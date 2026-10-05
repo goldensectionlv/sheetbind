@@ -1,0 +1,18 @@
+export { TemplateError } from './core/template'
+export { TaggedXlsxError } from './xlsx/tagged-template'
+export type { TaggedXlsxIssue } from './xlsx/tagged-template'
+export type { DataReference, FieldValue, TemplateIssue, TemplateValue, ValueExpression } from './core/template'
+export type { FieldRules } from './core/field-rules'
+export { parseValidation, formatValidation, ValidationExecutionError } from './core/validation'
+export type { JsonValue } from './core/json'
+export type { Validation, ValidationRuleUse, ValidationRule, ValidationContext, ValidationMessageContext, ValidationMessage, ValidationOptions, ValidationIssue } from './core/validation'
+export type { Dictionaries } from './core/dictionaries'
+export type { ChoiceRule, ChoiceOption, ResolvedChoice } from './core/choices'
+export type { GridAddress, GridOffset } from './grid/geometry'
+export type { WorkbookCellInstance, WorkbookLayout } from './grid/workbook-layout'
+// Keep an alias: declaration bundlers can turn a re-exported class into a value export.
+export type WorkbookTemplate = import('./xlsx/template').WorkbookTemplate
+export { importWorkbookXlsx, renderWorkbookReport, resolveWorkbook, workbookDictionarySources } from './xlsx/workbook-template'
+export { renderWorkbookForm, readWorkbookForm } from './xlsx/workbook-form'
+export { workbookChoiceRange } from './xlsx/workbook-choice-fields'
+export type { WorkbookFormIssue, WorkbookFormResult } from './form/workbook'

@@ -1,0 +1,159 @@
+{
+  "data": {
+    "category": "maintenance",
+    "categories": [
+      {
+        "id": "maintenance",
+        "name": "Maintenance"
+      }
+    ],
+    "items": [
+      {
+        "id": "line-a",
+        "product": "0007",
+        "supplier": 7,
+        "hours": 2
+      },
+      {
+        "id": "line-b",
+        "product": "0009",
+        "supplier": 8,
+        "hours": 3
+      }
+    ]
+  },
+  "dictionaries": {
+    "suppliers": [
+      {
+        "id": 7,
+        "name": "Local supplier",
+        "code": "LOCAL"
+      },
+      {
+        "rate": 22,
+        "code": "REMOTE",
+        "name": "Remote supplier",
+        "postal": "006",
+        "active": false,
+        "id": 8
+      }
+    ],
+    "products": [
+      {
+        "id": "0007",
+        "name": "Service"
+      },
+      {
+        "rate": 22,
+        "name": "Service",
+        "active": false,
+        "id": "0008",
+        "code": "006",
+        "details": {
+          "unit": "hour"
+        }
+      },
+      {
+        "id": "0009",
+        "name": "Inspection"
+      }
+    ]
+  },
+  "declaredData": {
+    "category": "maintenance",
+    "items": [
+      {
+        "id": "line-a",
+        "product": "0007",
+        "supplier": 7,
+        "hours": 2
+      },
+      {
+        "id": "line-b",
+        "product": "0009",
+        "supplier": 8,
+        "hours": 3
+      }
+    ]
+  },
+  "objectData": {
+    "category": {
+      "id": "maintenance",
+      "name": "Maintenance"
+    },
+    "categories": [
+      {
+        "id": "maintenance",
+        "name": "Maintenance"
+      }
+    ],
+    "items": [
+      {
+        "id": "line-a",
+        "product": {
+          "id": "0007",
+          "name": "Service"
+        },
+        "supplier": {
+          "id": 7,
+          "name": "Local supplier",
+          "code": "LOCAL"
+        },
+        "hours": 2
+      },
+      {
+        "id": "line-b",
+        "product": {
+          "id": "0009",
+          "name": "Inspection"
+        },
+        "supplier": {
+          "rate": 22,
+          "code": "REMOTE",
+          "name": "Remote supplier",
+          "postal": "006",
+          "active": false,
+          "id": 8
+        },
+        "hours": 3
+      }
+    ]
+  },
+  "objectResult": {
+    "category": {
+      "id": "maintenance",
+      "name": "Maintenance"
+    },
+    "items": [
+      {
+        "id": "line-a",
+        "product": {
+          "id": "0007",
+          "name": "Service"
+        },
+        "supplier": {
+          "id": 7,
+          "name": "Local supplier",
+          "code": "LOCAL"
+        },
+        "hours": 2
+      },
+      {
+        "id": "line-b",
+        "product": {
+          "id": "0009",
+          "name": "Inspection"
+        },
+        "supplier": {
+          "rate": 22,
+          "code": "REMOTE",
+          "name": "Remote supplier",
+          "postal": "006",
+          "active": false,
+          "id": 8
+        },
+        "hours": 3
+      }
+    ]
+  }
+}

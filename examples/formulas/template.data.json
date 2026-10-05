@@ -1,0 +1,40 @@
+{
+  "data": {
+    "items": [
+      {
+        "id": "service-a",
+        "quantity": 2,
+        "price": 100,
+        "rate": {
+          "rate": 22,
+          "label": "Standard",
+          "id": "standard"
+        }
+      },
+      {
+        "id": "service-b",
+        "quantity": 3,
+        "price": 50,
+        "rate": {
+          "id": "none",
+          "label": "Standard",
+          "rate": 0
+        }
+      }
+    ]
+  },
+  "dictionaries": {
+    "rates": [
+      {
+        "id": "none",
+        "label": "Standard",
+        "rate": 0
+      },
+      {
+        "rate": 22,
+        "label": "Standard",
+        "id": "standard"
+      }
+    ]
+  }
+}

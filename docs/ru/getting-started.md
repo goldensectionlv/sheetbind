@@ -1,0 +1,67 @@
+# Первый отчёт
+
+Создадим XLSX с именем заказчика. Нужны Node.js 22.13 или новее, pnpm, исходный репозиторий Sheetbind и Excel для создания или открытия книги.
+
+## 1. Установите пакет
+
+В папке исходников `sheetbind-public` установите зависимости и соберите архив пакета:
+
+```sh
+pnpm install --frozen-lockfile
+npm pack
+```
+
+В этой папке появится `sheetbind-0.2.0.tgz`. Создайте рядом приложение и установите архив, ExcelJS и средство запуска TypeScript:
+
+```sh
+cd ..
+mkdir sheetbind-example
+cd sheetbind-example
+pnpm init --init-type module
+pnpm add ../sheetbind-public/sheetbind-0.2.0.tgz exceljs@4.4.0
+pnpm add -D tsx
+```
+
+`--init-type module` добавляет `"type": "module"` в `package.json`: примеры используют `import` и `await` на верхнем уровне. Для существующего приложения установите зависимости в нём и используйте его настройки модулей. ExcelJS — peer dependency: его нужно установить рядом с Sheetbind.
+
+Дальнейшие команды выполняйте из `sheetbind-example`.
+
+## 2. Создайте шаблон
+
+Скачайте [first-report-template.xlsx](/examples/tutorials/first-report-template.xlsx) в папку приложения или создайте книгу в Excel:
+
+| Ячейка | Содержимое |
+| --- | --- |
+| A1 | `Customer` |
+| B1 | `{customer.name}` |
+
+Сохраните файл как `first-report-template.xlsx`. Шрифт, границы и ширину колонок можно настроить в Excel.
+
+## 3. Передайте данные и сохраните отчёт
+
+Сохраните этот код как `report.ts` рядом с шаблоном. Можно также [скачать скрипт](/examples/tutorials/first-report.ts) и сохранить его под этим именем.
+
+```ts
+import { readFile, writeFile } from 'node:fs/promises'
+import { importWorkbookXlsx, renderWorkbookReport } from 'sheetbind'
+
+const template = await importWorkbookXlsx(await readFile('first-report-template.xlsx'))
+const data = { customer: { name: 'Sample customer' } }
+await writeFile('report.xlsx', await renderWorkbookReport(template, data))
+```
+
+Запустите:
+
+```sh
+pnpm exec tsx report.ts
+```
+
+Откройте `report.xlsx` в той же папке. В A1 остаётся `Customer`, в B1 появляется `Sample customer`.
+
+Если при рендере получили `missing-source` для `$data.customer.name`, проверьте структуру данных. Объект `{ name: 'Sample customer' }` не соответствует тегу `{customer.name}`: в примере выше есть нужный объект `customer`.
+
+Храните размеченный файл как шаблон. После изменения тегов или оформления сохраните его и снова вызовите `importWorkbookXlsx`.
+
+## Следующий шаг
+
+В разделе [«Шаблоны»](./templates.md) добавим таблицу, повтор строк и итог. Если пользователь должен заполнить и вернуть файл, переходите к [заполнению формы](./forms.md).

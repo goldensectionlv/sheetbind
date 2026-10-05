@@ -1,0 +1,49 @@
+{
+  "data": {
+    "signedBy": "Jordan Lee",
+    "sites": [
+      {
+        "name": "North site",
+        "work": [],
+        "note": "No work scheduled"
+      },
+      {
+        "name": "Central site",
+        "work": [
+          {
+            "code": "0007",
+            "description": "Inspection",
+            "hours": 0,
+            "approved": false
+          }
+        ],
+        "note": "Awaiting review"
+      },
+      {
+        "name": "South site",
+        "work": [
+          {
+            "code": "0008",
+            "description": "Inspection",
+            "hours": 1,
+            "approved": true
+          },
+          {
+            "code": "0009",
+            "description": "Adjustment",
+            "hours": 2.5,
+            "approved": true,
+            "note": "Completed"
+          },
+          {
+            "code": "0010",
+            "description": "Verification",
+            "hours": 1,
+            "approved": false
+          }
+        ],
+        "note": "Follow-up required"
+      }
+    ]
+  }
+}

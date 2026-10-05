@@ -1,0 +1,31 @@
+{
+  "data": {
+    "provider": {
+      "name": "Northwind Service"
+    },
+    "reference": "SR-0042",
+    "signedBy": "Jordan Lee",
+    "work": [
+      {
+        "code": "0001",
+        "description": "Equipment inspection",
+        "hours": 0,
+        "note": "Covered by service plan",
+        "approved": false
+      },
+      {
+        "code": "0002",
+        "description": "Filter replacement",
+        "hours": 1.5,
+        "approved": true
+      },
+      {
+        "code": "0003",
+        "description": "Final verification",
+        "hours": 0.5,
+        "note": "Completed",
+        "approved": true
+      }
+    ]
+  }
+}

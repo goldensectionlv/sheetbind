@@ -1,0 +1,83 @@
+{
+  "name": "sheetbind",
+  "version": "0.2.0",
+  "description": "Workbook templates for XLSX reports and editable forms in TypeScript.",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "license": "MIT",
+  "keywords": [
+    "xlsx",
+    "excel",
+    "template",
+    "templating",
+    "typescript",
+    "editable forms",
+    "exceljs"
+  ],
+  "packageManager": "pnpm@11.5.2",
+  "publishConfig": {
+    "access": "public"
+  },
+  "sideEffects": false,
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "build:watch": "tsup --watch",
+    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm docs:check && pnpm docs:build",
+    "check:package": "pnpm build && tsx scripts/verify-package.ts",
+    "check:release": "pnpm check && pnpm check:package",
+    "docs:prepare": "tsx scripts/prepare-doc-examples.ts",
+    "docs:build": "pnpm docs:prepare && vitepress build docs",
+    "docs:check": "pnpm docs:prepare && tsx scripts/check-doc-links.ts",
+    "docs:dev": "pnpm docs:prepare && vitepress dev docs",
+    "docs:preview": "vitepress preview docs",
+    "lint": "eslint \"{src,test,scripts,examples}/**/*.ts\" \"*.config.ts\" eslint.config.js",
+    "lint:fix": "pnpm lint --fix",
+    "prepack": "pnpm build",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "check:library": "pnpm lint && pnpm typecheck && pnpm test && pnpm check:package",
+    "example:report": "tsx examples/package/generate.ts",
+    "example:tutorials": "tsx examples/tutorials/run.ts"
+  },
+  "dependencies": {
+    "jszip": "^3.10.1"
+  },
+  "peerDependencies": {
+    "exceljs": "^4.4.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@stylistic/eslint-plugin": "^5.10.0",
+    "@types/node": "^22.20.1",
+    "eslint": "^10.8.0",
+    "exceljs": "4.4.0",
+    "tsup": "^8.0.0",
+    "tsx": "^4.23.1",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.65.0",
+    "vitepress": "1.6.4",
+    "vitest": "^4.1.7"
+  }
+}

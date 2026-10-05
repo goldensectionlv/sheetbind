@@ -1,0 +1,52 @@
+{
+  "data": {
+    "contact": {
+      "name": "Jordan Lee"
+    },
+    "sites": [
+      {
+        "name": "North site",
+        "work": [],
+        "note": "No work scheduled"
+      },
+      {
+        "name": "Central site",
+        "work": [
+          {
+            "code": null,
+            "description": null,
+            "hours": null,
+            "approved": null
+          }
+        ],
+        "note": null
+      },
+      {
+        "name": "South site",
+        "work": [
+          {
+            "code": "0007",
+            "description": "Inspection",
+            "hours": 0,
+            "approved": false
+          },
+          {
+            "code": "0008",
+            "description": "Adjustment",
+            "hours": 2.5,
+            "approved": true
+          }
+        ],
+        "note": "Literal _x000a_ stays text"
+      }
+    ]
+  },
+  "dictionaries": {
+    "workCodes": [
+      "0007",
+      "0008",
+      "00042",
+      "Review, follow-up"
+    ]
+  }
+}

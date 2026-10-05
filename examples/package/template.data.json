@@ -1,0 +1,25 @@
+{
+  "data": {
+    "customer": {
+      "name": "Sample customer"
+    },
+    "items": [
+      {
+        "name": "Inspection",
+        "status": "Planned",
+        "hours": 0
+      },
+      {
+        "name": "Adjustment",
+        "status": "Done",
+        "hours": 2.5
+      }
+    ]
+  },
+  "dictionaries": {
+    "statuses": [
+      "Planned",
+      "Done"
+    ]
+  }
+}

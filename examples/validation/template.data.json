@@ -1,0 +1,17 @@
+{
+  "data": {
+    "ceiling": 10,
+    "items": [
+      {
+        "id": "line-a",
+        "quantity": 1.25,
+        "capacity": 5
+      },
+      {
+        "id": "line-b",
+        "quantity": 2,
+        "capacity": 20
+      }
+    ]
+  }
+}

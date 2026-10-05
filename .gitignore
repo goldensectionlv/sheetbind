@@ -1,0 +1,33 @@
+# build output
+dist
+docs/.vitepress/cache
+docs/.vitepress/dist
+docs/public/fixtures
+docs/public/examples
+
+# dependencies
+node_modules
+
+# generated workbooks and local diagnostics
+temp
+
+# misc
+*.tsbuildinfo
+coverage
+
+# local secrets and machine-specific package-manager config
+.env
+.env.*
+!.env.example
+.npmrc
+*.key
+*.pem
+*.p12
+*.pfx
+
+# editors and OS metadata
+.idea
+.vscode
+.DS_Store
+Thumbs.db
+*.log

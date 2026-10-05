@@ -1,0 +1,60 @@
+{
+  "data": {
+    "items": [
+      {
+        "name": "Item A",
+        "quantity": 2
+      },
+      {
+        "name": "Item B",
+        "quantity": 3
+      },
+      {
+        "name": "Item C",
+        "quantity": 1
+      }
+    ],
+    "offers": [
+      {
+        "name": "Option A",
+        "lines": [
+          {
+            "price": 10
+          },
+          {
+            "price": 20
+          },
+          {
+            "price": 30
+          }
+        ]
+      },
+      {
+        "name": "Option B",
+        "lines": [
+          {
+            "price": 11
+          },
+          {},
+          {
+            "price": 35
+          }
+        ]
+      },
+      {
+        "name": "Option C",
+        "lines": [
+          {
+            "price": 9
+          },
+          {
+            "price": 22
+          },
+          {
+            "price": 28
+          }
+        ]
+      }
+    ]
+  }
+}
