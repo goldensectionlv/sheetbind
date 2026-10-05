@@ -1,12 +1,14 @@
 # Первый отчёт
 
-Создадим XLSX с именем заказчика. Нужны Node.js 22.13 или новее, pnpm, исходный репозиторий Sheetbind и Excel для создания или открытия книги.
+Создадим XLSX с именем заказчика. Нужны Git, Node.js 22.13 или новее, pnpm и Excel для создания или открытия книги.
 
 ## 1. Установите пакет
 
-В папке исходников `sheetbind-public` установите зависимости и соберите архив пакета:
+Клонируйте репозиторий в папку `sheetbind-public`, установите зависимости и соберите архив пакета. Если эта папка с исходниками уже есть, пропустите `git clone`:
 
 ```sh
+git clone https://github.com/goldensectionlv/sheetbind.git sheetbind-public
+cd sheetbind-public
 pnpm install --frozen-lockfile
 npm pack
 ```

@@ -1,8 +1,124 @@
 # Templates
 
-A template is an XLSX file with tags in its cells. Keep labels, formatting and formulas in Excel. Tags select values from the data and mark areas to repeat.
+A template is an XLSX file with tags in its cells. Prepare one item row, pass three records and get a table with a total.
 
-This guide continues [First report](./getting-started.md). Run its scripts from the application directory where Sheetbind, ExcelJS and `tsx` are installed.
+To run the example, complete the [setup in First report](./getting-started.md). The images below show the files used in this example. Open an image for its full size; on narrow screens, scroll the tables horizontally.
+
+## Repeated rows and a total {#report-example}
+
+### 1. Template: one item row
+
+Download [report-template.xlsx](/examples/tutorials/report-template.xlsx). Its `Order` sheet contains a header, an item row and a total:
+
+<div class="workbook-preview" tabindex="0" role="region" aria-label="Report template, columns A–E">
+
+[![Template: opening marker in A3, item row A4:E4, closing marker in E5 and total in D6.](/images/report-template.png)](/images/report-template.png)
+
+</div>
+
+B1 contains `{customer.name}`. The customer's name will replace this tag.
+
+Two markers define the repeated area:
+
+- **A3 — `{#items}`:** starts the `items` list at column A.
+- **E5 — `{/items}`:** ends the list at column E.
+- **Between them — A4:E4:** this entire row repeats for each item. `{.name}`, `{.quantity}` and `{.price}` read the current item; `{?.note}` leaves a blank cell when there is no note.
+
+The blue marker rows disappear from the report. Colors only illustrate the example; tags determine its behavior. Each marker must be the only value on its entire row.
+
+The template image displays **formula text**: D4 contains `=B4*C4`, D6 contains `=SUM(D2:D5)`. In a localized Excel application, use its local function names.
+
+::: details Create this template manually: cells and tags to copy
+
+Create an `Order` sheet in a new workbook:
+
+| Cell | Content |
+| --- | --- |
+| A1 | `Customer` |
+| B1 | `{customer.name}` |
+| A2:E2 | Headers: `Item`, `Quantity`, `Price`, `Amount`, `Note` |
+| A3 | `{#items}` |
+| A4 | `{.name}` |
+| B4 | `{.quantity}` |
+| C4 | `{.price}` |
+| D4 | Formula `=B4*C4` |
+| E4 | `{?.note}` |
+| E5 | `{/items}` |
+| A6 | `Total` |
+| D6 | Formula `=SUM(D2:D5)` |
+
+Save as `report-template.xlsx`. Style row 4 and set the number format `0.00` for price and amount. Keep labels, formatting and formulas in Excel.
+
+:::
+
+### 2. Data: three items
+
+Download [report-3.json](/examples/tutorials/report-3.json) beside the template. This is the complete object passed to the renderer:
+
+<<< @/public/examples/tutorials/report-3.json
+
+The `items` array contains three objects, so one template row produces three report rows. `Paper` and `Folder` have no `note`; the quantity of `Pen` is zero.
+
+### 3. Result: table and total
+
+<div class="workbook-preview" tabindex="0" role="region" aria-label="Report with three items, columns A–E">
+
+[![Report: Paper — 2 at 5.00, amount 10.00; Pen — 0 at 3.00, amount 0.00; Folder — 3 at 4.00, amount 12.00. The total in D6 is 22.00.](/images/report-3.png)](/images/report-3.png)
+
+</div>
+
+Download the [completed report-3.xlsx](/examples/tutorials/report-3.xlsx) to inspect it immediately.
+
+Items occupy rows **3–5**. The marker rows are gone and the item formatting repeats. Missing notes remain blank and the zero quantity stays zero.
+
+D3 now contains `=B3*C3`, D4 contains `=B4*C4`, and D5 contains `=B5*C5`. The total in D6 is `=SUM(D2:D5)`.
+
+**The image shows recalculated values: 10 + 0 + 12 = 22.** Sheetbind moves formula references but does not calculate them. Excel recalculates on opening; another viewer may show blank or stale values until recalculation. See [Excel and limitations](./xlsx.md).
+
+### 4. Generate this file in your application
+
+Save [report.ts](/examples/tutorials/report.ts) beside `report-template.xlsx` and `report-3.json`. Run commands from this directory, with the packages installed as described in [First report](./getting-started.md).
+
+<<< @/public/examples/tutorials/report.ts
+
+```sh
+pnpm exec tsx report.ts
+```
+
+Open the generated `report.xlsx`. Its contents should match the result above.
+
+## Fewer items
+
+The same template handles arrays of different lengths. To try them with your script, download the JSON you want, replace `report-3.json` in `report.ts` with its filename and run the command again. The script overwrites `report.xlsx`.
+
+**One item** — [report-1.json data](/examples/tutorials/report-1.json), [completed report-1.xlsx](/examples/tutorials/report-1.xlsx):
+
+<div class="workbook-preview" tabindex="0" role="region" aria-label="Report with one item, columns A–E">
+
+[![One Paper item on row 3. The total moves to D4 and equals 10.00 after recalculation.](/images/report-1.png)](/images/report-1.png)
+
+</div>
+
+**No items, `items: []`** — [report-0.json data](/examples/tutorials/report-0.json), [completed report-0.xlsx](/examples/tutorials/report-0.xlsx):
+
+<div class="workbook-preview" tabindex="0" role="region" aria-label="Report without items, columns A–E">
+
+[![Empty report: customer, headers and a total of 0.00 in D3. There are no item rows.](/images/report-0.png)](/images/report-0.png)
+
+</div>
+
+The total follows the table: D4 for one item, D3 for an empty array. `SUM` includes the header and ignores its text, so the empty report keeps the valid formula `=SUM(D2:D2)`.
+
+Omitting `items` is an error; a repeat expects an array of objects. For **blank rows that a user will fill in**, use a [form](./forms.md#a-table-with-20-input-rows).
+
+## Repeat boundaries
+
+The closing marker must be below the opening marker, in the same column or to its right. The path must match: `{#items}` closes with `{/items}`, while `{#.items}` closes with `{/.items}`.
+
+If only column A repeats, check the closing marker: a closing tag in A defines a one-column body. Our example puts it in E to repeat A:E.
+
+For a block several rows high, leave all its body rows between the markers. Blank rows in that rectangle repeat too. Merged cells and nested blocks must fit inside their block; they cannot cross its boundary.
+
 
 ## Values and paths
 
@@ -34,94 +150,17 @@ Paths use property names separated by dots. Tags do not run JavaScript: expressi
 
 Text outside bindings stays as written. `Customer: {customer.name}` is not interpolated. Put the label in a separate cell, or prepare the whole text in your data. To display a literal `{customer.name}`, write <code v-pre>{{customer.name}}</code>. A cell that starts with a binding cannot append other text or a second binding.
 
-## Repeated rows and a total
-
-Build a table of items with quantity, price, amount and an optional note. The same template will produce reports for 0, 1 and 3 records.
-
-### Create the template
-
-Download [report-template.xlsx](/examples/tutorials/report-template.xlsx), or create an `Order` sheet with these cells:
-
-| Cell | Content |
-| --- | --- |
-| A1 | `Customer` |
-| B1 | `{customer.name}` |
-| A2:E2 | Headers: `Item`, `Quantity`, `Price`, `Amount`, `Note` |
-| A3 | `{#items}` |
-| A4 | `{.name}` |
-| B4 | `{.quantity}` |
-| C4 | `{.price}` |
-| D4 | Formula `=B4*C4` |
-| E4 | `{?.note}` |
-| E5 | `{/items}` |
-| A6 | `Total` |
-| D6 | Formula `=SUM(D2:D5)` |
-
-Save the file as `report-template.xlsx`. Style row 4 and set the number format `0.00` for price and amount. In a localized Excel application, enter formulas using its local function names.
-
-The two markers define the rectangle:
-
-- `{#items}` marks the row above the body and its leftmost column.
-- `{/items}` marks the row below the body and its rightmost column.
-- Here the body is `A4:E4`, including blank cells. All of it repeats for each item.
-
-Each marker must be the only value on its entire row. The closing marker must be below the opening marker, in the same column or to its right. The path must match: `{#items}` closes with `{/items}`, while `{#.items}` closes with `{/.items}`. Both marker rows disappear from the report.
-
-For a block several rows high, leave all its body rows between the markers. Blank rows in that rectangle repeat too. Merged cells and nested blocks must fit inside their block; they cannot cross its boundary.
-
-If only column A repeats, check the closing marker: a closing tag in A defines a one-column body. Move it to E when A:E should repeat.
-
-### Pass data and run
-
-Save this code as `report.ts` beside the template, replacing the script from the first guide. You can also [download it](/examples/tutorials/report.ts).
-
-```ts
-import { readFile, writeFile } from 'node:fs/promises'
-import { importWorkbookXlsx, renderWorkbookReport } from 'sheetbind'
-
-const template = await importWorkbookXlsx(await readFile('report-template.xlsx'))
-const items = [
-  { name: 'Paper', quantity: 2, price: 5 },
-  { name: 'Pen', quantity: 0, price: 3, note: 'Spare' },
-  { name: 'Folder', quantity: 3, price: 4 },
-]
-
-for (const count of [0, 1, 3]) {
-  const data = { customer: { name: 'Sample customer' }, items: items.slice(0, count) }
-  await writeFile(`report-${count}.xlsx`, await renderWorkbookReport(template, data))
-}
-```
-
-```sh
-pnpm exec tsx report.ts
-```
-
-The full inputs are also available as JSON: [0 records](/examples/tutorials/report-0.json), [1 record](/examples/tutorials/report-1.json), [3 records](/examples/tutorials/report-3.json).
-
-### Check the results
-
-Open the three files from the application directory:
-
-| File | Item rows in Excel | Total cell | Total after recalculation |
-| --- | --- | --- | --- |
-| `report-0.xlsx` | None | D3 | 0 |
-| `report-1.xlsx` | Row 3 | D4 | 10 |
-| `report-3.xlsx` | Rows 3–5 | D6 | 22 |
-
-`items: []` removes the repeated body. Omitting `items` is an error; the repeat expects an array of objects. The zero quantity for `Pen` remains zero.
-
-The total formula includes the header and the body. `SUM` ignores header text, so the empty report still has a valid range. Sheetbind moves formula references but does not calculate results. Excel recalculates on opening; another viewer may show an empty or stale result until recalculation. See [Excel and limitations](./xlsx.md) for formula support.
-
 ## If the workbook already exists
 
 Work on a copy of the file. For the table above, start with [ordinary.xlsx](/examples/tutorials/ordinary.xlsx):
 
-| Row | A | B | C | D | E |
-| --- | --- | --- | --- | --- | --- |
-| 1 | Customer | Sample customer | | | |
-| 2 | Item | Quantity | Price | Amount | Note |
-| 3 | Paper | 2 | 5 | `=B3*C3` | |
-| 4 | Total | | | `=SUM(D2:D3)` | |
+<div class="workbook-preview" tabindex="0" role="region" aria-label="Original workbook before adding tags, columns A–E">
+
+[![Ordinary workbook before tagging: Sample customer, one Paper item, two units at 5.00. The total in D4 is 10.00.](/images/ordinary.png)](/images/ordinary.png)
+
+</div>
+
+Formulas are shown as recalculated values: D3 contains `=B3*C3`, D4 contains `=SUM(D2:D3)`.
 
 1. Replace B1 with `{customer.name}`.
 2. Insert a whole blank row before the item and put `{#items}` in A3.

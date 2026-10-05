@@ -60,14 +60,26 @@ original.addRows([
   ['Paper', 2, 5, { formula: 'B3*C3' }, null],
   ['Total', null, null, { formula: 'SUM(D2:D3)' }],
 ])
-original.columns = [{ width: 24 }, { width: 22 }, { width: 14 }, { width: 16 }, { width: 30 }]
-original.getRow(2).font = { bold: true }
-original.getRow(3).height = 26
+original.columns = [{ width: 16 }, { width: 20 }, { width: 12 }, { width: 16 }, { width: 15 }]
+for (let row = 1; row <= 4; row++) {
+  original.getRow(row).height = 24
+  for (let column = 1; column <= 5; column++) {
+    const cell = original.getCell(row, column)
+    cell.font = { name: 'Arial', size: 11, color: { argb: 'FF17352F' } }
+    cell.alignment = { vertical: 'middle' }
+  }
+}
+for (let column = 1; column <= 5; column++) {
+  original.getCell(2, column).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF087F6D' } }
+  original.getCell(2, column).font = { name: 'Arial', size: 11, bold: true, color: { argb: 'FFFFFFFF' } }
+  original.getCell(3, column).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEAF5F1' } }
+  original.getCell(4, column).font = { name: 'Arial', size: 11, bold: true, color: { argb: 'FF17352F' } }
+}
 for (const column of [3, 4]) {
   original.getColumn(column).numFmt = '0.00'
 }
 original.getCell('E3').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFFCC' } }
-original.getCell('E3').alignment = { wrapText: true }
+original.getCell('E3').alignment = { vertical: 'middle', wrapText: true }
 original.pageSetup.orientation = 'landscape'
 await save('ordinary.xlsx', ordinary)
 
@@ -82,6 +94,15 @@ for (const [address, value] of Object.entries({ A4: '{.name}', B4: '{.quantity}'
 // ExcelJS row insertion does not rebase formulas; author their final template references explicitly.
 reportSheet.getCell('D4').value = { formula: 'B4*C4' }
 reportSheet.getCell('D6').value = { formula: 'SUM(D2:D5)' }
+for (const row of [3, 5]) {
+  reportSheet.getRow(row).height = 24
+  for (let column = 1; column <= 5; column++) {
+    const cell = reportSheet.getCell(row, column)
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEAF0FB' } }
+    cell.font = { name: 'Arial', size: 11, color: { argb: 'FF2457A7' } }
+    cell.alignment = { vertical: 'middle' }
+  }
+}
 await save('report-template.xlsx', tagged)
 
 const reportTemplate = await importWorkbookXlsx(await readFile(resolve(directory, 'report-template.xlsx')))

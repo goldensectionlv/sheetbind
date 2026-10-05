@@ -1,12 +1,14 @@
 # First report
 
-Create an XLSX with a customer name. You need Node.js 22.13 or newer, pnpm, the Sheetbind source repository and Excel to create or open the workbook.
+Create an XLSX with a customer name. You need Git, Node.js 22.13 or newer, pnpm and Excel to create or open the workbook.
 
 ## 1. Install the package
 
-In the `sheetbind-public` source directory, install dependencies and build the package archive:
+Clone the repository into `sheetbind-public`, install dependencies and build the package archive. If that source directory already exists, skip `git clone`:
 
 ```sh
+git clone https://github.com/goldensectionlv/sheetbind.git sheetbind-public
+cd sheetbind-public
 pnpm install --frozen-lockfile
 npm pack
 ```

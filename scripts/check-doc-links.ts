@@ -171,7 +171,7 @@ async function markdownAnchors(file: string): Promise<Set<string>> {
   const relative = path.relative(docsRoot, file)
   if (!relative.startsWith('..') && !path.isAbsolute(relative)) {
     const renderer = await createMarkdownRenderer(docsRoot, { highlight: () => '' })
-    return new Set(renderer.parse(markdown, {})
+    return new Set(renderer.parse(markdown, { path: file })
       .filter(token => token.type === 'heading_open')
       .map(token => token.attrGet('id'))
       .filter((id): id is string => id !== null))
