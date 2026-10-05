@@ -62,7 +62,7 @@
     "example:tutorials": "tsx examples/tutorials/run.ts"
   },
   "dependencies": {
-    "jszip": "^3.10.1"
+    "jszip": "^3.10.2"
   },
   "peerDependencies": {
     "exceljs": "^4.4.0"
