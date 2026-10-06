@@ -106,9 +106,9 @@ Synchronously resolves and validates report data without creating a file. This i
 | `size` | `GridOffset`: `{ rows, columns }`, including a merged cell's extent |
 | `value` | `{ literal: TemplateValue }` or `{ formula: string }`; formulas have no leading `=` |
 | `rules` | Optional `FieldRules`: validation, messages, string list or choice |
-| `origin` | Source node, data path and repeat indexes |
+| `origin` | `{ nodeId, dataPath, iterations: [{ nodeId, index }] }`: source node, data path and repeat indexes |
 | `contextPath` | Data path of the binding context |
-| `choice` | Optional display text and options, including each option's `key`, `label`, `value` and `text` |
+| `choice` | Optional `{ text, items: [{ key, label, value, text }] }`: display text and options |
 
 `TemplateValue` is `string | number | boolean | null`. `FieldValue` also permits an object choice value. `ChoiceOption` describes an option without its Excel display text; `ResolvedChoice` describes a selected key and those options. `ValueExpression` describes a literal or data binding; the latter uses `DataReference` (`path`, optional `from: 'current' | 'root'`). These types do not provide a template construction API.
 

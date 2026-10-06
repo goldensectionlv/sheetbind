@@ -1,11 +1,35 @@
 import ExcelJS from 'exceljs'
 import JSZip from 'jszip'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { importWorkbookXlsx, renderWorkbookReport, renderWorkbookForm, resolveWorkbook, TaggedXlsxError, TemplateError } from '../src/index'
 import type { WorkbookTemplate } from '../src/index'
 import { openWorkbook as load, saveWorkbook } from './xlsx'
 
 describe('imported XLSX ownership', () => {
+  it('rejects non-JSON execution data before evaluating accessors across public entry points', async () => {
+    const book = new ExcelJS.Workbook()
+    book.addWorksheet('Data').getCell('A1').value = '{name}'
+    const template = await importWorkbookXlsx(await saveWorkbook(book))
+    const getter = vi.fn(() => 'Desk')
+    const circular: Record<string, unknown> = { name: 'Desk' }
+    circular.self = circular
+    const invalid = [
+      { name: 'Desk', unused: new Date() },
+      { name: 'Desk', unused: undefined },
+      { name: 'Desk', unused: () => 'unused' },
+      { name: 'Desk', unused: Number.NaN },
+      { name: 'Desk', unused: new Array(1) },
+      circular,
+      Object.defineProperty({}, 'name', { get: getter, enumerable: true }),
+    ]
+    for (const data of invalid) {
+      for (const run of [resolveWorkbook, renderWorkbookReport, renderWorkbookForm]) {
+        await expect(Promise.resolve().then<unknown>(() => run(template, data))).rejects.toBeInstanceOf(SyntaxError)
+      }
+    }
+    expect(getter).not.toHaveBeenCalled()
+  })
+
   it('reports invalid template bytes without exposing a ZIP library error as the contract', async () => {
     await expect(importWorkbookXlsx(new Uint8Array([1, 2, 3]))).rejects.toMatchObject({
       name: 'TaggedXlsxError', issues: [{ code: 'invalid-workbook', path: '$workbook' }], cause: expect.any(Error),

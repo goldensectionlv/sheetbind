@@ -133,6 +133,14 @@ pnpm exec tsx issue-form.ts
 
 Twenty `{}` objects create twenty input rows. Required fields may be empty at issuance. The products have identical labels, so the dropdown shows `Paper [001]` and `Paper [002]`.
 
+This is the top of the [issued form](/examples/tutorials/issued.xlsx). Input rows start at 4 and continue through 23; control rows 1 and 3 are hidden.
+
+<div class="workbook-preview" tabindex="0" role="region" aria-label="Blank form, columns A–C, top of the table">
+
+[![Issued form: Product, Quantity and Date headers on row 2, with blank input rows starting at 4. Column A provides product lists.](/images/form-issued.png)](/images/form-issued.png)
+
+</div>
+
 This example uses `return=key`. Keep **the dictionary used for issuance** with the template: the reader converts a label to an ID using the supplied dictionary. Current API data may give a different mapping. Object mode and other sources are covered in [validation and lists](./fields.md).
 
 ### 3. Fill and read
@@ -145,7 +153,15 @@ Open `saved-form/issued.xlsx`. Input rows occupy rows 4–23:
 | 5 | Leave empty | | |
 | 6 | Select `Paper [002]` | Number `0` | Leave empty |
 
-Save the file as `completed.xlsx` next to `issue-form.ts`. Download [read-completed-form.ts](/examples/tutorials/read-completed-form.ts) into that directory and run:
+After filling two rows, the form looks like this:
+
+<div class="workbook-preview" tabindex="0" role="region" aria-label="Completed form, columns A–C, rows 4–6">
+
+[![Row 4 contains Paper [001], quantity 2.00 and date 2026-01-15. Row 5 is empty. Row 6 contains Paper [002] and quantity 0.00, with no date.](/images/form-completed.png)](/images/form-completed.png)
+
+</div>
+
+Save the file as `completed.xlsx` next to `issue-form.ts`, or download the [completed form](/examples/tutorials/completed.xlsx). Reading requires `saved-form/template.xlsx` and `saved-form/dictionaries.json` from the previous step. Download [read-completed-form.ts](/examples/tutorials/read-completed-form.ts) next to `completed.xlsx` and run:
 
 ```sh
 pnpm exec tsx read-completed-form.ts
@@ -153,16 +169,13 @@ pnpm exec tsx read-completed-form.ts
 
 This is a complete handler with `result.success` and `try/catch`, as in the first form. It loads `saved-form/template.xlsx`, `saved-form/dictionaries.json`, and `completed.xlsx` from the current directory.
 
-```json
-{
-  "items": [
-    { "product": "001", "quantity": 2, "date": "2026-01-15" },
-    { "product": "002", "quantity": 0, "date": null }
-  ]
-}
-```
+The result is also available as a [JSON download](/examples/tutorials/completed.json):
 
-Empty row 5 and the remaining unfilled rows are omitted; `0` is preserved. Entering `Unknown` in A6 produces a `choice` issue with address `A6` and path `$data.items[1].product`. The address refers to Excel; the index refers to data after empty rows are omitted. Select a value from the list and read the file again.
+<<< @/public/examples/tutorials/completed.json
+
+Empty row 5 and the remaining unfilled rows are omitted; `0` is preserved. Cell addresses refer to Excel; data indexes refer to the array after empty rows are omitted.
+
+To try a reading error, download [invalid.xlsx](/examples/tutorials/invalid.xlsx) and save it in the example directory as `completed.xlsx`. It already contains `Unknown` in A6. Excel's list validation blocks normal entry of that value, so this step uses a prepared file. Running the script again returns `success: false` and a `choice` issue with address `A6` and path `$data.items[1].product`; the [full result](/examples/tutorials/invalid.json) is available to download. Select `Paper [002]` in A6, save the file and read it again.
 
 ## Empty rows and values
 
@@ -198,7 +211,7 @@ When a record occupies several rows, copy the whole block with its hidden bounda
 In the issued form, the first record occupies entire rows **3:6**, and the second occupies **7:10**. Fields are visible on rows 4:5 and 8:9; the other rows in each block are hidden.
 
 1. Enter `3:6` in Excel's Name Box to the left of the formula bar and press Enter. This selects entire rows, including hidden boundaries.
-2. Copy them. Select row 7 and use Insert Copied Cells to insert entire rows.
+2. Copy them. Enter `7:7` in the Name Box and press Enter to select hidden row 7. Use Insert Copied Cells to insert entire rows.
 
 After this single copy operation, save the workbook as `contacts-completed.xlsx` next to `contacts-template.xlsx`. Download [read-contacts.ts](/examples/tutorials/read-contacts.ts) into that directory and run:
 

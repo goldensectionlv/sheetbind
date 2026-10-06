@@ -177,6 +177,7 @@ function importRegions(compiled: ReturnType<typeof compileWorkbookSheet>, create
 /** Resolve values and placement without exposing the imported definition. */
 export function resolveWorkbook(template: WorkbookTemplate, data: unknown, options: ValidationOptions & { readonly dictionaries?: Dictionaries } = {}): WorkbookLayout {
   const { definition } = WorkbookTemplate.content(template)
+  assertInputData(data)
   return withTemplateLocations(definition, () => resolveDefinition(definition, data, options))
 }
 

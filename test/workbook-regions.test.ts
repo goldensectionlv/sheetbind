@@ -165,7 +165,7 @@ describe('scope and repeat placement', () => {
   })
 
   it.each([
-    [{ ...project.data, work: undefined }, 'missing-source', '$data.work'],
+    [Object.fromEntries(Object.entries(project.data).filter(([key]) => key !== 'work')), 'missing-source', '$data.work'],
     [{ ...project.data, provider: [] }, 'missing-source', '$data.provider.name'],
     [{ ...project.data, work: {} }, 'invalid-collection', '$data.work'],
     [{ ...project.data, work: [0] }, 'invalid-item', '$data.work[0]'],

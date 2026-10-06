@@ -106,9 +106,9 @@ declare function resolveWorkbook(
 | `size` | `GridOffset`: `{ rows, columns }`, включая размер объединённой ячейки |
 | `value` | `{ literal: TemplateValue }` или `{ formula: string }`; формула без начального `=` |
 | `rules` | Необязательные `FieldRules`: проверки, сообщения, строковый список или выбор |
-| `origin` | Исходный узел, путь данных и индексы повторов |
+| `origin` | `{ nodeId, dataPath, iterations: [{ nodeId, index }] }`: исходный узел, путь данных и индексы повторов |
 | `contextPath` | Путь данных контекста привязки |
-| `choice` | Необязательные текст выбора и варианты с полями `key`, `label`, `value`, `text` |
+| `choice` | Необязательный объект `{ text, items: [{ key, label, value, text }] }`: текст выбора и варианты |
 
 `TemplateValue` — `string | number | boolean | null`. `FieldValue` также допускает объект выбора. `ChoiceOption` описывает вариант без текста отображения в Excel; `ResolvedChoice` — выбранный ключ и такие варианты. `ValueExpression` описывает литерал или привязку к данным; привязка использует `DataReference` (`path`, необязательный `from: 'current' | 'root'`). Эти типы не предоставляют API создания шаблона.
 

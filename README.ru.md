@@ -8,6 +8,8 @@ Sheetbind заполняет XLSX-шаблоны данными. Разметь�
 
 [Документация](https://goldensectionlv.github.io/sheetbind/ru/) содержит примеры с изображениями и книги для скачивания.
 
+Пакет пока не опубликован в npm. [Инструкция по установке](https://goldensectionlv.github.io/sheetbind/ru/getting-started) показывает, как собрать и установить архив из исходников.
+
 ## Первый отчёт
 
 Создайте `first-report-template.xlsx`: в A1 запишите `Customer`, в B1 — `{customer.name}`. Шрифты, цвета и ширину колонок настройте в Excel.
