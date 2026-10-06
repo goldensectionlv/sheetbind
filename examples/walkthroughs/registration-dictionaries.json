@@ -1,0 +1,6 @@
+{
+  "Tickets": [
+    { "id": "standard", "label": "Standard" },
+    { "id": "student", "label": "Student" }
+  ]
+}

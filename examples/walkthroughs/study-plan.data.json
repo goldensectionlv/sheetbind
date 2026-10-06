@@ -1,0 +1,20 @@
+{
+  "learner": "Alex",
+  "courses": [
+    { "title": "Drawing", "lessons": [], "note": "Choose lessons later" },
+    {
+      "title": "Photography",
+      "lessons": [{ "name": "Light and shadow", "minutes": 40 }],
+      "note": "Bring a camera"
+    },
+    {
+      "title": "Music",
+      "lessons": [
+        { "name": "Rhythm", "minutes": 30 },
+        { "name": "Chords", "minutes": 45, "note": "With a partner" },
+        { "name": "Practice", "minutes": 20 }
+      ],
+      "note": "Bring a notebook"
+    }
+  ]
+}

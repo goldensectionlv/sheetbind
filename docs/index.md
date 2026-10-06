@@ -33,6 +33,14 @@ The images show the example files: formula text in the template, recalculated va
 
 The instructions include downloadable templates, code and expected results. The same example files are used in both languages.
 
+## Examples
+
+- [Monthly budget](./examples/budget.md) — grow rows and columns, keep blanks and zero values, calculate totals.
+- [Learning plan](./examples/study-plan.md) — courses with different numbers of lessons, merged headings and subtotals.
+- [Event registration](./examples/registration.md) — nested participant lists, shared ticket choices, validation and reading completed forms.
+
+Each example includes a template, data, a runnable script and the expected result. All data is fictional.
+
 ## Reference
 
 - [API](./api.md) — function arguments, results and errors.

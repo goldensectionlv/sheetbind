@@ -14,6 +14,14 @@ const english = [
     ],
   },
   {
+    text: 'Examples',
+    items: [
+      { text: 'Monthly budget', link: '/examples/budget' },
+      { text: 'Learning plan', link: '/examples/study-plan' },
+      { text: 'Event registration', link: '/examples/registration' },
+    ],
+  },
+  {
     text: 'Reference',
     items: [
       { text: 'API', link: '/api' },
@@ -38,6 +46,14 @@ const russian = [
       { text: 'Разметка шаблона', link: '/ru/templates' },
       { text: 'Проверки и списки', link: '/ru/fields' },
       { text: 'Заполнение формы', link: '/ru/forms' },
+    ],
+  },
+  {
+    text: 'Примеры',
+    items: [
+      { text: 'Бюджет по месяцам', link: '/ru/examples/budget' },
+      { text: 'Учебный план', link: '/ru/examples/study-plan' },
+      { text: 'Регистрация участников', link: '/ru/examples/registration' },
     ],
   },
   {

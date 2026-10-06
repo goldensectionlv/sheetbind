@@ -20,7 +20,7 @@ async function copyExamples(relative = ''): Promise<void> {
       await copyExamples(name)
     }
     else if (/\.(xlsx|json)$/.test(entry.name)
-      || (relative === 'tutorials' && entry.name.endsWith('.ts'))
+      || (['tutorials', 'walkthroughs'].includes(relative) && entry.name.endsWith('.ts'))
       || name === path.join('validation', 'rules.ts')) {
       const target = path.join(destination, name)
       await mkdir(path.dirname(target), { recursive: true })
@@ -31,6 +31,10 @@ async function copyExamples(relative = ''): Promise<void> {
 
 await copyExamples()
 execFileSync(process.execPath, ['--import', 'tsx', 'examples/tutorials/run.ts', path.join(destination, 'tutorials')], {
+  cwd: root,
+  stdio: 'inherit',
+})
+execFileSync(process.execPath, ['--import', 'tsx', 'examples/walkthroughs/generate.ts', path.join(destination, 'walkthroughs')], {
   cwd: root,
   stdio: 'inherit',
 })

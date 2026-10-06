@@ -60,6 +60,7 @@ async function main(): Promise<void> {
       package: ['verify.ts', 'validation.ts', 'template.xlsx', 'template.data.json'],
       validation: ['definition.ts', 'rules.ts', 'template.xlsx', 'template.data.json'],
       tutorials: (await readdir(path.join(root, 'examples', 'tutorials'))).filter(name => name.endsWith('.ts')),
+      walkthroughs: (await readdir(path.join(root, 'examples', 'walkthroughs'))).filter(name => /\.(ts|json)$/.test(name)),
     }
     for (const [directory, names] of Object.entries(examples)) {
       await mkdir(path.join(consumer, directory))
@@ -108,12 +109,12 @@ async function main(): Promise<void> {
     await writeFile(path.join(consumer, 'opaque-type.cts'), opaqueType)
     await writeFile(path.join(consumer, 'tsconfig.json'), JSON.stringify({
       compilerOptions: { module: 'NodeNext', moduleResolution: 'NodeNext', target: 'ES2023', strict: true, esModuleInterop: true, resolveJsonModule: true, rootDir: '.', outDir: 'build' },
-      include: ['package/verify.ts', 'tutorials/*.ts', 'types.ts', 'opaque-type.ts', 'opaque-type.cts'],
+      include: ['package/verify.ts', 'tutorials/*.ts', 'walkthroughs/*.ts', 'types.ts', 'opaque-type.ts', 'opaque-type.cts'],
     }))
     run(process.execPath, ['node_modules/typescript/bin/tsc'], consumer)
-    for (const directory of Object.keys(examples)) {
-      if (directory !== 'tutorials') {
-        await copyFile(path.join(consumer, directory, 'template.xlsx'), path.join(consumer, 'build', directory, 'template.xlsx'))
+    for (const [directory, names] of Object.entries(examples)) {
+      for (const name of names.filter(name => name.endsWith('.xlsx'))) {
+        await copyFile(path.join(consumer, directory, name), path.join(consumer, 'build', directory, name))
       }
     }
     run(process.execPath, ['build/package/verify.js', 'artifacts'], consumer)
@@ -139,6 +140,13 @@ async function main(): Promise<void> {
     await copyFile(path.join(tutorialDirectory, 'contacts-issued.xlsx'), path.join(tutorialDirectory, 'contacts-completed.xlsx'))
     const contacts = JSON.parse(tutorial('read-contacts', true)) as { contacts: unknown[] }
     assert.equal(contacts.contacts.length, 2)
+    run(process.execPath, ['build/walkthroughs/generate.js', 'artifacts/walkthroughs'], consumer)
+    const walkthroughDirectory = path.join(consumer, 'artifacts', 'walkthroughs')
+    for (const name of ['budget', 'study-plan', 'registration-issue']) {
+      run(process.execPath, [path.join(consumer, 'build', 'walkthroughs', `${name}.js`)], walkthroughDirectory)
+    }
+    const registration = run(process.execPath, [path.join(consumer, 'build', 'walkthroughs', 'registration-read.js')], walkthroughDirectory, true)
+    assert.deepEqual(JSON.parse(registration), JSON.parse(await readFile(path.join(walkthroughDirectory, 'registration-completed.json'), 'utf8')))
     await writeFile(path.join(consumer, 'smoke.cjs'), `
   const assert = require('node:assert/strict')
   const api = require('sheetbind')
