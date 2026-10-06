@@ -22,6 +22,7 @@ const template = await api.importWorkbookXlsx(source)
 assert.deepEqual(api.workbookDictionarySources(template), ['statuses'])
 const options = { dictionaries }
 const layout = api.resolveWorkbook(template, data, options)
+assert.throws(() => api.resolveWorkbook(template, { ...data, unused: new Date() }, options), SyntaxError)
 assert(layout.sheets.every(sheet => !('xlsx' in sheet) && sheet.cells.every(cell => !('xlsx' in cell))))
 const another = { ...data, customer: { name: 'Another customer' }, items: data.items.slice(0, 1) }
 freeze(another)
