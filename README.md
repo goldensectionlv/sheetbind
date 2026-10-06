@@ -8,6 +8,8 @@ Requires Node.js 22.13 or newer and ExcelJS 4.4.0. Licensed under MIT.
 
 [Read the documentation](https://goldensectionlv.github.io/sheetbind/) for illustrated examples and downloadable workbooks.
 
+The package is not published on npm yet. The [installation guide](https://goldensectionlv.github.io/sheetbind/getting-started) shows how to build and install an archive from source.
+
 ## First report
 
 Create `first-report-template.xlsx`: put `Customer` in A1 and `{customer.name}` in B1. Set fonts, colours and column widths in Excel.

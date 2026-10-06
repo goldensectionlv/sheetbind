@@ -65,7 +65,9 @@ When changing the item table:
 3. Save matching PNGs with the same base names in `docs/public/images/`. Keep column letters and row numbers visible. Display the existing formula text in the template, and recalculated values in the results. Do not replace formulas in downloadable files to make an image.
 4. Compare tags, values, formatting and addresses with the workbooks. Check totals of 22, 10 and 0 for three, one and zero items. Check both locales on wide and narrow screens.
 
-Images are updated manually; `docs:prepare` does not redraw them. The template guide imports its code and JSON directly from the example files prepared by that command.
+For the form, refresh `form-issued.png` from `issued.xlsx` and `form-completed.png` from `completed.xlsx`: sheet `Input`, range A2:C8. Preserve hidden rows and visible row numbers. In the completed form, row 5 is empty, B4 contains 2, B6 contains 0, and C4 contains the text `2026-01-15`.
+
+Images are updated manually; `docs:prepare` does not redraw them. The template and form guides import code and JSON directly from the example files prepared by that command.
 
 ## Dependency updates
 

@@ -27,9 +27,9 @@ The library has eight built-in rules:
 
 Rules run from left to right. The first failure stops validation of that field; other fields are still checked. Multiple `@validate` directives in one cell append rules in the order written.
 
-`null`, `undefined`, `""`, and whitespace-only strings count as empty. All built-in rules except `required` skip empty values. `0` and `false` are not empty. Rules do not convert values: the string `"12"` fails `number`, and whitespace is not trimmed.
+`null`, `""`, and whitespace-only strings count as empty. All built-in rules except `required` skip empty values. `0` and `false` are not empty. Rules do not convert values: the string `"12"` fails `number`, and whitespace is not trimmed.
 
-For an optional field, omit `required`. The `?` binding prefix permits a missing field in report input; it does not cancel `required` when reading a form.
+For an optional field, omit `required`. The `?` binding prefix permits a missing field in report input; it does not cancel `required` when reading a form. If a value is missing, omit the property from the input object: explicit `undefined` is not valid JSON input.
 
 ## A list of strings
 
@@ -57,7 +57,9 @@ Run from that directory:
 pnpm exec tsx list-report.ts
 ```
 
-Cell B1 in `list-report.xlsx` contains `Draft` and offers the `Draft`, `Ready` list. Reading this kind of field from a [form](./forms.md) returns the selected string. Add `{@validate:required}` to require a selection.
+Cell B1 in `list-report.xlsx` contains `Draft` and offers the `Draft`, `Ready` list. Add `{@validate:required}` to require a selection.
+
+This example creates a report. For a file the user will return to your application, replace `renderWorkbookReport` with `renderWorkbookForm` in both the import and the call. Reading that [form](./forms.md) returns the selected string. A dropdown alone does not make a report readable by `readWorkbookForm`.
 
 The list must contain at least one string. Pass the same list through `dictionaries` when reading the form. A value outside the list produces a `list` issue.
 
@@ -90,7 +92,9 @@ await writeFile('choice-report.xlsx', await renderWorkbookReport(template, data,
 pnpm exec tsx choice-report.ts
 ```
 
-Cell B1 in `choice-report.xlsx` contains `Paper` and offers a list of products. `key=id` names the identifier field; `label=name` names the label shown in Excel. By default the data field holds the whole object. Reading a selection of `Paper` from a form returns:
+Cell B1 in `choice-report.xlsx` contains `Paper` and offers a list of products. `key=id` names the identifier field; `label=name` names the label shown in Excel. By default the data field holds the whole object.
+
+To read the file back, create it with `renderWorkbookForm`, as in the [form tutorial](./forms.md). Reading a selection of `Paper` from that form returns:
 
 ```json
 { "product": { "id": "001", "name": "Paper" } }
@@ -108,7 +112,7 @@ Replace the `data` line in `choice-report.ts` and run the script again:
 const data = { product: '001' }
 ```
 
-The dictionary stays the same. Excel shows `Paper`; reading returns `{ "product": "001" }`. The key keeps its type: the string `'001'` does not become a number.
+The dictionary stays the same. Excel shows `Paper`; reading the form returns `{ "product": "001" }`. The key keeps its type: the string `'001'` does not become a number.
 
 Keys must be unique nonempty strings or finite numbers. Labels must be nonempty strings. Duplicate labels appear in Excel as, for example, `Paper [001]` and `Paper [002]`. Rendering rejects the dictionary if adding keys still leaves ambiguous display labels.
 
