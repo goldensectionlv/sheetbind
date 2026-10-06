@@ -59,6 +59,14 @@ When changing the item table:
 
 Images are updated manually; `docs:prepare` does not redraw them. The template guide imports its code and JSON directly from the example files prepared by that command.
 
+## Dependency updates
+
+Dependabot checks npm packages and GitHub Actions weekly. Minor and patch version updates are grouped into one PR per ecosystem; major updates stay in separate PRs. Security updates are handled separately.
+
+Keep `@types/node` on the oldest supported Node.js major from `package.json`. Dependabot skips major updates for this package so that APIs from later Node.js majors do not silently become available during type checking. Revisit this rule when changing the minimum supported Node.js version.
+
+Review the changelog and runtime requirements, then run `pnpm check:release`. Before merging, update the PR to the current `main` and wait for all required CI checks. Passing checks do not enable automatic merging. When an update affects XLSX processing, also verify the resulting files with an independent consumer.
+
 ## Code conventions
 
 TypeScript runs in strict mode, including unused-local and unused-parameter checks. Library source disallows explicit `any`: receive external values as `unknown` and validate them. Declare public results and contracts between modules explicitly.
