@@ -1,0 +1,8 @@
+{
+  "categories": [{ "name": "Food" }, { "name": "Transport" }, { "name": "Books" }],
+  "months": [
+    { "name": "January", "amounts": [{ "value": 240 }, { "value": 60 }, { "value": 35 }] },
+    { "name": "February", "amounts": [{ "value": 225 }, { "value": 0 }, {}] },
+    { "name": "March", "amounts": [{ "value": 260 }, { "value": 45 }, { "value": 20 }] }
+  ]
+}

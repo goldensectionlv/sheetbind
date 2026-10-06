@@ -1,0 +1,6 @@
+{
+  "groups": [
+    { "name": "Friends", "participants": [{}, {}, {}], "contact": null },
+    { "name": "Family", "participants": [], "contact": null }
+  ]
+}

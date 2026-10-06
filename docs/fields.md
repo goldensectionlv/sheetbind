@@ -3,8 +3,11 @@
 Write rules in the same cell as the [binding](./templates.md):
 
 ```text
-{quantity}{@validate:required|number|min:0}
+{quantity}
+{@validate:required|number|min:0}
 ```
+
+Tags for one field can start on separate lines within the same cell. In Excel for Windows, use Alt+Enter. Line breaks between tags do not change the binding or rules; writing them on one line also works.
 
 Here `quantity` is the data field, `required` rejects an empty value, `number` requires a number, and `min:0` rejects negative numbers. Rules run when building a report and reading a completed form. Issuing a form defers value validation until reading.
 

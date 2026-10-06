@@ -80,3 +80,7 @@
   outline: 2px solid var(--vp-c-brand-1);
   outline-offset: 3px;
 }
+
+.vp-doc .workbook-preview-wide img {
+  min-width: 800px;
+}
