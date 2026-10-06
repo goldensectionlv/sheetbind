@@ -6,6 +6,7 @@ import type { WorkbookFormField } from '../form/workbook-read'
 import { writeData } from '../form/records'
 import { WorkbookFormInputError } from '../form/workbook'
 import { formatAddress, XLSX_MAX_COLUMN, XLSX_MAX_ROW } from './addresses'
+import { assertXlsxText } from './report-text'
 
 interface LocalSource {
   readonly sheet: string
@@ -19,6 +20,9 @@ export function writeLocalChoiceSources(book: Workbook, helper: Worksheet, sheet
   const names = new Set(book.definedNames.model.map(entry => entry.name.toLowerCase()))
   let serial = 0
   function column(values: readonly string[]): string {
+    for (const value of values) {
+      assertXlsxText(value, 'Local choice source')
+    }
     const index = helper.columnCount + 1
     if (index > XLSX_MAX_COLUMN || values.length > XLSX_MAX_ROW) {
       throw new RangeError('Form choice sources exceed the XLSX worksheet limits')
@@ -26,6 +30,7 @@ export function writeLocalChoiceSources(book: Workbook, helper: Worksheet, sheet
     helper.getCell(1, index).value = null
     values.forEach((value, row) => {
       helper.getCell(row + 1, index).value = value
+      helper.getCell(row + 1, index).numFmt = '@'
     })
     let name: string
     do {

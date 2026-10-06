@@ -50,10 +50,10 @@ Original template + completed XLSX
                   |
          validate the completed data
                   |
-              data or issues
+          data and value issues
 ```
 
-The XLSX adapter checks the submitted structure and extracts field values with data paths and cell addresses. Form processing works with this submission, without inspecting ExcelJS cells. It derives the current records from the returned file; it does not match them to original application records.
+The XLSX adapter checks the submitted structure and extracts field values with data paths and cell addresses. The submitted cell's format also determines numeric types and precision here, and native dates become ISO strings. Form processing works with this submission, without inspecting ExcelJS cells. It derives the current records from the returned file; it does not match them to original application records.
 
 All list and choice sources travel with the issued workbook. Shared dictionaries and root collections are stored once; row-local sources use hidden references that move when whole rows or record blocks are copied or sorted. The XLSX adapter resolves those references before passing choice contexts to form processing. Reading does not reload application dictionaries, and the return mode only selects an object or its key.
 

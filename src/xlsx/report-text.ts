@@ -18,6 +18,14 @@ export function xlsxTextIssues(value: string): { code: string, message: string }
   return issues
 }
 
+/** Apply the same text limits to every XLSX writer, including hidden lookup cells. */
+export function assertXlsxText(value: string, location?: string): void {
+  const issue = xlsxTextIssues(value)[0]
+  if (issue) {
+    throw new RangeError(`${location ? location + ': ' : ''}${issue.message}`)
+  }
+}
+
 /**
  * ExcelJS 4.4 writes literal `_xHHHH_` sequences without protecting the initial
  * underscore. Excel decodes them in ST_Xstring fields, changing user text.

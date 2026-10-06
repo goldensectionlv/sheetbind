@@ -101,7 +101,7 @@ describe('shared workbook forms: definition + marked XLSX', () => {
 
   it.each([
     ['number', (book: ExcelJS.Workbook) => {
-      find(book.getWorksheet('Form')!, 0).value = '4'
+      find(book.getWorksheet('Form')!, 0).value = 'four'
     }],
     ['max', (book: ExcelJS.Workbook) => {
       find(book.getWorksheet('Form')!, 0).value = 25
@@ -113,7 +113,7 @@ describe('shared workbook forms: definition + marked XLSX', () => {
     ['formula', (book: ExcelJS.Workbook) => {
       find(book.getWorksheet('Form')!, 0).value = { formula: '1+1', result: 2 }
     }],
-    ['non-scalar', (book: ExcelJS.Workbook) => {
+    ['number', (book: ExcelJS.Workbook) => {
       const cell = find(book.getWorksheet('Form')!, 0)
       cell.value = new Date('2026-01-02')
       cell.numFmt = 'yyyy-mm-dd'
@@ -131,10 +131,15 @@ describe('shared workbook forms: definition + marked XLSX', () => {
       const sheet = book.getWorksheet('Form')!
       find(sheet, FORM_MARKER_PREFIX + '["repeat",1]').value = FORM_MARKER_PREFIX + '["repeat",999]'
     }],
-  ] as const)('rejects %s and returns no partial data', async (code, change) => {
+  ] as const)('rejects %s and retains data only when the structure is valid', async (code, change) => {
     const result = await mutate(change)
     expect(codes(result)).toContain(code)
-    expect(result).not.toHaveProperty('data')
+    if (!result.success && result.issues.every(issue => issue.phase === 'value')) {
+      expect(result.data).toHaveProperty('contact.name', 'Jordan Lee')
+    }
+    else {
+      expect(result).not.toHaveProperty('data')
+    }
   })
 
   it.each([

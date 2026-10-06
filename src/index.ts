@@ -16,5 +16,7 @@ export type { WorkbookCellInstance, WorkbookLayout } from './grid/workbook-layou
 export type WorkbookTemplate = import('./xlsx/template').WorkbookTemplate
 export { importWorkbookXlsx, renderWorkbookReport, resolveWorkbook, workbookDictionarySources } from './xlsx/workbook-template'
 export { renderWorkbookForm, readWorkbookForm } from './xlsx/workbook-form'
+export { inspectWorkbookTemplate } from './xlsx/workbook-inspect'
+export type { WorkbookTemplateFinding } from './xlsx/workbook-inspect'
 export { workbookChoiceRange } from './xlsx/workbook-choice-fields'
 export type { WorkbookFormIssue, WorkbookFormResult } from './form/workbook'

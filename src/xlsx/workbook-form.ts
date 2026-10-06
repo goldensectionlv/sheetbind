@@ -5,7 +5,6 @@ import ExcelJS from 'exceljs'
 import type { ValidationOptions } from '../core/validation'
 import type { Dictionaries } from '../core/dictionaries'
 import { TemplateError } from '../core/template'
-import type { TemplateValue } from '../core/template'
 import { prepareWorkbookForm, referencePath, WorkbookFormInputError } from '../form/workbook'
 import type { PreparedWorkbookField, PreparedWorkbookForm, WorkbookFormIssue, WorkbookFormResult } from '../form/workbook'
 import { issueWorkbookFormData } from '../form/workbook-rows'
@@ -22,6 +21,7 @@ import { workbookListSheetName } from './workbook-dropdowns'
 import { readWorkbookChoiceSources, writeWorkbookChoiceSources } from './workbook-choice-sources'
 import { readLocalChoiceContext } from './workbook-local-choices'
 import { xlsxTextIssues } from './report-text'
+import { readFormValue } from './form-value'
 import { formCarrierDefinition, formDataFromMarkers, placeFormMarkers, readFormMarkers, writeFormMarkers } from './workbook-form-markers'
 import { writeWorkbookPackage } from './workbook-package'
 import { TaggedXlsxError, withTemplateLocations } from './tagged-template'
@@ -43,7 +43,7 @@ export async function renderWorkbookForm(value: WorkbookTemplate, data: unknown,
   const carrier = planFormWorkbook(prepared, formCarrierDefinition(prepared.template), issued)
   const sheets = carrier.layout.sheets.map(sheet => ({ ...sheet, cells: sheet.cells.map(cell => {
     const field = prepared.fields.get(cell.definitionId)
-    return field && (hasValidation(field.rules, 'string') || field.rules?.choice) ? { ...cell, text: true } : cell
+    return field && (hasValidation(field.rules, 'string') || cell.choice) ? { ...cell, text: true } : cell
   }) }))
   const workbook = createWorkbookOutput(sheets, prepared.dictionaries, true)
   for (const [name, markers] of carrier.markers) {
@@ -164,31 +164,16 @@ function readSheetFields(sheet: ExcelJS.Worksheet, plan: WorkbookLayout['sheets'
       issues.push(structureIssue('merges', 'an input field has a different merged range', sheet.name, address))
       continue
     }
-    const raw = plainValue(cell.value)
+    const raw = readFormValue(cell)
     const location = { sheetName: sheet.name, address, nodeId: field.id, path: placed.origin.dataPath }
-    const issue = raw === undefined ? { code: cell.type === ExcelJS.ValueType.Formula ? 'formula' : 'non-scalar', message: 'enter a plain string, number, boolean or blank value' } : undefined
+    const issue = raw === undefined ? { code: cell.type === ExcelJS.ValueType.Formula ? 'formula' : 'non-scalar', message: 'enter a string, number, boolean, Excel date or blank value' } : undefined
     const context = contexts.get(placed.contextPath)!
-    fields.push({ ...field, path: referencePath(field.reference, context), context, raw: raw ?? null, location, ...(issue ? { issue } : {}) })
+    fields.push({ ...field, path: referencePath(field.reference, context), context, raw: raw ?? null, location,
+      ...(field.rules?.list || field.rules?.choice ? { text: cell.text } : {}), ...(issue ? { issue } : {}) })
   }
   return { fields, issues }
 }
 
 function structureIssue(code: string, message: string, sheetName: string, address?: string): WorkbookFormIssue {
   return { phase: 'structure', code, path: '$workbook', message, sheetName, address }
-}
-
-function plainValue(value: ExcelJS.CellValue): TemplateValue | undefined {
-  if (value === null || value === undefined || value === '') {
-    return null
-  }
-  if (typeof value === 'string' || typeof value === 'boolean' || typeof value === 'number' && Number.isFinite(value)) {
-    return value
-  }
-  if (value && typeof value === 'object' && 'hyperlink' in value) {
-    return value.text || null
-  }
-  if (value && typeof value === 'object' && 'richText' in value) {
-    return value.richText.map(part => part.text).join('') || null
-  }
-  return undefined
 }

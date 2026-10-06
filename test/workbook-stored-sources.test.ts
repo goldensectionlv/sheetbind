@@ -5,6 +5,13 @@ import { importAuthoredWorkbook, saveWorkbook } from './xlsx'
 import { importWorkbookXlsx, readWorkbookForm, renderWorkbookForm, renderWorkbookReport } from '../src/index'
 
 const sourceTag = '{.answer}{@choice:.answers; key=id; label=label; return=key; emptySource=input}'
+
+it.each(['x'.repeat(32768), 'A\u0001B', '\ud800'])('rejects invalid text in an unselected local choice %#', async label => {
+  const template = await importAuthoredWorkbook(book => book.addWorksheet('Input').getCell('A1').value = '{answer}{@choice:.options; key=id; label=label; return=key}')
+  for (const render of [renderWorkbookForm, renderWorkbookReport]) {
+    await expect(render(template, { answer: null, options: [{ id: 'a', label }] })).rejects.toThrow(/32767|XML/)
+  }
+})
 async function load(bytes: Uint8Array) {
   const book = new ExcelJS.Workbook()
   await book.xlsx.load(Uint8Array.from(bytes).buffer)

@@ -17,6 +17,8 @@ export interface WorkbookFormField extends PreparedWorkbookField {
   readonly path: DataPath
   readonly context: DataPath
   readonly raw: TemplateValue
+  /** Original input text for label lookup, separate from a normalized free value. */
+  readonly text?: string
   readonly issue?: Pick<WorkbookFormIssue, 'code' | 'message'>
   readonly location: { readonly sheetName: string, readonly address: string, readonly nodeId: string, readonly path: string }
 }
@@ -76,7 +78,7 @@ export function readWorkbookFormFields(prepared: PreparedWorkbookForm, submissio
     }
   }
   if (issues.length) {
-    return { success: false, issues }
+    return { success: false, issues, data }
   }
   return { success: true, data }
 }
@@ -95,7 +97,7 @@ function decodeFormFields(prepared: PreparedWorkbookForm, submission: WorkbookFo
       issues.set(field, { phase: 'value', ...field.issue, ...location })
       continue
     }
-    let raw: FieldValue = field.raw
+    let raw: FieldValue = rules?.list ? field.text ?? field.raw : field.raw
     if (rules?.choice && !isBlank(raw)) {
       try {
         const object = returnsObject(rules.choice)
@@ -107,18 +109,18 @@ function decodeFormFields(prepared: PreparedWorkbookForm, submission: WorkbookFo
         const resolved = choiceOptions(rules.choice, source, current, prepared.dictionaries)
         const items = displayChoice({ key: null, items: resolved }).items
         choices.set(field, items)
-        const selected = items.find(item => item.text === raw)
+        const selected = items.find(item => item.text === (field.text ?? raw))
         if (!selected && !allowsChoiceInput(rules.choice, items)) {
+          raw = field.text ?? raw
           issues.set(field, { phase: 'value', code: 'choice', message: 'select a label from the declared choice source', ...location })
-          continue
         }
         if (selected) {
           raw = object ? structuredClone(selected.value) : selected.key
         }
       }
       catch (error) {
+        raw = field.text ?? raw
         issues.set(field, { phase: 'value', code: 'choice-source', message: (error as Error).message, ...location })
-        continue
       }
     }
     if (fields.has(location.path) && !equalJson(fields.get(location.path), raw)) {

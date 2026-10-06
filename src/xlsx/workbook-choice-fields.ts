@@ -3,7 +3,7 @@ import type { ChoiceRule } from '../core/choices'
 import type { WorkbookChoiceOption } from '../grid/workbook-choice-display'
 import { equalJson } from '../core/json'
 import { formatAddress, XLSX_MAX_COLUMN } from './addresses'
-import { xlsxTextIssues } from './report-text'
+import { assertXlsxText } from './report-text'
 
 export interface WorkbookChoiceTarget {
   readonly rule: ChoiceRule
@@ -41,10 +41,7 @@ function fieldValue(value: unknown): string | number | boolean | null {
   }
   const result = typeof value === 'object' ? JSON.stringify(value) : value as string | number | boolean
   if (typeof result === 'string') {
-    const issue = xlsxTextIssues(result)[0]
-    if (issue) {
-      throw new RangeError(issue.message)
-    }
+    assertXlsxText(result)
   }
   return result
 }

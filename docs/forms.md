@@ -73,7 +73,7 @@ Output:
 }
 ```
 
-Clear B1 and save the file again to get `success: false`. The `issues` array contains a `required` issue with `sheetName: "Input"`, `address: "B1"`, and `path: "$data.customer.name"`. Failed results contain no partial `data`.
+Clear B1 and save the file again to get `success: false`. The `issues` array contains a `required` issue with `sheetName: "Input"`, `address: "B1"`, and `path: "$data.customer.name"`. Parsed fields remain in `data` so they can be shown for correction; `success: false` means the data have not passed validation. Invalid file structure produces no `data`.
 
 `issues` describes problems with the returned file or entered values. Invalid application settings and file operations can throw exceptions, so use both `result.success` and `try/catch`. See the [API](./api.md) for details.
 
@@ -103,7 +103,7 @@ Create an `Input` sheet in `form-template.xlsx`, or download the [template](/exa
 | C3 | `{?.date}{@validate:string}` |
 | C4 | `{/items}` |
 
-The repeat covers row A3:C3. Style it and set B3 to number format `0.00`. C3 needs text format `@`: enter the date as the string `2026-01-15`. Native Excel dates are unsupported in input fields; the `string` rule checks the type, not calendar validity.
+The repeat covers row A3:C3. Style it and set B3 to number format `0.00`. C3 needs text format `@`: enter the date as the string `2026-01-15`. Native Excel dates are also supported and read as ISO strings. This example uses text to preserve the `YYYY-MM-DD` representation; the `string` rule checks the type, not calendar validity.
 
 ### 2. Issue the rows
 

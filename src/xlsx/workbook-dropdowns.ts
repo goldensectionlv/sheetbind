@@ -6,7 +6,7 @@ import type { FieldRules } from '../core/field-rules'
 import { parseDictionaries } from '../core/dictionaries'
 import type { Dictionaries } from '../core/dictionaries'
 import { formatAddress, formatRange, parseAddress } from './addresses'
-import { xlsxTextIssues } from './report-text'
+import { assertXlsxText } from './report-text'
 
 export interface DropdownTarget {
   readonly sheet: Worksheet
@@ -47,10 +47,7 @@ function prepareDropdowns(book: Workbook, targets: readonly DropdownTarget[], va
       return source
     }
     for (const item of items) {
-      const issue = xlsxTextIssues(item)[0]
-      if (issue) {
-        throw new RangeError(`Dropdown ${target.sheet.name}!${target.address}: ${issue.message}`)
-      }
+      assertXlsxText(item, `Dropdown ${target.sheet.name}!${target.address}`)
     }
     sources.set(source, items)
     return source

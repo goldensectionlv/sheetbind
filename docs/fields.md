@@ -303,6 +303,8 @@ registerFormatter('suffix', (value, args) => String(value ?? '') + String(args[0
 {code | uppercase | suffix:"!"}
 ```
 
+Built-in formatters preserve `null`, empty strings and whitespace-only text. A blank answer does not become `0` or the negative label; actual `0` and `false` still get formatted.
+
 Pipelines run left to right. Each handler receives a value and JSON argument array and synchronously returns a string, finite number, boolean or `null`. Unknown formatters, handler failures and invalid results stop rendering. Built-in names are reserved; registering an application name again replaces its handler. Register separately for each loaded package instance, process or worker.
 
 Formatters **never run on read** and are not inverted: a cell formatted with `bool_replace` returns the text “Yes”, not a boolean. Use `@choice` to return a key or object from a display label. Formatting cannot share a cell with `@choice` or `@list`. Handler registrations are not stored in XLSX.

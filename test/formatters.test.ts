@@ -3,6 +3,26 @@ import { readWorkbookForm, registerFormatter, registerValidationRule, renderWork
 import type { Formatter } from '../src/index'
 import { importAuthoredWorkbook, openWorkbook } from './xlsx'
 
+it.each(['bool_replace:"Yes","No"', 'float', 'format_date:YYYY-MM-DD'])('preserves blank input rows with %s', async format => {
+  const template = await importAuthoredWorkbook(book => book.addWorksheet('Input').addRows([
+    ['{#items}'], ['{.value | ' + format + '}{@validate:required}'], ['{/items}'],
+  ]))
+  for (const input of [{}, { items: [{}] }, { items: [{ value: null }, { value: '' }, { value: ' ' }] }]) {
+    expect(await readWorkbookForm(template, await renderWorkbookForm(template, input))).toEqual({ success: true, data: { items: [] } })
+  }
+})
+
+it('does not hide a missing required boolean answer in a partially filled row', async () => {
+  const template = await importAuthoredWorkbook(book => book.addWorksheet('Input').addRows([
+    ['{#items}'], ['{.name}', '{.enabled | bool_replace:"Yes","No"}{@validate:required}'], [null, '{/items}'],
+  ]))
+  const data = { items: [{ name: 'Missing' }, { name: 'False', enabled: false }, { name: 'Zero', enabled: 0 }] }
+  expect(await readWorkbookForm(template, await renderWorkbookForm(template, data))).toMatchObject({ success: false,
+    data: { items: [{ name: 'Missing', enabled: null }, { name: 'False', enabled: 'No' }, { name: 'Zero', enabled: 'No' }] },
+    issues: [{ code: 'required', address: 'B2' }],
+  })
+})
+
 it('formats date, boolean and numeric text in reports and forms without changing the payload', async () => {
   const template = await importAuthoredWorkbook(book => {
     const sheet = book.addWorksheet('Data')

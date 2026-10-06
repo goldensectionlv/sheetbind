@@ -2,6 +2,7 @@ import { assertJson, isDataObject } from './json'
 import type { JsonValue } from './json'
 import { parseRuleArgument, splitRuleText } from './rule-syntax'
 import type { TemplateValue } from './template'
+import { isBlank } from './validation'
 
 export interface FormatterUse {
   readonly formatter: string
@@ -43,27 +44,18 @@ export function parseFormatting(value: unknown): readonly FormatterUse[] {
 }
 
 const builtins: Readonly<Record<string, Formatter>> = {
-  float(value, args) {
-    if (args.length) {
-      throw new SyntaxError('float accepts no arguments')
-    }
-    if (value === null || value === '') {
+  float(value) {
+    if (isBlank(value)) {
       return value
     }
     const number = Number(value)
     return Number.isFinite(number) ? number : value
   },
   bool_replace(value, args) {
-    if (args.length !== 2 || args.some(arg => typeof arg !== 'string')) {
-      throw new SyntaxError('bool_replace requires two text labels')
-    }
-    return args[value ? 0 : 1] as string
+    return isBlank(value) ? value : args[value ? 0 : 1] as string
   },
   format_date(value, args) {
-    if (args.length > 1 || args.length === 1 && typeof args[0] !== 'string') {
-      throw new SyntaxError('format_date accepts one text mask')
-    }
-    if (value === null || value === '' || typeof value === 'boolean') {
+    if (value === null || typeof value === 'boolean' || isBlank(value)) {
       return value
     }
     const date = new Date(value)
@@ -98,6 +90,16 @@ export function prepareFormatting(formatting: Formatting): (value: TemplateValue
     const formatter = registered.get(use.formatter) ?? (Object.hasOwn(builtins, use.formatter) ? builtins[use.formatter] : undefined)
     if (!formatter) {
       throw new SyntaxError(`Unknown formatter: ${use.formatter}`)
+    }
+    const args = use.args ?? []
+    if (use.formatter === 'float' && args.length) {
+      throw new SyntaxError('float accepts no arguments')
+    }
+    if (use.formatter === 'bool_replace' && (args.length !== 2 || args.some(arg => typeof arg !== 'string'))) {
+      throw new SyntaxError('bool_replace requires two text labels')
+    }
+    if (use.formatter === 'format_date' && (args.length > 1 || args.length === 1 && typeof args[0] !== 'string')) {
+      throw new SyntaxError('format_date accepts one text mask')
     }
     return { ...use, formatter }
   })

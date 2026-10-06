@@ -11,7 +11,7 @@ import { workbookListSheetName, writeWorkbookDropdowns } from './workbook-dropdo
 import type { DropdownTarget } from './workbook-dropdowns'
 import { writeWorkbookChoiceFields } from './workbook-choice-fields'
 import type { WorkbookChoiceTarget } from './workbook-choice-fields'
-import { xlsxTextIssues } from './report-text'
+import { assertXlsxText } from './report-text'
 
 /** Ready-to-write cells; bindings, repetition and carrier shifts are already resolved. */
 export interface WorkbookOutputCell extends Pick<WorkbookCell, 'at' | 'size' | 'rules' | 'xlsx'> {
@@ -52,8 +52,8 @@ export function createWorkbookOutput(sheets: readonly WorkbookOutputSheet[], dic
       const at = definition.at
       const value = definition.value
       if ('literal' in value) {
-        if (typeof value.literal === 'string' && xlsxTextIssues(value.literal).length) {
-          throw new RangeError(xlsxTextIssues(value.literal)[0].message)
+        if (typeof value.literal === 'string') {
+          assertXlsxText(value.literal)
         }
       }
       const merged = definition.size.rows > 1 || definition.size.columns > 1
@@ -69,8 +69,8 @@ export function createWorkbookOutput(sheets: readonly WorkbookOutputSheet[], dic
             choiceSources.set(rule, sources)
           }
         }
-        if (choice.text !== null && xlsxTextIssues(choice.text).length) {
-          throw new RangeError(xlsxTextIssues(choice.text)[0].message)
+        if (choice.text !== null) {
+          assertXlsxText(choice.text)
         }
         const items = choiceTexts.get(choice.items) ?? choice.items.map(item => item.text)
         choiceTexts.set(choice.items, items)

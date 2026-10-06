@@ -23,9 +23,9 @@ export interface WorkbookFormIssue {
   readonly nodeId?: string
 }
 export type WorkbookFormResult = { readonly success: true, readonly data: Readonly<Record<string, unknown>> }
-  | { readonly success: false, readonly issues: readonly WorkbookFormIssue[] }
+  | { readonly success: false, readonly issues: readonly WorkbookFormIssue[], readonly data?: Readonly<Record<string, unknown>> }
 
-/** Internal early exit for a malformed carrier. Public reads return issues, never partial data. */
+/** Internal early exit for a malformed carrier; structural failures cannot provide trustworthy data. */
 export class WorkbookFormInputError extends Error {
   constructor(readonly issue: WorkbookFormIssue) {
     super(issue.message)

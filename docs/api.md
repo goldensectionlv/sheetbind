@@ -75,14 +75,24 @@ Use the original template and the completed file. Reading returns fields declare
 ```ts
 type WorkbookFormResult =
   | { readonly success: true, readonly data: Readonly<Record<string, unknown>> }
-  | { readonly success: false, readonly issues: readonly WorkbookFormIssue[] }
+  | { readonly success: false, readonly issues: readonly WorkbookFormIssue[], readonly data?: Readonly<Record<string, unknown>> }
 ```
 
-There is no partial `data` on failure. Check `result.success` and also handle exceptions from template or application configuration.
+Value failures contain both `data` and `issues`, so the application can show the parsed fields for correction. An invalid choice remains the entered string; formulas and unsupported values produce `null` and an issue. These data have not passed validation. Unreadable XLSX or invalid structure produces no `data`. Check `result.success` and also handle template or application configuration exceptions. Types and precision follow the [submitted cells' formats](./xlsx.md#input-formats-and-value-types).
 
 All list and choice sources are embedded in the issued file, including row-local arrays. Reading only uses `validationRules` and `validationMessages` from the options; dictionaries and context are not read inputs. Keep the original template.
 
 An unknown validation rule is skipped with one `console.warn` per rule name per read. Known rules still run in their original order. Invalid arguments for a known rule and errors inside a supplied handler remain errors.
+
+## Inspect a template without data
+
+```ts
+const findings = inspectWorkbookTemplate(template, {
+  dictionaries: ['Products', 'Statuses'],
+})
+```
+
+Checks formatter availability, built-in formatter arguments and dictionary names. Each `WorkbookTemplateFinding` has `severity` (`error` or `warning`), `code`, `message`, `nodeId`, `path` and a `sheetName`/`address` location. An unknown formatter is an error; an unknown dictionary is a warning. Omitting `dictionaries` skips dictionary-name checks. Custom formatters and validation rules are not invoked. Syntax and layout are checked earlier by `importWorkbookXlsx`.
 
 ## Inspect values and placement
 

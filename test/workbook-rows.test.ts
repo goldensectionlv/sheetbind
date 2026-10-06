@@ -182,19 +182,16 @@ it('retains a conflicting nonempty occurrence when the first occurrence is blank
   ] })
 })
 
-it.each([{ formula: '1+1' }, new Date('2026-01-01T00:00:00Z')])('keeps an invalid native input and locates it after blank rows', async value => {
+it.each([{ formula: '1+1' }])('keeps an invalid native input and locates it after blank rows', async value => {
   const template = await importWorkbookXlsx(await templateBytes())
   const book = await openWorkbook(await renderWorkbookForm(template, { contact: 'Jordan', items: [{}, {}, {}] }))
   const sheet = book.worksheets[0]
   const start = Number(find(sheet, FORM_MARKER_PREFIX + '["repeat",1]').row) + 1
   const cell = sheet.getCell(start + 2, 1)
   cell.value = value
-  if (value instanceof Date) {
-    cell.numFmt = 'yyyy-mm-dd'
-  }
   const result = await readWorkbookForm(template, await saveWorkbook(book))
   expect(result).toMatchObject({ success: false, issues: [
-    { code: value instanceof Date ? 'non-scalar' : 'formula', address: cell.address, path: '$data.items[0].name' },
+    { code: 'formula', address: cell.address, path: '$data.items[0].name' },
   ] })
 })
 
