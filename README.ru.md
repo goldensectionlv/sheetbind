@@ -8,7 +8,13 @@ Sheetbind заполняет XLSX-шаблоны данными. Разметь�
 
 [Документация](https://goldensectionlv.github.io/sheetbind/ru/) содержит примеры с изображениями и книги для скачивания.
 
-Пакет пока не опубликован в npm. [Инструкция по установке](https://goldensectionlv.github.io/sheetbind/ru/getting-started) показывает, как собрать и установить архив из исходников.
+Установите Sheetbind и необходимый ему ExcelJS:
+
+```sh
+npm install sheetbind exceljs@4.4.0
+```
+
+[Инструкция по установке](https://goldensectionlv.github.io/sheetbind/ru/getting-started) показывает, как создать приложение и запустить первый отчёт.
 
 ## Первый отчёт
 

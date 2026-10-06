@@ -1,30 +1,18 @@
 # Первый отчёт
 
-Создадим XLSX с именем заказчика. Нужны Git, Node.js 22.13 или новее, [pnpm 11.5.2](https://pnpm.io/installation) и Excel для создания или открытия книги. Проверьте версию командой `pnpm --version`: команды ниже рассчитаны на pnpm 11.5.2.
+Создадим XLSX с именем заказчика. Нужны Node.js 22.13 или новее, [pnpm 11.5.2](https://pnpm.io/installation) и Excel для создания или открытия книги. Проверьте версию командой `pnpm --version`: команды ниже рассчитаны на pnpm 11.5.2.
 
 Если нужна установка этой версии pnpm, выполните `npm install --global pnpm@11.5.2`.
 
 ## 1. Установите пакет
 
-Пакет пока не опубликован в npm. Сейчас установим архив, собранный из исходников.
-
-Клонируйте репозиторий в папку `sheetbind`, установите зависимости и соберите архив пакета. Если эта папка с исходниками уже есть, пропустите `git clone`:
+Создайте приложение и установите Sheetbind из npm, ExcelJS и средство запуска TypeScript:
 
 ```sh
-git clone https://github.com/goldensectionlv/sheetbind.git
-cd sheetbind
-pnpm install --frozen-lockfile
-npm pack
-```
-
-В этой папке появится `sheetbind-0.2.0.tgz`. Создайте рядом приложение и установите архив, ExcelJS и средство запуска TypeScript:
-
-```sh
-cd ..
 mkdir sheetbind-example
 cd sheetbind-example
 pnpm init --init-type module
-pnpm add ../sheetbind/sheetbind-0.2.0.tgz exceljs@4.4.0
+pnpm add sheetbind@0.2.0 exceljs@4.4.0
 pnpm add -D tsx
 ```
 
