@@ -6,6 +6,14 @@
     "node": ">=22.13.0"
   },
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/goldensectionlv/sheetbind.git"
+  },
+  "homepage": "https://goldensectionlv.github.io/sheetbind/",
+  "bugs": {
+    "url": "https://github.com/goldensectionlv/sheetbind/issues"
+  },
   "keywords": [
     "xlsx",
     "excel",
