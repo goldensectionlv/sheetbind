@@ -16,10 +16,10 @@ import { WorkbookTemplate } from './template'
 import { resolveWorkbookFormulas } from '../grid/workbook-formulas'
 import { createWorkbookOutput } from './workbook-output'
 import { formatAddress, formatRange, parseRange } from './addresses'
-import { loadFormWorkbook } from './form-input'
+import { loadWorkbook } from './workbook-input'
+import { createWorkbookResources } from './workbook-resources'
 import { workbookListSheetName } from './workbook-dropdowns'
 import { readWorkbookChoiceSources, writeWorkbookChoiceSources } from './workbook-choice-sources'
-import { readLocalChoiceContext } from './workbook-local-choices'
 import { xlsxTextIssues } from './report-text'
 import { readFormValue } from './form-value'
 import { formCarrierDefinition, formDataFromMarkers, placeFormMarkers, readFormMarkers, writeFormMarkers } from './workbook-form-markers'
@@ -45,13 +45,14 @@ export async function renderWorkbookForm(value: WorkbookTemplate, data: unknown,
     const field = prepared.fields.get(cell.definitionId)
     return field && (hasValidation(field.rules, 'string') || cell.choice) ? { ...cell, text: true } : cell
   }) }))
-  const workbook = createWorkbookOutput(sheets, prepared.dictionaries, true)
+  const resources = createWorkbookResources(WorkbookTemplate.content(value).resources)
+  const workbook = createWorkbookOutput(sheets, prepared.dictionaries, resources)
   for (const [name, markers] of carrier.markers) {
     writeFormMarkers(workbook.getWorksheet(name)!, markers)
   }
-  const sources = workbookChoiceSources(prepared.template, issued, prepared.dictionaries)
+  const sources = workbookChoiceSources(prepared.template, issued, prepared.dictionaries, sheets)
   if (sources) {
-    writeWorkbookChoiceSources(workbook, workbookListSheetName(prepared.template.sheets.map(sheet => sheet.name)), sources, sheets)
+    writeWorkbookChoiceSources(workbook, workbookListSheetName(prepared.template.sheets.map(sheet => sheet.name)), sources, resources)
   }
   return writeWorkbookPackage(workbook, { source, template: prepared.template, sheets, axes: carrier.axes, coordinates: carrier.coordinates, carriers: carrier.formulaRows })
 }
@@ -64,7 +65,7 @@ export async function readWorkbookForm(value: WorkbookTemplate, bytes: Uint8Arra
   }))
   let returned: ExcelJS.Workbook
   try {
-    returned = await loadFormWorkbook(bytes)
+    returned = await loadWorkbook(bytes)
   }
   catch {
     return { success: false, issues: [{ phase: 'xlsx', code: 'invalid-workbook', path: '$workbook', message: 'cannot read a supported unencrypted XLSX form' }] }
@@ -77,13 +78,7 @@ export async function readWorkbookForm(value: WorkbookTemplate, bytes: Uint8Arra
     const sources = [...prepared.fields.values()].some(field => field.rules?.choice || field.rules?.list)
       ? readWorkbookChoiceSources(returned, workbookListSheetName(prepared.template.sheets.map(sheet => sheet.name)))
       : { dictionaries: {}, context: {}, local: {} }
-    const fields = result.submission.fields.map(field => {
-      const source = field.rules?.choice?.source
-      return field.raw !== null && source && 'path' in source && source.from !== 'root'
-        ? { ...field, choiceContext: readLocalChoiceContext(returned, field, sources.local) }
-        : field
-    })
-    return readWorkbookFormFields({ ...prepared, dictionaries: sources.dictionaries }, { ...result.submission, fields }, { context: sources.context, validateText: xlsxTextIssues })
+    return readWorkbookFormFields({ ...prepared, dictionaries: sources.dictionaries }, result.submission, { context: sources.context, local: sources.local, validateText: xlsxTextIssues })
   }
   catch (error) {
     if (error instanceof WorkbookFormInputError) {
@@ -164,12 +159,16 @@ function readSheetFields(sheet: ExcelJS.Worksheet, plan: WorkbookLayout['sheets'
       issues.push(structureIssue('merges', 'an input field has a different merged range', sheet.name, address))
       continue
     }
-    const raw = readFormValue(cell)
+    const { raw, text } = readFormValue(cell)
     const location = { sheetName: sheet.name, address, nodeId: field.id, path: placed.origin.dataPath }
-    const issue = raw === undefined ? { code: cell.type === ExcelJS.ValueType.Formula ? 'formula' : 'non-scalar', message: 'enter a string, number, boolean, Excel date or blank value' } : undefined
+    const issue = raw === undefined
+      ? cell.type === ExcelJS.ValueType.Formula
+        ? { code: 'formula', message: 'recalculate and save the formula in Excel; its saved result must be a string, number, boolean, date or blank value' }
+        : { code: 'non-scalar', message: 'enter a string, number, boolean, Excel date or blank value' }
+      : undefined
     const context = contexts.get(placed.contextPath)!
     fields.push({ ...field, path: referencePath(field.reference, context), context, raw: raw ?? null, location,
-      ...(field.rules?.list || field.rules?.choice ? { text: cell.text } : {}), ...(issue ? { issue } : {}) })
+      ...(field.rules?.list || field.rules?.choice ? { text } : {}), ...(issue ? { issue } : {}) })
   }
   return { fields, issues }
 }

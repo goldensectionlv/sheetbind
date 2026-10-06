@@ -7,6 +7,8 @@ import { parseDictionaries } from '../core/dictionaries'
 import type { Dictionaries } from '../core/dictionaries'
 import { formatAddress, formatRange, parseAddress } from './addresses'
 import { assertXlsxText } from './report-text'
+import { createWorkbookResources } from './workbook-resources'
+import type { WorkbookResources } from './workbook-resources'
 
 export interface DropdownTarget {
   readonly sheet: Worksheet
@@ -75,23 +77,17 @@ function prepareDropdowns(book: Workbook, targets: readonly DropdownTarget[], va
 }
 
 /** Preflight precedes all writes; an existing validation is never silently replaced. */
-export function writeWorkbookDropdowns(book: Workbook, targets: readonly DropdownTarget[], values: Dictionaries = {}): Worksheet | undefined {
+export function writeWorkbookDropdowns(book: Workbook, targets: readonly DropdownTarget[], values: Dictionaries = {}, resources: WorkbookResources = createWorkbookResources({ names: book.definedNames.model.map(entry => entry.name), references: new Set() })): Worksheet | undefined {
   if (!targets.length) {
     return
   }
   const { sources, fields } = prepareDropdowns(book, targets, values)
   const sheetName = workbookListSheetName(book.worksheets.map(sheet => sheet.name))
   const sheet = book.addWorksheet(sheetName, { state: 'veryHidden' })
-  const names = new Set(book.definedNames.model.map(entry => entry.name.toLowerCase()))
   const references = new Map<string, string>()
   let serial = 0
   function nextName(prefix: string): string {
-    let name: string
-    do {
-      name = `${prefix}${++serial}`
-    } while (names.has(name.toLowerCase()))
-    names.add(name.toLowerCase())
-    return name
+    return resources.allocate(`${prefix}${++serial}`)
   }
   for (const [index, [source, items]] of [...sources].entries()) {
     const name = nextName('_sb_list_')

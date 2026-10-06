@@ -32,6 +32,19 @@ it.each<[CellValue, string, unknown]>([
   [1234567, '0.00,,', 1230000],
   [1234567, '0.00E+00', 1230000],
   [0.00001234567, '0.00E+00', 0.0000123],
+  [12345.67, '##0.0E+0', 12300],
+  [12345.67, '##0.00E+00', 12350],
+  [0.01234567, '##0.0E+0', 0.0123],
+  [12.34567, '00.0E+0', 12.3],
+  [12345.67, '00.0E+0', 12000],
+  [999.96, '##0.0E+0', 1000],
+  [-12345.67, '##0.0E+0', -12300],
+  [{ formula: '5/2', result: 2.5 }, '0', 3],
+  [{ formula: '10.075', result: 10.075 }, '0.00', 10.08],
+  [{ formula: '"006"', result: '006' }, '@', '006'],
+  [{ formula: '1=2', result: false }, 'General', false],
+  [{ formula: '0', result: 0 }, 'General', 0],
+  [{ formula: '""', result: '' }, 'General', null],
   [12.345, '"Revision 2.0; "0.00" units"', 12.35],
   [12.345, '[>=100]0.0;0.00', 12.35],
   [123.456, '[>=100]0.0;0.00', 123.5],
@@ -53,6 +66,30 @@ it.each<[CellValue, string, unknown]>([
   cell.value = value
   cell.numFmt = format
   expect(await readWorkbookForm(template, await saveWorkbook(book))).toEqual({ success: true, data: { value: expected } })
+})
+
+it('keeps blank list fields null and uses saved formula labels without losing zero', async () => {
+  const template = await importAuthoredWorkbook(book => book.addWorksheet('Input').addRows([
+    ['{#items}'], ['{.name}', '{.list}{@list:Codes}', '{.choice}{@choice:Options; key=id; label=name; return=key}', '{.plain}'],
+    [null, null, null, '{/items}'],
+  ]))
+  const book = await openWorkbook(await renderWorkbookForm(template, { items: [{ name: 'Blank' }, { name: 'Zero' }] }, {
+    dictionaries: { Codes: ['0', '006'], Options: [{ id: 'zero', name: '0' }] },
+  }))
+  book.worksheets[0].getCell('B3').value = { formula: '0', result: 0 }
+  book.worksheets[0].getCell('C3').value = { formula: '0', result: 0 }
+  expect(await readWorkbookForm(template, await saveWorkbook(book))).toEqual({ success: true, data: { items: [
+    { name: 'Blank', list: null, choice: null, plain: null }, { name: 'Zero', list: '0', choice: 'zero', plain: null },
+  ] } })
+})
+
+it.each([{ formula: '1+1' }, { formula: '1/0', result: { error: '#DIV/0!' as const } }])('reports a missing or failed formula result without discarding other values (%j)', async value => {
+  const template = await importAuthoredWorkbook(book => book.addWorksheet('Input').addRow(['{name}', '{amount}']))
+  const book = await openWorkbook(await renderWorkbookForm(template, { name: 'Keep' }))
+  book.worksheets[0].getCell('B1').value = value
+  expect(await readWorkbookForm(template, await saveWorkbook(book))).toMatchObject({ success: false,
+    data: { name: 'Keep', amount: null }, issues: [{ phase: 'value', code: 'formula', address: 'B1' }],
+  })
 })
 
 it('validates converted values and retains usable data alongside input errors', async () => {

@@ -185,11 +185,11 @@ const result = await readWorkbookForm(template, completed)
 
 The first row offers `Red / Blue`, and the second offers `Small / Large`. No extra identifier or flattened dictionary is needed. Source arrays do not become submitted fields.
 
-Copy, move, delete and sort **whole rows**, including their hidden source references. For multirow records, include the whole block. Sorting only visible cells can separate values from their local sources. New rows with local options should be made by copying an existing row or block; issue a new form to change the available options.
+Local options are saved for the issued fields. Fill or clear values while keeping the same records and row order. To add, remove or reorder records, or change their options, issue a new form. Local sources are not automatically transferred between rows.
 
 Omitted, `undefined` and `null` data sources such as `.answers` or `$root.catalog.options` behave like an empty array. You do not need to add `answers: []` to every record. Named dictionaries must still be supplied through `options.dictionaries`.
 
-For questions that accept text when `answers` is empty or absent, add `emptySource=input` together with `return=key`. Populated sources still require a listed value, and `@validate` rules still apply. An empty local source retains a dropdown arrow in Excel but accepts ordinary input.
+For questions that accept text when `answers` is empty or absent, add `emptySource=input` together with `return=key`. Populated sources still require a listed value, and `@validate` rules still apply. An empty source allows ordinary input without a dropdown.
 
 ## Custom messages
 

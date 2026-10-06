@@ -111,7 +111,7 @@ describe('shared workbook forms: definition + marked XLSX', () => {
       book.worksheets.find(sheet => sheet.state === 'veryHidden')!.getCell('A1').value = 'Unknown'
     }],
     ['formula', (book: ExcelJS.Workbook) => {
-      find(book.getWorksheet('Form')!, 0).value = { formula: '1+1', result: 2 }
+      find(book.getWorksheet('Form')!, 0).value = { formula: '1+1' }
     }],
     ['number', (book: ExcelJS.Workbook) => {
       const cell = find(book.getWorksheet('Form')!, 0)

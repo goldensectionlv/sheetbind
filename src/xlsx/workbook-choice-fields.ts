@@ -4,6 +4,7 @@ import type { WorkbookChoiceOption } from '../grid/workbook-choice-display'
 import { equalJson } from '../core/json'
 import { formatAddress, XLSX_MAX_COLUMN } from './addresses'
 import { assertXlsxText } from './report-text'
+import type { WorkbookResources } from './workbook-resources'
 
 export interface WorkbookChoiceTarget {
   readonly rule: ChoiceRule
@@ -15,29 +16,30 @@ function namePart(value: string): string {
   return value.replace(/[^a-z0-9]/g, character => `_u${character.charCodeAt(0).toString(16).padStart(4, '0')}_`)
 }
 function rangeName(prefix: string, field?: string): string {
-  const name = `${prefix}__${field === undefined ? 'text' : `field_${namePart(field)}`}`
+  return `${prefix}__${field === undefined ? 'text' : `field_${namePart(field)}`}`
+}
+
+/** Stable field names for a named dictionary projection, independent of object key order. */
+export function workbookChoiceRange(rule: ChoiceRule, field?: string): string {
+  const name = rangeName(choicePrefix(rule), field)
   if (name.length > 255) {
     throw new RangeError('Choice field reference exceeds the Excel defined-name limit')
   }
   return name
 }
 
-/** Stable field names for a named dictionary projection, independent of object key order. */
-export function workbookChoiceRange(rule: ChoiceRule, field?: string): string {
+function choicePrefix(rule: ChoiceRule): string {
   if (!('dictionary' in rule.source)) {
     throw new RangeError('A stable choice range requires a named dictionary source')
   }
   const parts = [rule.source.dictionary, rule.key, rule.label].map(namePart)
   const prefix = parts.map(part => `${part.length}_${part}`).join('_')
-  return rangeName(`_sb_ref_${prefix}`, field)
+  return `_sb_ref_${prefix}`
 }
 
 function fieldValue(value: unknown): string | number | boolean | null {
   if (value === undefined || value === null) {
     return null
-  }
-  if (typeof value === 'number' && Number(value.toPrecision(15)) !== value) {
-    throw new RangeError('Numeric choice fields must fit Excel precision; use a string for longer identifiers')
   }
   const result = typeof value === 'object' ? JSON.stringify(value) : value as string | number | boolean
   if (typeof result === 'string') {
@@ -47,16 +49,18 @@ function fieldValue(value: unknown): string | number | boolean | null {
 }
 
 /** Full objects remain in the source payload; this flat projection is for Excel formulas. */
-export function writeWorkbookChoiceFields(book: Workbook, sheet: Worksheet, targets: readonly WorkbookChoiceTarget[]): void {
+export function writeWorkbookChoiceFields(book: Workbook, sheet: Worksheet, targets: readonly WorkbookChoiceTarget[], resources: WorkbookResources): void {
   const named = new Map<string, readonly WorkbookChoiceOption[]>()
-  const contextual = new WeakSet<readonly WorkbookChoiceOption[]>()
   const sources: { headers: readonly string[], rows: readonly ReturnType<typeof fieldValue>[][], names: readonly string[] }[] = []
-  const names = new Set(book.definedNames.model.map(entry => entry.name.toLowerCase()))
   let columns = sheet.columnCount
   for (const { rule, items } of targets) {
     let prefix: string
     if ('dictionary' in rule.source) {
-      const name = workbookChoiceRange(rule)
+      prefix = choicePrefix(rule)
+      if (![...resources.references].some(name => name.startsWith(prefix.toLowerCase() + '__'))) {
+        continue
+      }
+      const name = rangeName(prefix)
       const previous = named.get(name)
       if (previous) {
         if (!equalJson(previous, items)) {
@@ -65,16 +69,14 @@ export function writeWorkbookChoiceFields(book: Workbook, sheet: Worksheet, targ
         continue
       }
       named.set(name, items)
-      prefix = name.slice(0, -6)
     }
     else {
-      if (contextual.has(items)) {
-        continue
-      }
-      prefix = `_sb_context_${sources.length + 1}`
-      contextual.add(items)
+      continue
     }
-    const fields = [...new Set(items.flatMap(item => Object.keys(item.value)))].sort()
+    const fields = [...new Set(items.flatMap(item => Object.keys(item.value)))].filter(field => resources.references.has(rangeName(prefix, field).toLowerCase())).sort()
+    if (!fields.length && !resources.references.has(rangeName(prefix).toLowerCase())) {
+      continue
+    }
     columns += fields.length + 1
     if (columns > XLSX_MAX_COLUMN) {
       throw new RangeError('Object-choice field ranges exceed the XLSX column limit')
@@ -82,10 +84,7 @@ export function writeWorkbookChoiceFields(book: Workbook, sheet: Worksheet, targ
     const references = [rangeName(prefix), ...fields.map(field => rangeName(prefix, field))]
     fields.forEach(fieldValue)
     for (const name of references) {
-      if (names.has(name.toLowerCase())) {
-        throw new RangeError(`Choice range already exists: ${name}`)
-      }
-      names.add(name.toLowerCase())
+      resources.allocate(name, true)
     }
     const rows = items.map(item => [fieldValue(item.text), ...fields.map(field => fieldValue(item.value[field]))])
     sources.push({ headers: ['Selection', ...fields], rows, names: references })

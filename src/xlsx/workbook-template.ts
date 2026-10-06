@@ -10,7 +10,6 @@ import { planWorkbook, resolveWorkbook as resolveDefinition } from '../grid/work
 import type { WorkbookLayout } from '../grid/workbook-layout'
 import type { WorkbookCell, WorkbookRegion, WorkbookRow, WorkbookSheet } from '../grid/workbook'
 import { formatAddress, parseRange } from './addresses'
-import { workbookParts } from './workbook-source'
 import { compileWorkbookSheet } from './workbook-tags'
 import { writeWorkbookPackage } from './workbook-package'
 import { parseDictionaries } from '../core/dictionaries'
@@ -23,19 +22,21 @@ import type { FormulaRows } from '../grid/workbook-formula'
 import { readWorkbookFormula } from './workbook-formula'
 import { readSourceContent } from './source-metadata'
 import { TaggedXlsxError, withTemplateLocations } from './tagged-template'
+import { loadWorkbook } from './workbook-input'
+import { readWorkbookResources, createWorkbookResources, workbookParts } from './workbook-resources'
 
 function unsupported(what: string): never {
   throw new RangeError(`${what} is outside the supported template model`)
 }
 /** Import a tagged workbook into the execution document. */
 export async function importWorkbookXlsx(bytes: Uint8Array): Promise<WorkbookTemplate> {
-  const book = new ExcelJS.Workbook()
+  let book: ExcelJS.Workbook
   let zip: JSZip
   let parts: Awaited<ReturnType<typeof workbookParts>>
   try {
     zip = await JSZip.loadAsync(bytes)
     parts = await workbookParts(zip)
-    await book.xlsx.load(Uint8Array.from(bytes).buffer)
+    book = await loadWorkbook(bytes, zip)
   }
   catch (error) {
     throw new TaggedXlsxError([{ phase: 'template', code: 'invalid-workbook', path: '$workbook', message: 'cannot read a supported unencrypted XLSX template' }], { cause: error })
@@ -146,7 +147,7 @@ export async function importWorkbookXlsx(bytes: Uint8Array): Promise<WorkbookTem
     return { id: createId('sheet'), name: sheet.name, state: sheet.state, xlsx: { part, markers: [...markers], cells: sourceCells }, ...(print ? { print } : {}),
       rows, columns, cells, ...(occupied.length ? { occupied } : {}), ...(regions.length ? { regions } : {}) }
   }
-  return new WorkbookTemplate(validateWorkbookDefinition({ sheets: book.worksheets.map(importSheet) }), bytes)
+  return new WorkbookTemplate(validateWorkbookDefinition({ sheets: book.worksheets.map(importSheet) }), bytes, await readWorkbookResources(zip))
 }
 
 type ImportedRegion = Omit<WorkbookRegion, 'cells' | 'rows' | 'regions' | 'occupied'> & { cells: WorkbookCell[], rows: WorkbookRow[], occupied: GridRange[], regions?: ImportedRegion[] }
@@ -186,10 +187,10 @@ export function workbookDictionarySources(template: WorkbookTemplate): string[] 
 
 /** Render data into the imported workbook while preserving its native content. */
 export async function renderWorkbookReport(template: WorkbookTemplate, data: unknown, options: { readonly dictionaries?: Dictionaries } = {}): Promise<Buffer> {
-  const { definition, source } = WorkbookTemplate.content(template)
+  const { definition, source, resources } = WorkbookTemplate.content(template)
   const dictionaries = parseDictionaries(options.dictionaries ?? {})
   assertInputData(data)
   const plan = withTemplateLocations(definition, () => planWorkbook(definition, data, { ...options, dictionaries, checkValues: true }))
-  const output = createWorkbookOutput(plan.layout.sheets, dictionaries)
+  const output = createWorkbookOutput(plan.layout.sheets, dictionaries, createWorkbookResources(resources))
   return writeWorkbookPackage(output, { source, template: definition, sheets: plan.layout.sheets, axes: plan.axes, coordinates: plan.coordinates })
 }

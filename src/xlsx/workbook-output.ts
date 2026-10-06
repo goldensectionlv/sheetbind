@@ -1,5 +1,4 @@
 import ExcelJS from 'exceljs'
-import { returnsObject } from '../core/choices'
 import type { Dictionaries } from '../core/dictionaries'
 import type { TemplateValue } from '../core/template'
 import type { WorkbookCell, WorkbookSheet } from '../grid/workbook'
@@ -12,6 +11,8 @@ import type { DropdownTarget } from './workbook-dropdowns'
 import { writeWorkbookChoiceFields } from './workbook-choice-fields'
 import type { WorkbookChoiceTarget } from './workbook-choice-fields'
 import { assertXlsxText } from './report-text'
+import { createWorkbookResources } from './workbook-resources'
+import type { WorkbookResources } from './workbook-resources'
 
 /** Ready-to-write cells; bindings, repetition and carrier shifts are already resolved. */
 export interface WorkbookOutputCell extends Pick<WorkbookCell, 'at' | 'size' | 'rules' | 'xlsx'> {
@@ -23,7 +24,7 @@ export interface WorkbookOutputSheet extends Omit<WorkbookSheet, 'cells' | 'regi
   readonly cells: readonly WorkbookOutputCell[]
 }
 
-export function createWorkbookOutput(sheets: readonly WorkbookOutputSheet[], dictionaries?: Dictionaries, form = false) {
+export function createWorkbookOutput(sheets: readonly WorkbookOutputSheet[], dictionaries?: Dictionaries, resources: WorkbookResources = createWorkbookResources()) {
   const book = new ExcelJS.Workbook()
   book.calcProperties.fullCalcOnLoad = true
   const dropdowns: DropdownTarget[] = []
@@ -60,7 +61,7 @@ export function createWorkbookOutput(sheets: readonly WorkbookOutputSheet[], dic
       const address = merged || definition.choice || definition.rules?.list ? formatAddress(at) : ''
       if (definition.choice) {
         const choice = definition.choice
-        if (returnsObject(definition.rules?.choice)) {
+        if (resources.references.size && 'dictionary' in definition.rules!.choice!.source) {
           const rule = definition.rules!.choice!
           const sources = choiceSources.get(rule) ?? new WeakSet<WorkbookChoiceTarget['items']>()
           if (!sources.has(choice.items)) {
@@ -74,10 +75,7 @@ export function createWorkbookOutput(sheets: readonly WorkbookOutputSheet[], dic
         }
         const items = choiceTexts.get(choice.items) ?? choice.items.map(item => item.text)
         choiceTexts.set(choice.items, items)
-        const source = definition.rules!.choice!.source
-        const localFormChoice = form && 'path' in source && source.from !== 'root'
-        // Form-local lists are written together with their copied source references.
-        if (!localFormChoice && (items.length || definition.rules?.choice?.emptySource !== 'input')) {
+        if (items.length || definition.rules?.choice?.emptySource !== 'input') {
           dropdowns.push({ sheet, address, rules: definition.rules ?? {}, items })
         }
       }
@@ -89,10 +87,10 @@ export function createWorkbookOutput(sheets: readonly WorkbookOutputSheet[], dic
       }
     }
   }
-  const listSheet = writeWorkbookDropdowns(book, dropdowns, dictionaries)
+  const listSheet = writeWorkbookDropdowns(book, dropdowns, dictionaries, resources)
     ?? (choices.length ? book.addWorksheet(workbookListSheetName(book.worksheets.map(sheet => sheet.name)), { state: 'veryHidden' }) : undefined)
   if (listSheet) {
-    writeWorkbookChoiceFields(book, listSheet, choices)
+    writeWorkbookChoiceFields(book, listSheet, choices, resources)
   }
   return book
 }

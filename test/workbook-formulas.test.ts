@@ -103,6 +103,8 @@ describe('workbook formulas', () => {
     expect(await readWorkbookForm(definition, Buffer.from(await book.xlsx.writeBuffer()))).toMatchObject({ success: true, data: expected })
     sheet.getCell(start, 4).value = { formula }
     sheet.getCell(start, 2).value = { formula: '1+1', result: 2 }
+    expect(await readWorkbookForm(definition, Buffer.from(await book.xlsx.writeBuffer()))).toMatchObject({ success: true, data: { items: [{ ...data.items[0], quantity: 2 }, data.items[1]] } })
+    sheet.getCell(start, 2).value = { formula: '1+1' }
     expect(await readWorkbookForm(definition, Buffer.from(await book.xlsx.writeBuffer()))).toMatchObject({ success: false, issues: [expect.objectContaining({ code: 'formula' })] })
   })
 

@@ -1,6 +1,5 @@
 import { expect, it } from 'vitest'
 import ExcelJS from 'exceljs'
-import { readFile } from 'node:fs/promises'
 import { importAuthoredWorkbook, saveWorkbook } from './xlsx'
 import { importWorkbookXlsx, readWorkbookForm, renderWorkbookForm, renderWorkbookReport } from '../src/index'
 
@@ -41,7 +40,7 @@ it('reads named key, object, root and string-list sources without a second input
   expect(await readWorkbookForm(template, await saveWorkbook(book))).toMatchObject({ success: false, issues: [{ code: 'choice-source' }] })
 })
 
-it('keeps distinct local sources after row sorting, copying, deletion and a fresh template import', async () => {
+it('keeps distinct local sources for issued fields without movable worksheet references', async () => {
   const authored = new ExcelJS.Workbook()
   authored.addWorksheet('Survey').addRows([
     ['{#questions}'], ['{.question}', sourceTag], [null, '{/questions}'],
@@ -54,20 +53,18 @@ it('keeps distinct local sources after row sorting, copying, deletion and a fres
   ] })
   const book = await load(issued)
   const sheet = book.worksheets[0]
-  const first = sheet.getRow(2).values
-  sheet.getRow(2).values = sheet.getRow(3).values
-  sheet.getRow(3).values = first
-  sheet.spliceRows(4, 0, sheet.getRow(2).values as ExcelJS.CellValue[])
-  sheet.spliceRows(3, 1)
+  expect(sheet.getCell('B2').dataValidation.formulae[0]).toMatch(/^_sb_list_/)
+  expect(sheet.getCell('B3').dataValidation.formulae[0]).not.toEqual(sheet.getCell('B2').dataValidation.formulae[0])
+  expect(sheet.getCell('B4').dataValidation).toBeUndefined()
+  expect(sheet.columnCount).toBe(257)
   const template = await importWorkbookXlsx(bytes)
   expect(await readWorkbookForm(template, await saveWorkbook(book))).toEqual({ success: true, data: { questions: [
-    { question: 'B', answer: 'same' }, { question: 'B', answer: 'same' }, { question: 'C', answer: 0 },
+    { question: 'A', answer: 'same' }, { question: 'B', answer: 'same' }, { question: 'C', answer: 0 },
   ] } })
-  sheet.getCell('B2').value = 'First'
-  expect(await readWorkbookForm(template, await saveWorkbook(book))).toMatchObject({ success: false, issues: [{ code: 'choice', address: 'B2' }] })
   sheet.getCell('B2').value = 'Second'
-  sheet.getCell(2, sheet.columnCount).value = null
-  expect(await readWorkbookForm(template, await saveWorkbook(book))).toMatchObject({ success: false, issues: [{ code: 'choice-source', address: 'B2' }] })
+  expect(await readWorkbookForm(template, await saveWorkbook(book))).toMatchObject({ success: false, issues: [{ code: 'choice', address: 'B2' }] })
+  sheet.getCell('B2').value = 'First'
+  expect((await readWorkbookForm(template, await saveWorkbook(book))).success).toBe(true)
 })
 
 it('keeps sources for two independent local fields in nested records, including object payloads', async () => {
@@ -157,17 +154,27 @@ it('still rejects invalid source types, missing named dictionaries and lost loca
   expect(await readWorkbookForm(template, await saveWorkbook(book))).toMatchObject({ success: false, issues: [{ code: 'choice-source' }] })
 })
 
-it('reads an Excel-saved form after native sorting and copying, with independent local dropdowns', async () => {
-  const template = await importAuthoredWorkbook(book => book.addWorksheet('Survey').addRows([
-    ['{status}{@list:Statuses}'], ['{#questions}'],
-    ['{.question}', sourceTag, '{.detail}{@choice:.details; key=id; label=label}'],
-    [null, null, '{/questions}'],
-  ]))
-  const bytes = await readFile(new URL('./fixtures/local-choices-excel.xlsx', import.meta.url))
-  expect(await readWorkbookForm(template, bytes)).toEqual({ success: true, data: { status: 'Open', questions: [
-    { question: 'Text', answer: 'A free answer', detail: { id: 'same', label: 'Text detail' } },
-    { question: 'Beta', answer: 'same', detail: { id: 'same', label: 'Beta detail', code: '007', rate: 20 } },
-    { question: 'Beta', answer: 'other', detail: { id: 'same', label: 'Beta detail', code: '007', rate: 20 } },
-    { question: 'Alpha', answer: 'same', detail: { id: 'same', label: 'Alpha detail', code: '006', rate: 0 } },
-  ] } })
+it.each(['named', 'root', 'local', 'list'])('classifies missing saved sources as file failures before reading values (%s)', async kind => {
+  const rule = kind === 'list' ? '{@list:Options}' : `{@choice:${kind === 'named' ? 'Options' : kind === 'root' ? '$root.options' : '.options'}; key=id; label=name; return=key}`
+  const template = await importAuthoredWorkbook(book => book.addWorksheet('Input').getCell('A1').value = '{selected}' + rule)
+  const options = [{ id: 'a', name: 'Allowed' }]
+  for (const populated of [false, true]) {
+    const book = await load(await renderWorkbookForm(template, { selected: populated ? kind === 'list' ? 'Allowed' : 'a' : null, options }, { dictionaries: { Options: kind === 'list' ? ['Allowed'] : options } }))
+    const range = book.definedNames.getRanges('_sb_object_sources').ranges[0]
+    const cell = book.getWorksheet('_sheetbind_lists')!.getCell(range.split('!')[1].split(':')[1].replaceAll('$', ''))
+    const payload = JSON.parse(String(cell.value))
+    if (kind === 'named' || kind === 'list') {
+      delete payload.dictionaries.Options
+    }
+    else if (kind === 'root') {
+      delete payload.context.options
+    }
+    else {
+      payload.local = {}
+    }
+    cell.value = JSON.stringify(payload)
+    const result = await readWorkbookForm(template, await saveWorkbook(book))
+    expect(result).toMatchObject({ success: false, issues: [{ phase: 'xlsx', code: 'choice-source', sheetName: 'Input', address: 'A1' }] })
+    expect(result).not.toHaveProperty('data')
+  }
 })

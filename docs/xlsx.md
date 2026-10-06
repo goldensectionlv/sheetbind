@@ -25,7 +25,9 @@ For form fields with `string` validation or an active choice list, issuance chan
 
 `General` keeps numeric precision. It accepts numeric text with a decimal point or comma, while text with leading zeroes such as `"006"` remains text. Use `@` to make an identifier's type explicit. Fixed and optional decimal places, percent, scientific notation, scaling commas and numeric format sections determine rounding. Percent values stay fractional numbers: `0.123456` with `0.00%` reads as `0.1235`. Fraction and elapsed-time formats do not round the stored number. Reading does not change the workbook. Trailing zeroes are display information: the JSON number `12.30` is represented as `12.3`.
 
-Native Excel dates become ISO strings; Sheetbind does not infer a timezone from the workbook. An ordinary numeric serial without a date format remains a number. Formulas entered into input fields produce a `formula` issue. Formula cells outside input fields are not returned as data.
+Native Excel dates become ISO strings; Sheetbind does not infer a timezone from the workbook. An ordinary numeric serial without a date format remains a number. A formula in an input field uses the result saved by Excel and the cell's format, including `0`, `false` and an empty string. Recalculate and save the workbook before reading: Sheetbind cannot verify that the result is current. A missing result or an Excel error produces a `formula` issue. Formula cells outside input fields are not returned as data.
+
+Engineering notation accounts for the number of integer positions: `12345.67` with `##0.0E+0` displays as `12.3E+3` and reads as `12300`.
 
 List labels are matched using the original text: `"2026"` stays a list option, and selected objects or keys follow the `@choice` return setting. Numeric conversion applies to free input, including `emptySource=input`.
 

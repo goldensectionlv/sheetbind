@@ -77,7 +77,7 @@ it('omits undefined dictionary properties from saved named, root and local choic
   const stored = JSON.parse(text)
   expect(stored.dictionaries.Options).toStrictEqual([normalized])
   expect(stored.context.catalog).toStrictEqual([normalized])
-  expect(Object.values(stored.local)).toEqual([expect.objectContaining({ values: [[normalized]] })])
+  expect(Object.values(stored.local)).toStrictEqual([{ '$data.items[0].local': [normalized] }])
   expect(await readWorkbookForm(template, await saveWorkbook(book))).toStrictEqual({ success: true, data: {
     named: normalized, root: normalized, items: [{ local: normalized }],
   } })

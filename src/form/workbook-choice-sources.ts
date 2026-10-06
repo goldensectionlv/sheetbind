@@ -2,14 +2,16 @@ import type { Dictionaries } from '../core/dictionaries'
 import type { WorkbookDefinition } from '../grid/workbook'
 import { workbookCells } from '../grid/workbook'
 import { readData, writeData } from './records'
+import type { WorkbookPlacement } from '../grid/workbook-layout'
 
 export interface WorkbookChoiceSources {
   readonly dictionaries: Dictionaries
   readonly context: Readonly<Record<string, unknown>>
+  readonly local: Readonly<Record<string, Readonly<Record<string, readonly Readonly<Record<string, unknown>>[]>>>>
 }
 
 /** Keep the issued dictionaries and root sources needed to read any return mode. */
-export function workbookChoiceSources(template: WorkbookDefinition, data: unknown, dictionaries: Dictionaries): WorkbookChoiceSources | undefined {
+export function workbookChoiceSources(template: WorkbookDefinition, data: unknown, dictionaries: Dictionaries, sheets: WorkbookPlacement['sheets']): WorkbookChoiceSources | undefined {
   const context: Record<string, unknown> = {}
   const selected: Record<string, Dictionaries[string]> = {}
   const fields = template.sheets.flatMap(workbookCells).filter(cell => cell.rules?.choice || cell.rules?.list)
@@ -32,5 +34,15 @@ export function workbookChoiceSources(template: WorkbookDefinition, data: unknow
       writeData(context, path, structuredClone(readData(data, path) ?? []), true)
     }
   }
-  return { context, dictionaries: selected }
+  const local: Record<string, Record<string, readonly Readonly<Record<string, unknown>>[]>> = {}
+  for (const sheet of sheets) {
+    for (const cell of sheet.cells) {
+      const source = cell.rules?.choice?.source
+      if (source && 'path' in source && source.from !== 'root') {
+        const fields = local[cell.definitionId] ??= {}
+        fields[cell.origin.dataPath] = cell.choice?.items.map(item => item.value) ?? []
+      }
+    }
+  }
+  return { context, dictionaries: selected, local }
 }

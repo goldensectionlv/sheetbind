@@ -106,7 +106,7 @@ function assertFormBindings(template: WorkbookDefinition): void {
     collect(sheet, '')
   }
   if (lookups.some(path => shapes.has(path) || [...shapes].some(([parent, kind]) => kind === 'field' && path.startsWith(parent + '.')))) {
-    throw new SyntaxError('Form choice sources must be separate from submitted fields and collections')
+    throw new TemplateError([{ phase: 'template', code: 'conflicting-source', nodeId: '', path: '$template', message: 'Form choice sources must be separate from submitted fields and collections' }])
   }
   if (!fields) {
     throw new TemplateError([{ phase: 'template', code: 'no-form-fields', nodeId: '', path: '$template', message: 'a form needs at least one data binding' }])
@@ -130,7 +130,7 @@ function assertFormBindings(template: WorkbookDefinition): void {
   function collect(body: WorkbookBody, context: string): void {
     const regions = [...body.regions ?? []].sort((a, b) => a.row - b.row)
     if (regions.some((region, index) => index && region.row < regions[index - 1].row + regions[index - 1].height)) {
-      throw new SyntaxError('Independent form regions need separate row bands')
+      throw new TemplateError([{ phase: 'template', code: 'overlapping-form-regions', nodeId: '', path: '$template', message: 'Independent form regions need separate row bands' }])
     }
     const path = (ref: DataReference) => `${ref.from === 'root' ? '' : context}${ref.path}`
     for (const cell of body.cells) {

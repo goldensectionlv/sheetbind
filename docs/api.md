@@ -78,7 +78,7 @@ type WorkbookFormResult =
   | { readonly success: false, readonly issues: readonly WorkbookFormIssue[], readonly data?: Readonly<Record<string, unknown>> }
 ```
 
-Value failures contain both `data` and `issues`, so the application can show the parsed fields for correction. An invalid choice remains the entered string; formulas and unsupported values produce `null` and an issue. These data have not passed validation. Unreadable XLSX or invalid structure produces no `data`. Check `result.success` and also handle template or application configuration exceptions. Types and precision follow the [submitted cells' formats](./xlsx.md#input-formats-and-value-types).
+Value failures contain both `data` and `issues`, so the application can show the parsed fields for correction. An invalid choice remains the entered string; formulas without a usable saved result and unsupported values produce `null` and an issue. These data have not passed validation. Unreadable XLSX, missing embedded sources or invalid structure produces no `data`. Check `result.success` and also handle template or application configuration exceptions. Types and precision follow the [submitted cells' formats](./xlsx.md#input-formats-and-value-types).
 
 All list and choice sources are embedded in the issued file, including row-local arrays. Reading only uses `validationRules` and `validationMessages` from the options; dictionaries and context are not read inputs. Keep the original template.
 
@@ -171,7 +171,7 @@ const prices = workbookChoiceRange(rule, 'price')
 const formula = `INDEX(${prices},MATCH(B3,${labels},0))`
 ```
 
-Use the resulting formula in the source workbook. Rendering creates these ranges when an object choice using that dictionary is emitted (`return` omitted or `'object'`). The helper only computes a name; it does not create a range. A property range exists only if that property occurs in the source objects. A contextual source throws `RangeError`; key-returning choices do not create these object-property ranges.
+Use the resulting formula in the source workbook. Rendering creates the ranges referenced by template formulas when a choice using that dictionary is emitted, regardless of its `return` mode. The helper only computes a name; it does not create a range. A property range exists only if that property occurs in the source objects. Unreferenced properties stay in the saved JSON and are not written into cells. Excel precision applies to formula cells; reading the chosen object preserves the saved JSON values. A contextual source or a conflict with an existing range of the same name throws `RangeError`.
 
 `ChoiceRule` contains `source`, `key`, `label` and optional `return: 'object' | 'key'`. `emptySource: 'input'` permits free input for an empty source and requires `return: 'key'`. Its source is `{ dictionary: string }` or a `DataReference`; `.answers` can select an array from each record in both reports and forms. Omitted, `undefined` and `null` data references behave like empty arrays; named dictionaries must still be supplied. See [validation and lists](./fields.md).
 

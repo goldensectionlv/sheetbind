@@ -1,5 +1,10 @@
 import type JSZip from 'jszip'
 
+/** Decode ST_Xstring once: protected literal escapes must not be decoded recursively. */
+export function decodeXstring(value: string): string {
+  return value.replace(/_x([0-9a-fA-F]{4})_/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
+}
+
 export function hasInvalidXmlText(value: string): boolean {
   // Unicode mode matches lone surrogates without rejecting valid astral characters.
   // eslint-disable-next-line no-control-regex

@@ -4,20 +4,16 @@ import { jsonSnapshot, parseJsonObject } from '../core/json'
 import type { WorkbookChoiceSources } from '../form/workbook-choice-sources'
 import { WorkbookFormInputError } from '../form/workbook'
 import { formatAddress, parseRange, XLSX_MAX_COLUMN, XLSX_MAX_ROW } from './addresses'
-import type { WorkbookPlacement } from '../grid/workbook-layout'
-import { writeLocalChoiceSources } from './workbook-local-choices'
+import type { WorkbookResources } from './workbook-resources'
 
 const NAME = '_sb_object_sources'
-const VERSION = 'sheetbind.choices/1'
+const VERSION = 'sheetbind.choices/2'
 
 /** Store the issued lists and choice payloads independently of the return mode. */
-export function writeWorkbookChoiceSources(book: Workbook, sheetName: string, sources: WorkbookChoiceSources, sheets: WorkbookPlacement['sheets']): void {
-  if (book.definedNames.model.some(entry => entry.name.toLowerCase() === NAME)) {
-    throw new RangeError('Object-choice source name is already defined')
-  }
+export function writeWorkbookChoiceSources(book: Workbook, sheetName: string, sources: WorkbookChoiceSources, resources: WorkbookResources): void {
+  const name = resources.allocate(NAME)
   const sheet = book.getWorksheet(sheetName) ?? book.addWorksheet(sheetName, { state: 'veryHidden' })
-  const local = writeLocalChoiceSources(book, sheet, sheets)
-  const payload = jsonSnapshot({ ...sources, local })
+  const payload = jsonSnapshot(sources)
   const json = JSON.stringify(payload).replace(/[^\x20-\x7e]/g, character => `\\u${character.charCodeAt(0).toString(16).padStart(4, '0')}`)
   const column = sheet.columnCount + 1
   const chunks = [VERSION, ...json.match(/.{1,30000}/g)!]
@@ -29,20 +25,18 @@ export function writeWorkbookChoiceSources(book: Workbook, sheetName: string, so
     cell.value = text
     cell.numFmt = '@'
   })
-  book.definedNames.add(`'${sheetName}'!${formatAddress({ row: 1, column })}:${formatAddress({ row: chunks.length, column })}`, NAME)
+  book.definedNames.add(`'${sheetName}'!${formatAddress({ row: 1, column })}:${formatAddress({ row: chunks.length, column })}`, name)
 }
 
-export function readWorkbookChoiceSources(book: Workbook, sheetName: string): WorkbookChoiceSources & { readonly local: Readonly<Record<string, unknown>> } {
+export function readWorkbookChoiceSources(book: Workbook, sheetName: string): Omit<WorkbookChoiceSources, 'local'> & { readonly local: Readonly<Record<string, unknown>> } {
   try {
-    const ranges = book.definedNames.getRanges(NAME).ranges
+    const prefix = `'${sheetName}'!`
+    const ranges = book.definedNames.model.filter(entry => /^_sb_object_sources(?:_\d+)?$/i.test(entry.name))
+      .flatMap(entry => entry.ranges).filter(range => range.startsWith(prefix))
     if (ranges.length !== 1) {
       throw new Error('missing source range')
     }
-    const prefix = `'${sheetName}'!`
     const range = ranges[0]
-    if (!range.startsWith(prefix)) {
-      throw new Error('source range is on another sheet')
-    }
     const { start, end } = parseRange(range.slice(prefix.length).replace(/\$/g, ''))
     if (start.column !== end.column) {
       throw new Error('invalid source range')

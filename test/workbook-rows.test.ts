@@ -133,7 +133,7 @@ it('validates partially filled rows at their resulting paths after skipping empt
   ] })
 })
 
-it.each(['choice', 'choice-source'])('keeps a nonempty %s failure and reports its compacted nested path', async code => {
+it.each(['choice', 'choice-source'])('distinguishes invalid input from a damaged source in nested records (%s)', async code => {
   const template = await importAuthoredWorkbook(book => {
     book.addWorksheet('Nested').addRows([
       ['{#departments}'], ['{.name}'], ['{#.groups}'], ['{.name}'], ['{#.items}'],
@@ -160,6 +160,11 @@ it.each(['choice', 'choice-source'])('keeps a nonempty %s failure and reports it
   }
   const result = await readWorkbookForm(template, await saveWorkbook(book))
   expect(result.success).toBe(false)
+  if (code === 'choice-source') {
+    expect(result).toMatchObject({ success: false, issues: [{ phase: 'xlsx', code, sheetName: 'Nested' }] })
+    expect(result).not.toHaveProperty('data')
+    return
+  }
   if (!result.success) {
     expect(result.issues.filter(issue => issue.address === edited.address)).toEqual([
       expect.objectContaining({ code, sheetName: 'Nested', address: edited.address, path: '$data.departments[0].groups[0].items[1].product' }),

@@ -3,6 +3,7 @@ import type JSZip from 'jszip'
 import type { WorkbookPrint } from '../grid/workbook-print'
 import { formatAddress, parseRange } from './addresses'
 import { decodeXml, xmlAttributes } from './xml'
+import { decodeXstring } from './report-text'
 
 /** Read coordinate-bearing print settings; page formatting stays in the source XLSX. */
 export async function readWorkbookPrint(zip: JSZip, book: ExcelJS.Workbook): Promise<Map<string, WorkbookPrint>> {
@@ -15,7 +16,7 @@ export async function readWorkbookPrint(zip: JSZip, book: ExcelJS.Workbook): Pro
     if (!/^\d+$/.test(attr.localSheetId ?? '') || !sheet || !['_xlnm.Print_Area', '_xlnm.Print_Titles'].includes(attr.name)) {
       continue
     }
-    const value = decodeXml(match[2])
+    const value = decodeXstring(decodeXml(match[2]))
     const prefix = value.match(/^(?:'((?:[^']|'')+)'|([^'!]+))!(.+)$/)
     if (!prefix || (prefix[1]?.replace(/''/g, "'") ?? prefix[2]) !== sheet.name) {
       continue

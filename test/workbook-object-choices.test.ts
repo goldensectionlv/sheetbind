@@ -66,6 +66,9 @@ it('names Excel fields independently of key order and includes keys absent from 
   const rule = { source: { dictionary: 'products' }, key: 'id', label: 'name', return: 'object' as const }
   const config = await editExample('choices/object-template.xlsx', book => {
     book.worksheets[0].getCell('B4').value = '{.product}{@validate:required|object}{@choice:products; key=id; label=name; return=object}'
+    for (const [index, field] of ['rate', 'code', 'active', 'details'].entries()) {
+      book.worksheets[0].getCell(1, index + 6).value = { formula: `INDEX(${workbookChoiceRange(rule, field)},MATCH(B4,${workbookChoiceRange(rule)},0))` }
+    }
   })
   const products = dictionaries.products
   const sources = { ...dictionaries, products }
@@ -153,12 +156,41 @@ it('keeps numeric transport precision out of core and rejects ambiguous or malfo
   const config = await importAuthoredWorkbook(book => {
     book.addWorksheet('Choice').getCell('A1').value = '{category}{@validate:object}{@choice:options; key=id; label=name}'
   })
-  await expect(renderWorkbookForm(config, { category: value }, { dictionaries: { options: [value] } })).rejects.toThrow('Excel precision')
+  const issued = await renderWorkbookForm(config, { category: value }, { dictionaries: { options: [value] } })
+  expect(await readWorkbookForm(config, issued)).toEqual({ success: true, data: { category: value } })
   const noChoice = await importAuthoredWorkbook(book => {
     book.addWorksheet('Choice').getCell('A1').value = '{category}{@validate:object}'
   })
   expect(() => resolveWorkbook(noChoice, { category: value })).toThrow('declared object choice')
   expect(() => createChoiceResolver()(rule, {}, {}, { options: [{ id: '1', name: 'Same' }, { id: '1', name: 'Other' }] })).toThrow('unique')
+})
+
+it.each(['key', 'object'] as const)('keeps unused JSON properties out of formula ranges (%s)', async mode => {
+  const template = await importAuthoredWorkbook(book => book.addWorksheet('Input').getCell('A1').value = `{selected}{@choice:Options; key=id; label=name; return=${mode}}`)
+  const option = { id: 1234567890123456, name: 'Allowed', rate: 1 / 3, sum: 0.1 + 0.2, notes: 'x'.repeat(33000), ['x'.repeat(300)]: { nested: true } }
+  const selected = mode === 'key' ? option.id : option
+  const options = { dictionaries: { Options: [option] } }
+  const issued = await renderWorkbookForm(template, { selected }, options)
+  expect(await readWorkbookForm(template, issued)).toEqual({ success: true, data: { selected } })
+  for (const content of [issued, await renderWorkbookReport(template, { selected }, options)]) {
+    expect((await load(content)).definedNames.model.some(entry => entry.name.startsWith('_sb_ref_') || entry.name.startsWith('_sb_context_'))).toBe(false)
+  }
+})
+
+it.each(['key', 'object'] as const)('creates only formula-referenced properties independently of return mode (%s)', async mode => {
+  const rule = { source: { dictionary: 'Options' }, key: 'id', label: 'name', return: mode }
+  const template = await importAuthoredWorkbook(book => {
+    const sheet = book.addWorksheet('Input')
+    sheet.getCell('A1').value = `{selected}{@choice:Options; key=id; label=name; return=${mode}}`
+    sheet.getCell('B1').value = { formula: `INDEX(${workbookChoiceRange(rule, 'rate')},MATCH(A1,${workbookChoiceRange(rule)},0))` }
+  })
+  const option = { id: 'a', name: 'Allowed', rate: 1 / 3, notes: 'x'.repeat(33000) }
+  const selected = mode === 'key' ? option.id : option
+  const issued = await renderWorkbookForm(template, { selected }, { dictionaries: { Options: [option] } })
+  const book = await load(issued)
+  expect(rangeValues(book, workbookChoiceRange(rule, 'rate'))).toEqual([option.rate])
+  expect(book.definedNames.getRanges(workbookChoiceRange(rule, 'notes')).ranges).toEqual([])
+  expect(await readWorkbookForm(template, issued)).toEqual({ success: true, data: { selected } })
 })
 
 it('escapes field names without collisions in Excel case-insensitive identifiers', () => {

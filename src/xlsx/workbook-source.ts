@@ -10,7 +10,9 @@ import { sourceStyles } from './source-styles'
 import { offsetWorkbookStrings, sourceWorksheet } from './source-worksheet'
 import { relocateSourceMetadata } from './source-metadata'
 import type { WorkbookCells } from './workbook-cells'
-import { appendXmlChildren, decodeXml, encodeXml, resolvePart, setXmlAttributes, setXmlElement, xmlAttributes, xmlElements } from './xml'
+import { appendXmlChildren, decodeXml, encodeXml, setXmlAttributes, setXmlElement, xmlAttributes, xmlElements } from './xml'
+import { decodeXstring, protect } from './report-text'
+import { workbookParts } from './workbook-resources'
 
 export interface WorkbookSource {
   readonly source: Uint8Array
@@ -24,20 +26,6 @@ export interface GeneratedWorkbook {
   readonly zip: JSZip
   readonly parts: Awaited<ReturnType<typeof workbookParts>>
   readonly cells: WorkbookCells
-}
-
-export async function workbookParts(zip: JSZip) {
-  const workbook = await zip.file('xl/workbook.xml')!.async('string')
-  const rels = await zip.file('xl/_rels/workbook.xml.rels')!.async('string')
-  const relationships = new Map(xmlElements(rels, 'Relationship').map(node => {
-    const attr = xmlAttributes(node)
-    return [attr.Id, attr]
-  }))
-  return new Map(xmlElements(workbook, 'sheet').map(node => {
-    const attr = xmlAttributes(node)
-    const relationship = relationships.get(attr['r:id'])!
-    return [attr.name, { name: attr.name, part: resolvePart('xl/workbook.xml', relationship.Target), node, relationship }]
-  }))
 }
 
 /** Bind source sheets and their coordinate maps once, before writing any package parts. */
@@ -100,17 +88,17 @@ export async function preserveWorkbookSource(zip: JSZip, generated: GeneratedWor
 }
 
 function mergeWorkbookNames(workbook: string, generated: string, maps: ReadonlyMap<string, SourceCoordinates>): string {
-  const sheetNames = xmlElements(workbook, 'sheet').map(node => xmlAttributes(node).name)
-  const generatedNames = xmlElements(generated, 'sheet').map(node => xmlAttributes(node).name)
+  const sheetNames = xmlElements(workbook, 'sheet').map(node => decodeXstring(xmlAttributes(node).name))
+  const generatedNames = xmlElements(generated, 'sheet').map(node => decodeXstring(xmlAttributes(node).name))
   const localMaps = new Map([...maps.values()].map(map => [map.name.toLowerCase(), map]))
   const names: { name: string, scope?: string, xml: string }[] = xmlElements(workbook, 'definedName').map(node => {
     const attributes = xmlAttributes(node.split('>')[0])
     const sheetName = sheetNames[Number(attributes.localSheetId)]
     const map = localMaps.get((sheetName ?? '').toLowerCase()) ?? maps.values().next().value
     const xml = map
-      ? node.replace(/>([^<]*)<\/definedName>$/, (_, value: string) => `>${encodeXml(sourceFormula(decodeXml(value), map, maps))}</definedName>`)
+      ? node.replace(/>([^<]*)<\/definedName>$/, (_, value: string) => `>${encodeXml(protect(sourceFormula(decodeXstring(decodeXml(value)), map, maps)))}</definedName>`)
       : node
-    return { name: attributes.name, scope: attributes.localSheetId, xml }
+    return { name: decodeXstring(attributes.name).toLowerCase(), scope: attributes.localSheetId, xml }
   })
   for (const node of xmlElements(generated, 'definedName')) {
     const attributes = xmlAttributes(node.split('>')[0])
@@ -121,11 +109,12 @@ function mergeWorkbookNames(workbook: string, generated: string, maps: ReadonlyM
       // ExcelJS writes this sheet prefix without escaping its internal apostrophes.
       // Coordinates are already final; repair only the prefix using the sheet identity.
       xml = xml.replace(/>([^<]*)<\/definedName>$/, (_, value: string) =>
-        `>${encodeXml(decodeXml(value).split(`'${local}'!`).join(`'${local.replace(/'/g, "''")}'!`))}</definedName>`)
+        `>${encodeXml(protect(decodeXstring(decodeXml(value)).split(`'${local}'!`).join(`'${local.replace(/'/g, "''")}'!`)))}</definedName>`)
     }
     const scope = targetIndex === undefined ? undefined : String(targetIndex)
-    const identity = names.findIndex(entry => entry.name === attributes.name && entry.scope === scope)
-    const entry = { name: attributes.name, scope, xml }
+    const name = decodeXstring(attributes.name).toLowerCase()
+    const identity = names.findIndex(entry => entry.name === name && entry.scope === scope)
+    const entry = { name, scope, xml }
     if (identity < 0) {
       names.push(entry)
     }

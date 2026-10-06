@@ -182,13 +182,15 @@ For a single-row repeat with input fields, `items: []`, `items: null` or an omit
 
 Completely blank single-row records are omitted on read. Partially completed rows are validated; a row with a nonempty invalid value is also retained. `null`, empty text, and whitespace-only text count as empty; `0` and `false` do not. A blank cell in a retained record is returned as `null`.
 
-Types are not converted: the text `"2"` remains a string and fails `number`. A formula in an input field produces a `formula` issue even if Excel has cached its result. Calculated cells without a binding are not included in submitted data.
+Types and precision follow the [submitted cell's format](./xlsx.md#input-formats-and-value-types): for example, `"2"` with a numeric format reads as a number, while `@` keeps it as text. A formula in an input field uses the result saved by Excel. A missing result or an Excel error produces a `formula` issue. Calculated cells without a binding are not included in submitted data.
 
 ## Adding, deleting, and reordering records
 
 ### Single-row records
 
 In the table above, copy an entire Excel row and insert the copy inside the input region. Delete an entire row to remove it; cut and insert an entire row in the same region to reorder it. Copying retains formatting, formulas, and lists. Clearing every field of a single-row record omits it from the result.
+
+This example uses a shared dictionary. Forms with [local options](./fields.md) support filling the issued rows; changing those records or their order requires issuing a new form.
 
 Forms support repetition down rows. Sideways repetition is for reports. Place independent form lists one below another: their row ranges must not overlap. Nested lists are supported.
 
