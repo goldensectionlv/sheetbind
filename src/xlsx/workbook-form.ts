@@ -1,13 +1,13 @@
-import { returnsObject } from '../core/choices'
 import { hasValidation } from '../core/field-rules'
 import { readWorkbookFormFields } from '../form/workbook-read'
 import type { WorkbookFormField, WorkbookFormSubmission } from '../form/workbook-read'
 import ExcelJS from 'exceljs'
-import { parseInputData } from '../core/json'
+import type { ValidationOptions } from '../core/validation'
+import type { Dictionaries } from '../core/dictionaries'
 import { TemplateError } from '../core/template'
 import type { TemplateValue } from '../core/template'
 import { prepareWorkbookForm, referencePath, WorkbookFormInputError } from '../form/workbook'
-import type { PreparedWorkbookField, PreparedWorkbookForm, WorkbookFormIssue, WorkbookFormOptions, WorkbookFormResult } from '../form/workbook'
+import type { PreparedWorkbookField, PreparedWorkbookForm, WorkbookFormIssue, WorkbookFormResult } from '../form/workbook'
 import { issueWorkbookFormData } from '../form/workbook-rows'
 import { workbookChoiceSources } from '../form/workbook-choice-sources'
 import type { DataPath } from '../form/records'
@@ -20,22 +20,23 @@ import { formatAddress, formatRange, parseRange } from './addresses'
 import { loadFormWorkbook } from './form-input'
 import { workbookListSheetName } from './workbook-dropdowns'
 import { readWorkbookChoiceSources, writeWorkbookChoiceSources } from './workbook-choice-sources'
+import { readLocalChoiceContext } from './workbook-local-choices'
 import { xlsxTextIssues } from './report-text'
 import { formCarrierDefinition, formDataFromMarkers, placeFormMarkers, readFormMarkers, writeFormMarkers } from './workbook-form-markers'
 import { writeWorkbookPackage } from './workbook-package'
 import { TaggedXlsxError, withTemplateLocations } from './tagged-template'
 
-type ReadOptions = WorkbookFormOptions & { readonly context?: Readonly<Record<string, unknown>> }
+type ReadOptions = ValidationOptions
 
 /** Carrier placement is pure; readers compare this plan without creating a workbook. */
 function planFormWorkbook(prepared: PreparedWorkbookForm, definition: ReturnType<typeof formCarrierDefinition>, data: unknown) {
-  const { plan, sources } = withTemplateLocations(prepared.template, () => placeWorkbook(prepared.layoutTemplate, data, { ...prepared.validationOptions, dictionaries: prepared.dictionaries, checkValues: false }))
+  const { plan, sources } = withTemplateLocations(prepared.template, () => placeWorkbook(prepared.layoutTemplate, data, { dictionaries: prepared.dictionaries, checkValues: false }))
   const carrier = placeFormMarkers(plan, definition)
   return { ...carrier, layout: resolveWorkbookFormulas(carrier.layout, sources, carrier.formulaRows), axes: plan.axes, coordinates: plan.coordinates }
 }
 
 /** Issue input fields and structural boundaries. Blank required fields can be completed later. */
-export async function renderWorkbookForm(value: WorkbookTemplate, data: unknown, options: WorkbookFormOptions = {}): Promise<Buffer> {
+export async function renderWorkbookForm(value: WorkbookTemplate, data: unknown, options: { readonly dictionaries?: Dictionaries } = {}): Promise<Buffer> {
   const { definition, source } = WorkbookTemplate.content(value)
   const prepared = withTemplateLocations(definition, () => prepareWorkbookForm(definition, 'issue', options))
   const issued = issueWorkbookFormData(prepared.template, data)
@@ -44,22 +45,23 @@ export async function renderWorkbookForm(value: WorkbookTemplate, data: unknown,
     const field = prepared.fields.get(cell.definitionId)
     return field && (hasValidation(field.rules, 'string') || field.rules?.choice) ? { ...cell, text: true } : cell
   }) }))
-  const workbook = createWorkbookOutput(sheets, prepared.dictionaries)
+  const workbook = createWorkbookOutput(sheets, prepared.dictionaries, true)
   for (const [name, markers] of carrier.markers) {
     writeFormMarkers(workbook.getWorksheet(name)!, markers)
   }
   const sources = workbookChoiceSources(prepared.template, issued, prepared.dictionaries)
   if (sources) {
-    writeWorkbookChoiceSources(workbook, workbookListSheetName(prepared.template.sheets.map(sheet => sheet.name)), sources)
+    writeWorkbookChoiceSources(workbook, workbookListSheetName(prepared.template.sheets.map(sheet => sheet.name)), sources, sheets)
   }
   return writeWorkbookPackage(workbook, { source, template: prepared.template, sheets, axes: carrier.axes, coordinates: carrier.coordinates, carriers: carrier.formulaRows })
 }
 
-/** Definition + completed form -> data/issues; object choices retain their issued source payloads. */
+/** Definition + completed form -> data/issues, using only the sources issued with the form. */
 export async function readWorkbookForm(value: WorkbookTemplate, bytes: Uint8Array, options: ReadOptions = {}): Promise<WorkbookFormResult> {
   const { definition } = WorkbookTemplate.content(value)
-  const prepared = withTemplateLocations(definition, () => prepareWorkbookForm(definition, 'read', options))
-  const context = options.context === undefined ? undefined : parseInputData(options.context)
+  const prepared = withTemplateLocations(definition, () => prepareWorkbookForm(definition, 'read', {
+    validationRules: options.validationRules, validationMessages: options.validationMessages,
+  }))
   let returned: ExcelJS.Workbook
   try {
     returned = await loadFormWorkbook(bytes)
@@ -72,10 +74,16 @@ export async function readWorkbookForm(value: WorkbookTemplate, bytes: Uint8Arra
     if (!result.success) {
       return result
     }
-    const objectSources = [...prepared.fields.values()].some(field => returnsObject(field.rules?.choice))
+    const sources = [...prepared.fields.values()].some(field => field.rules?.choice || field.rules?.list)
       ? readWorkbookChoiceSources(returned, workbookListSheetName(prepared.template.sheets.map(sheet => sheet.name)))
-      : undefined
-    return readWorkbookFormFields(prepared, result.submission, { context, objectSources, validateText: xlsxTextIssues })
+      : { dictionaries: {}, context: {}, local: {} }
+    const fields = result.submission.fields.map(field => {
+      const source = field.rules?.choice?.source
+      return field.raw !== null && source && 'path' in source && source.from !== 'root'
+        ? { ...field, choiceContext: readLocalChoiceContext(returned, field, sources.local) }
+        : field
+    })
+    return readWorkbookFormFields({ ...prepared, dictionaries: sources.dictionaries }, { ...result.submission, fields }, { context: sources.context, validateText: xlsxTextIssues })
   }
   catch (error) {
     if (error instanceof WorkbookFormInputError) {

@@ -4,6 +4,8 @@ import type { ChoiceRule } from './choices'
 import { assertJson, isDataObject } from './json'
 import { isBlank, parseValidation } from './validation'
 import type { Validation } from './validation'
+import { parseFormatting } from './formatters'
+import type { Formatting } from './formatters'
 
 /** Serializable field behavior shared by template I/O, execution and form reading. */
 export interface FieldRules {
@@ -11,14 +13,18 @@ export interface FieldRules {
   readonly validationMessages?: Readonly<Record<string, string>>
   readonly list?: string
   readonly choice?: ChoiceRule
+  readonly format?: Formatting
 }
 
 export function parseFieldRules(value: unknown): FieldRules {
   assertJson(value)
-  if (!isDataObject(value) || Object.keys(value).some(key => !['validation', 'validationMessages', 'list', 'choice'].includes(key))) {
+  if (!isDataObject(value) || Object.keys(value).some(key => !['validation', 'validationMessages', 'list', 'choice', 'format'].includes(key))) {
     throw new SyntaxError('Unknown or invalid field rules')
   }
-  const { validation, validationMessages, list, choice } = value
+  const { validation, validationMessages, list, choice, format } = value
+  if (format !== undefined && (list !== undefined || choice !== undefined)) {
+    throw new SyntaxError('Formatting cannot change list or choice labels')
+  }
   if (list !== undefined && !isDictionaryName(list)) {
     throw new SyntaxError('A list requires a dictionary name')
   }
@@ -37,6 +43,7 @@ export function parseFieldRules(value: unknown): FieldRules {
     ...(validationMessages && Object.keys(validationMessages).length ? { validationMessages: structuredClone(validationMessages) as Record<string, string> } : {}),
     ...(list !== undefined ? { list: list as string } : {}),
     ...(choice !== undefined ? { choice: parseChoiceRule(choice) } : {}),
+    ...(format !== undefined ? { format: parseFormatting(format) } : {}),
   }
 }
 

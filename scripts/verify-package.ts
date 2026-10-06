@@ -127,7 +127,8 @@ async function main(): Promise<void> {
     }
     tutorial('first-report')
     tutorial('report')
-    tutorial('rules-report')
+    tutorial('rules-form')
+    assert.deepEqual(JSON.parse(tutorial('formatting', true)), { success: true, data: { date: '01.10.2026', enabled: 'No', amount: 12.5, code: 'AB' } })
     tutorial('list-report')
     tutorial('choice-report')
     tutorial('first-form')
@@ -151,10 +152,21 @@ async function main(): Promise<void> {
   const assert = require('node:assert/strict')
   const api = require('sheetbind')
   assert.equal(Object.hasOwn(api, 'WorkbookTemplate'), false)
-  for (const name of ['importWorkbookXlsx', 'renderWorkbookReport', 'renderWorkbookForm', 'readWorkbookForm', 'resolveWorkbook']) {
+  for (const name of ['importWorkbookXlsx', 'renderWorkbookReport', 'renderWorkbookForm', 'readWorkbookForm', 'resolveWorkbook', 'registerFormatter', 'registerValidationRule']) {
     assert.equal(typeof api[name], 'function')
   }
-  console.log('Installed CommonJS: ok')
+  async function main() {
+    const ExcelJS = require('exceljs')
+    const book = new ExcelJS.Workbook()
+    book.addWorksheet('Input').getCell('A1').value = '{v | twice}{@validate:four}'
+    api.registerFormatter('twice', value => Number(value) * 2)
+    api.registerValidationRule('four', { validate: value => value === 4 })
+    const template = await api.importWorkbookXlsx(await book.xlsx.writeBuffer())
+    const file = await api.renderWorkbookForm(template, { v: 2 })
+    assert.deepEqual(await api.readWorkbookForm(template, file), { success: true, data: { v: 4 } })
+    console.log('Installed CommonJS: registered formatters and validation: ok')
+  }
+  main().catch(error => { console.error(error); process.exitCode = 1 })
   `)
     run(process.execPath, ['smoke.cjs'], consumer)
     await writeFile(path.join(consumer, 'smoke.mjs'), `

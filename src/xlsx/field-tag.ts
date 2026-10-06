@@ -5,6 +5,7 @@ import type { FieldRules } from '../core/field-rules'
 import { parseValidation } from '../core/validation'
 import type { ValidationRuleUse } from '../core/validation'
 import { parseRuleArgument, splitRuleText } from '../core/rule-syntax'
+import { parseFormatting } from '../core/formatters'
 
 function tags(text: string): string[] {
   const result: string[] = []
@@ -70,13 +71,26 @@ export function parseFieldTag(text: string): { value: Exclude<ValueExpression, {
   if (bindings.length !== 1) {
     throw new SyntaxError('A field cell requires exactly one binding')
   }
-  const binding = bindings[0]
+  const [binding, ...pipeline] = splitRuleText(bindings[0], '|')
   const optional = binding.startsWith('?')
   const value = { ...parseDataReference(optional ? binding.slice(1) : binding), optional }
   const validation: ValidationRuleUse[] = []
   const messages: Record<string, string> = {}
   const rules: Record<string, unknown> = {}
-  const directives: Record<string, (text: string) => void> = { validate, validationMessage, choice, list }
+  if (pipeline.length) {
+    format(pipeline.join('|'))
+  }
+  const directives: Record<string, (text: string) => void> = { validate, validationMessage, choice, list, format }
+  function format(text: string): void {
+    if (rules.format !== undefined) {
+      throw new SyntaxError('A field has one formatting pipeline')
+    }
+    const chain = parseFormatting(text)
+    if (!chain.length) {
+      throw new SyntaxError('A formatting directive needs a formatter')
+    }
+    rules.format = chain
+  }
   function validate(text: string): void {
     const [pipeline, ...options] = splitRuleText(text, ';')
     const chain = parseValidation(pipeline)
@@ -106,7 +120,7 @@ export function parseFieldTag(text: string): { value: Exclude<ValueExpression, {
       throw new SyntaxError('A field has one choice source')
     }
     const [name, ...options] = splitRuleText(text, ';')
-    const settings = assignments(options, ['key', 'label', 'return'])
+    const settings = assignments(options, ['key', 'label', 'return', 'emptySource'])
     const reference = name.startsWith('.') || name.startsWith('$root.') ? parseDataReference(name) : undefined
     const source = reference ? reference.from === 'root' ? reference : { path: reference.path } : { dictionary: name }
     rules.choice = { source, ...settings }

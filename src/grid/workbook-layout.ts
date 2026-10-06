@@ -1,7 +1,6 @@
 import { instantiate, TemplateError } from '../core/template'
 import type { Fragment, Origin, ResolvedFragment, TemplateValue } from '../core/template'
 import type { Dictionaries } from '../core/dictionaries'
-import type { ValidationOptions } from '../core/validation'
 import type { FieldRules } from '../core/field-rules'
 import type { GridAddress, GridOffset } from './geometry'
 import { createWorkbookChoiceDisplay } from './workbook-choice-display'
@@ -69,13 +68,13 @@ interface WorkbookExecution {
   readonly groups: readonly ResolvedFragment<null>[]
   readonly origin: (value: Origin) => Origin
 }
-type WorkbookExecutionOptions = ValidationOptions & { readonly dictionaries?: Dictionaries, readonly checkValues?: boolean }
+type WorkbookExecutionOptions = { readonly dictionaries?: Dictionaries, readonly checkValues?: boolean }
 function executionKey(kind: string, id: string): string {
   return JSON.stringify([kind, id])
 }
 
 /** Expose independent resolved cells without changing the compiled definition. */
-export function resolveWorkbook(config: WorkbookDefinition, data: unknown, options: ValidationOptions & { dictionaries?: Dictionaries } = {}): WorkbookLayout {
+export function resolveWorkbook(config: WorkbookDefinition, data: unknown, options: { dictionaries?: Dictionaries } = {}): WorkbookLayout {
   const { layout } = planWorkbook(config, data, { ...options, checkValues: true })
   return { sheets: layout.sheets.map(sheet => ({
     ...structuredClone({ id: sheet.id, name: sheet.name, state: sheet.state, rows: sheet.rows, columns: sheet.columns, print: sheet.print }),

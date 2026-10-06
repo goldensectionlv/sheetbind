@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import ExcelJS from 'exceljs'
 import { parseFieldRules } from '../src/core/field-rules'
 import { createValidation } from '../src/core/validation'
-import { TemplateError } from '../src/core/template'
+import { renderWorkbookForm, readWorkbookForm } from '../src/xlsx/workbook-form'
 import { resolveWorkbook, renderWorkbookReport, importWorkbookXlsx } from '../src/xlsx/workbook-template'
 import { parseFieldTag } from '../src/xlsx/field-tag'
 
@@ -30,22 +30,20 @@ describe('shared field rules', () => {
     expect(output.worksheets[0].getCell('C5').value).toBe('00042')
   })
 
-  it('reports each invalid field with its definition identity and concrete nested data path', async () => {
+  it('renders invalid input and reports field errors only when reading the completed form', async () => {
     const data = { groups: [{ name: 'Main', items: [{ hours: -1, approved: 'false', code: 'too-long' }, { approved: false, code: '' }] }] }
-    try {
-      resolveWorkbook(project.definition, data)
-      expect.fail('Expected field errors')
-    }
-    catch (error) {
-      expect(error).toBeInstanceOf(TemplateError)
-      expect((error as TemplateError).issues.map(({ code, path }) => ({ code, path }))).toEqual([
+    expect(() => resolveWorkbook(project.definition, data)).not.toThrow()
+    await expect(renderWorkbookReport(project.definition, data)).resolves.toBeInstanceOf(Buffer)
+    const result = await readWorkbookForm(project.definition, await renderWorkbookForm(project.definition, data))
+    expect(result.success).toBe(false)
+    if (!result.success) {
+      expect(result.issues.map(({ code, path }) => ({ code, path }))).toEqual([
         { code: 'min', path: '$data.groups[0].items[0].hours' },
         { code: 'boolean', path: '$data.groups[0].items[0].approved' },
         { code: 'maxLength', path: '$data.groups[0].items[0].code' },
         { code: 'required', path: '$data.groups[0].items[1].hours' },
       ])
     }
-    await expect(renderWorkbookReport(project.definition, data)).rejects.toThrow('$data.groups[0].items[0].hours')
   })
 
   it('uses binding and directive tags and rejects invalid choice options', async () => {
@@ -55,7 +53,8 @@ describe('shared field rules', () => {
     }
     const workbook = new ExcelJS.Workbook()
     workbook.addWorksheet('Report').getCell('A1').value = '{x | required}'
-    await expect(importWorkbookXlsx(Buffer.from(await workbook.xlsx.writeBuffer()))).rejects.toThrow('Use a dotted path')
+    const formatted = await importWorkbookXlsx(Buffer.from(await workbook.xlsx.writeBuffer()))
+    await expect(renderWorkbookReport(formatted, { x: 1 })).rejects.toThrow('Unknown formatter: required')
 
   })
 

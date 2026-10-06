@@ -1,23 +1,29 @@
 import type { Workbook } from 'exceljs'
 import { parseDictionaries } from '../core/dictionaries'
-import { assertJson, parseInputData } from '../core/json'
+import { jsonSnapshot, parseJsonObject } from '../core/json'
 import type { WorkbookChoiceSources } from '../form/workbook-choice-sources'
 import { WorkbookFormInputError } from '../form/workbook'
-import { formatAddress, parseRange } from './addresses'
+import { formatAddress, parseRange, XLSX_MAX_COLUMN, XLSX_MAX_ROW } from './addresses'
+import type { WorkbookPlacement } from '../grid/workbook-layout'
+import { writeLocalChoiceSources } from './workbook-local-choices'
 
 const NAME = '_sb_object_sources'
 const VERSION = 'sheetbind.choices/1'
 
-/** Store the issued object-choice payloads for form reading. */
-export function writeWorkbookChoiceSources(book: Workbook, sheetName: string, sources: WorkbookChoiceSources): void {
-  assertJson(sources)
-  const json = JSON.stringify(sources).replace(/[^\x20-\x7e]/g, character => `\\u${character.charCodeAt(0).toString(16).padStart(4, '0')}`)
+/** Store the issued lists and choice payloads independently of the return mode. */
+export function writeWorkbookChoiceSources(book: Workbook, sheetName: string, sources: WorkbookChoiceSources, sheets: WorkbookPlacement['sheets']): void {
   if (book.definedNames.model.some(entry => entry.name.toLowerCase() === NAME)) {
     throw new RangeError('Object-choice source name is already defined')
   }
   const sheet = book.getWorksheet(sheetName) ?? book.addWorksheet(sheetName, { state: 'veryHidden' })
+  const local = writeLocalChoiceSources(book, sheet, sheets)
+  const payload = jsonSnapshot({ ...sources, local })
+  const json = JSON.stringify(payload).replace(/[^\x20-\x7e]/g, character => `\\u${character.charCodeAt(0).toString(16).padStart(4, '0')}`)
   const column = sheet.columnCount + 1
   const chunks = [VERSION, ...json.match(/.{1,30000}/g)!]
+  if (column > XLSX_MAX_COLUMN || chunks.length > XLSX_MAX_ROW) {
+    throw new RangeError('Form source payload exceeds the XLSX worksheet limits')
+  }
   chunks.forEach((text, index) => {
     const cell = sheet.getCell(index + 1, column)
     cell.value = text
@@ -26,7 +32,7 @@ export function writeWorkbookChoiceSources(book: Workbook, sheetName: string, so
   book.definedNames.add(`'${sheetName}'!${formatAddress({ row: 1, column })}:${formatAddress({ row: chunks.length, column })}`, NAME)
 }
 
-export function readWorkbookChoiceSources(book: Workbook, sheetName: string): WorkbookChoiceSources {
+export function readWorkbookChoiceSources(book: Workbook, sheetName: string): WorkbookChoiceSources & { readonly local: Readonly<Record<string, unknown>> } {
   try {
     const ranges = book.definedNames.getRanges(NAME).ranges
     if (ranges.length !== 1) {
@@ -53,13 +59,13 @@ export function readWorkbookChoiceSources(book: Workbook, sheetName: string): Wo
       }
       text += value
     }
-    const payload = parseInputData(JSON.parse(text))
-    if (Object.keys(payload).some(key => !['context', 'dictionaries'].includes(key))) {
+    const payload = parseJsonObject(JSON.parse(text))
+    if (Object.keys(payload).some(key => !['context', 'dictionaries', 'local'].includes(key))) {
       throw new Error('unknown source property')
     }
-    return { context: parseInputData(payload.context), dictionaries: parseDictionaries(payload.dictionaries) }
+    return { context: parseJsonObject(payload.context), dictionaries: parseDictionaries(payload.dictionaries), local: parseJsonObject(payload.local ?? {}) }
   }
   catch {
-    throw new WorkbookFormInputError({ phase: 'xlsx', code: 'choice-source', path: '$workbook', message: 'object-choice source data is missing or malformed' })
+    throw new WorkbookFormInputError({ phase: 'xlsx', code: 'choice-source', path: '$workbook', message: 'form dictionary source data is missing or malformed' })
   }
 }

@@ -6,8 +6,7 @@ const directory = resolve(process.argv[2] ?? 'temp/tutorials')
 const uploaded = resolve(process.argv[3] ?? resolve(directory, 'completed.xlsx'))
 try {
   const template = await importWorkbookXlsx(await readFile(resolve(directory, 'form-template.xlsx')))
-  const dictionaries = JSON.parse(await readFile(resolve(directory, 'issued-dictionaries.json'), 'utf8'))
-  const result = await readWorkbookForm(template, await readFile(uploaded), { dictionaries })
+  const result = await readWorkbookForm(template, await readFile(uploaded))
   if (result.success) {
     console.log(JSON.stringify(result.data, null, 2))
   }

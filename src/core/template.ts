@@ -1,7 +1,6 @@
 import { isDataObject } from './json'
-import { createValidation, isBlank } from './validation'
+import { isBlank } from './validation'
 import type { JsonValue } from './json'
-import type { ValidationOptions, ValidateValue } from './validation'
 import { isDataPath, compileDataPath } from './reference'
 import type { DataReference } from './reference'
 export type { DataReference } from './reference'
@@ -9,8 +8,9 @@ import { parseFieldRules, validateList } from './field-rules'
 import type { FieldRules } from './field-rules'
 import { parseDictionaries } from './dictionaries'
 import type { Dictionaries } from './dictionaries'
-import { choiceKey, createChoiceResolver, selectedChoice, returnsObject } from './choices'
+import { allowsChoiceInput, choiceKey, createChoiceResolver, selectedChoice, returnsObject } from './choices'
 import type { ResolvedChoice } from './choices'
+import { prepareFormatting } from './formatters'
 
 /** Template semantics, independent of coordinates, document formats and I/O. */
 export type TemplateValue = string | number | boolean | null
@@ -52,7 +52,7 @@ export class TemplateError extends Error {
     this.name = 'TemplateError'
   }
 }
-export interface ExecutionOptions extends ValidationOptions {
+export interface ExecutionOptions {
   readonly maxNodes?: number
   readonly maxDepth?: number
   readonly dictionaries?: Dictionaries
@@ -66,7 +66,7 @@ function scalar(value: unknown): value is TemplateValue {
 
 /** Typed, consumer-built templates; consumer content must support structuredClone. */
 export function instantiate<Content>(template: Fragment<Content>, data: unknown, options: ExecutionOptions = {}): ResolvedFragment<Content> {
-  const { fields, dictionaries } = prepareTemplate(template, options)
+  const { fields, dictionaries, formatters } = prepareTemplate(template, options)
   const choiceOptions = createChoiceResolver()
   const { maxNodes } = options
   if (!isDataObject(data)) {
@@ -92,8 +92,7 @@ export function instantiate<Content>(template: Fragment<Content>, data: unknown,
     const origin: Origin = { nodeId: node.id, dataPath: context.path, iterations: context.iterations }
     switch (node.type) {
       case 'value': {
-        const field = fields.get(node.id)
-        const rules = field?.rules
+        const rules = fields.get(node.id)
         const result = 'literal' in node.value ? { value: node.value.literal, path: context.path } : resolveReference(node.value, context)
         if (result.value === undefined && 'path' in node.value && node.value.optional) {
           result.value = null
@@ -104,10 +103,8 @@ export function instantiate<Content>(template: Fragment<Content>, data: unknown,
         if (!scalar(result.value) && !(returnsObject(rules?.choice) && isDataObject(result.value))) {
           return fail('data', 'non-scalar', result.path, node.id, 'expected a scalar or a declared object choice')
         }
-        if (field && options.checkValues !== false) {
-          const current = 'path' in node.value && node.value.from === 'root' ? data : context.value
-          const issue = field.validate(result.value, { root: data as Record<string, unknown>, current: current as Record<string, unknown>, path: result.path })
-            ?? validateList(result.value, field.rules, field.rules.list ? dictionaries[field.rules.list] as readonly string[] : undefined)
+        if (rules?.list && options.checkValues !== false) {
+          const issue = validateList(result.value, rules, dictionaries[rules.list] as readonly string[])
           if (issue) {
             valueIssues.push({ ...issue, phase: 'data', path: result.path, nodeId: node.id })
           }
@@ -123,30 +120,42 @@ export function instantiate<Content>(template: Fragment<Content>, data: unknown,
           }
           const selected = selectedChoice(rules.choice, items, result.value)
           const blank = isBlank(result.value)
-          if (!blank && !selected && options.checkValues !== false) {
+          if (!blank && !selected && !allowsChoiceInput(rules.choice, items) && options.checkValues !== false) {
             valueIssues.push({ phase: 'data', code: 'choice', path: result.path, nodeId: node.id, message: 'select a key from the declared choice source' })
           }
           const key = choiceKey(rules.choice, result.value)
-          choice = { items, key: blank ? null : typeof key === 'string' || typeof key === 'number' ? key : String(result.value) }
+          if (!allowsChoiceInput(rules.choice, items)) {
+            choice = { items, key: blank ? null : typeof key === 'string' || typeof key === 'number' ? key : String(result.value) }
+          }
         }
-        return { type: 'value', origin: { ...origin, dataPath: result.path }, value: scalar(result.value) ? result.value : structuredClone(result.value), ...(choice ? { choice } : {}) }
+        let value = scalar(result.value) ? result.value : structuredClone(result.value)
+        const format = formatters.get(node.id)
+        if (format && scalar(value)) {
+          try {
+            value = format(value)
+          }
+          catch (error) {
+            return fail('data', 'format', result.path, node.id, (error as Error).message)
+          }
+        }
+        return { type: 'value', origin: { ...origin, dataPath: result.path }, value, ...(choice ? { choice } : {}) }
       }
       case 'group': return { type: 'group', origin, content: structuredClone(node.content), children: node.children.map(child => visit(child, context)) }
       case 'scope': case 'repeat': {
         const source = resolveReference(node.source, context)
-        if (source.value === undefined) {
-          fail('data', 'missing-source', source.path, node.id, 'source is missing')
-        }
         if (node.type === 'scope') {
+          if (source.value === undefined) {
+            fail('data', 'missing-source', source.path, node.id, 'source is missing')
+          }
           if (!isDataObject(source.value)) {
             fail('data', 'invalid-object', source.path, node.id, 'scope source must be an object')
           }
           return { type: 'scope', origin: { ...origin, dataPath: source.path }, body: visit(node.body, { ...context, ...source }) }
         }
-        if (!Array.isArray(source.value)) {
+        const items = source.value ?? []
+        if (!Array.isArray(items)) {
           return fail('data', 'invalid-collection', source.path, node.id, 'repeat source must be an array of objects')
         }
-        const items: unknown[] = source.value
         // Every instance costs at least one node when the caller sets a budget.
         if (maxNodes !== undefined && items.length > maxNodes - count) {
           fail('data', 'node-budget', source.path, node.id, 'collection exceeds remaining maxNodes')
@@ -177,8 +186,7 @@ function fail(phase: TemplateIssue['phase'], code: string, path: string, nodeId:
 
 /** Validate the complete definition, including empty repeats, before any data is executed. */
 function prepareTemplate<Content>(template: Fragment<Content>, options: ExecutionOptions) {
-  const prepareValidation = createValidation(options)
-  const fields = new Map<string, { rules: FieldRules, validate: ValidateValue }>()
+  const fields = new Map<string, FieldRules>()
   const { maxNodes, maxDepth } = options
   for (const value of [maxNodes, maxDepth]) {
     if (value !== undefined && (!Number.isSafeInteger(value) || value < 1)) {
@@ -187,6 +195,7 @@ function prepareTemplate<Content>(template: Fragment<Content>, options: Executio
   }
   const ids = new Set<string>()
   const lists = new Map<string, string[]>()
+  const formatters = new Map<string, ReturnType<typeof prepareFormatting>>()
   const choiceSources = new Set<string>()
   function reference(ref: DataReference, id: string): void {
     if (!isDataPath(ref.path) || ref.from !== undefined && ref.from !== 'current' && ref.from !== 'root') {
@@ -213,7 +222,10 @@ function prepareTemplate<Content>(template: Fragment<Content>, options: Executio
           let rules: FieldRules
           try {
             rules = parseFieldRules(node.rules)
-            fields.set(node.id, { rules, validate: prepareValidation(rules.validation, rules.validationMessages) })
+            fields.set(node.id, rules)
+            if (rules.format) {
+              formatters.set(node.id, prepareFormatting(rules.format))
+            }
           }
           catch (error) {
             fail('template', 'invalid-rules', node.id, node.id, (error as Error).message)
@@ -271,5 +283,5 @@ function prepareTemplate<Content>(template: Fragment<Content>, options: Executio
   if (missing.length) {
     throw new TemplateError(missing)
   }
-  return { fields, dictionaries }
+  return { fields, dictionaries, formatters }
 }

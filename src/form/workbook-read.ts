@@ -1,7 +1,8 @@
-import { createChoiceResolver, selectedChoice, returnsObject } from '../core/choices'
+import { allowsChoiceInput, createChoiceResolver, selectedChoice, returnsObject } from '../core/choices'
 import { equalJson } from '../core/json'
 import { validateList } from '../core/field-rules'
 import { isBlank } from '../core/validation'
+import { readDataPath } from '../core/reference'
 import type { FieldValue, TemplateValue } from '../core/template'
 import { createWorkbookChoiceDisplay } from '../grid/workbook-choice-display'
 import type { WorkbookChoiceOption } from '../grid/workbook-choice-display'
@@ -10,9 +11,9 @@ import { readWorkbookRows } from './workbook-rows'
 import type { WorkbookFormRows } from './workbook-rows'
 import { dataPath, readData, writeData } from './records'
 import type { DataPath } from './records'
-import type { WorkbookChoiceSources } from './workbook-choice-sources'
 
 export interface WorkbookFormField extends PreparedWorkbookField {
+  readonly choiceContext?: Readonly<Record<string, unknown>>
   readonly path: DataPath
   readonly context: DataPath
   readonly raw: TemplateValue
@@ -26,7 +27,6 @@ export interface WorkbookFormSubmission {
 }
 interface ReadOptions {
   readonly context?: Readonly<Record<string, unknown>>
-  readonly objectSources?: WorkbookChoiceSources
   readonly validateText?: (text: string) => readonly { code: string, message: string }[]
 }
 
@@ -58,13 +58,13 @@ export function readWorkbookFormFields(prepared: PreparedWorkbookForm, submissio
     const rules = field.rules ?? {}
     const raw = readData(data, path)
     const choices = decoded.choices.get(field)
-    if (rules.choice && !isBlank(raw) && choices) {
+    if (rules.choice && !isBlank(raw) && choices && !allowsChoiceInput(rules.choice, choices)) {
       const selected = selectedChoice(rules.choice, choices, raw)
       if (!selected || returnsObject(rules.choice) && !equalJson(raw, selected.value)) {
         issues.push({ phase: 'value', code: 'choice', message: 'select a value from the declared choice source', ...location })
       }
     }
-    const issue = field.validate(raw, { root: data, current: readData(data, context) as Record<string, unknown>, path: location.path })
+    const issue = field.validate?.(raw, { root: data, current: readData(data, context) as Record<string, unknown>, path: location.path })
       ?? validateList(raw, rules, rules.list ? prepared.dictionaries[rules.list] as readonly string[] : undefined)
     if (issue) {
       issues.push({ phase: 'value', ...issue, ...location })
@@ -82,7 +82,7 @@ export function readWorkbookFormFields(prepared: PreparedWorkbookForm, submissio
 }
 
 function decodeFormFields(prepared: PreparedWorkbookForm, submission: WorkbookFormSubmission, options: ReadOptions) {
-  const { context, objectSources } = options
+  const source = options.context ?? {}
   const data = structuredClone(submission.data) as Record<string, unknown>
   const issues = new Map<WorkbookFormField, WorkbookFormIssue>()
   const fields = new Map<string, FieldValue>()
@@ -99,17 +99,22 @@ function decodeFormFields(prepared: PreparedWorkbookForm, submission: WorkbookFo
     if (rules?.choice && !isBlank(raw)) {
       try {
         const object = returnsObject(rules.choice)
-        const source = object ? objectSources!.context : context ?? {}
-        const dictionaries = object ? objectSources!.dictionaries : prepared.dictionaries
-        const resolved = choiceOptions(rules.choice, source, readData(source, field.context), dictionaries)
+        const current = field.choiceContext ?? readData(source, field.context)
+        const reference = rules.choice.source
+        if ('path' in reference && !Array.isArray(readDataPath(reference.from === 'root' ? source : current, reference.path))) {
+          throw new SyntaxError('Saved choice source must be an array of objects')
+        }
+        const resolved = choiceOptions(rules.choice, source, current, prepared.dictionaries)
         const items = displayChoice({ key: null, items: resolved }).items
         choices.set(field, items)
         const selected = items.find(item => item.text === raw)
-        if (!selected) {
+        if (!selected && !allowsChoiceInput(rules.choice, items)) {
           issues.set(field, { phase: 'value', code: 'choice', message: 'select a label from the declared choice source', ...location })
           continue
         }
-        raw = object ? structuredClone(selected.value) : selected.key
+        if (selected) {
+          raw = object ? structuredClone(selected.value) : selected.key
+        }
       }
       catch (error) {
         issues.set(field, { phase: 'value', code: 'choice-source', message: (error as Error).message, ...location })

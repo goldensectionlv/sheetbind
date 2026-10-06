@@ -34,9 +34,23 @@ const separate = new ExcelJS.Workbook()
 await separate.xlsx.load(Uint8Array.from(anotherReport).buffer)
 assert.equal(separate.getWorksheet('Report')!.getCell('A1').value, 'Another customer')
 assert.equal(separate.getWorksheet('Report')!.getCell('A6').value, 'Prepared for review')
-assert.deepEqual(await api.readWorkbookForm(template, anotherForm, options), { success: true, data: another })
+assert.deepEqual(await api.readWorkbookForm(template, anotherForm), { success: true, data: another })
 assert.deepEqual(api.resolveWorkbook(template, data, options), layout)
 assert.deepEqual(sample, unchanged)
+const runtimeData = { ...data, optional: undefined, items: data.items.map(item => ({ ...item, unused: { optional: undefined } })) }
+const runtimeBefore = structuredClone(runtimeData)
+assert.deepEqual(api.resolveWorkbook(template, runtimeData, options), layout)
+assert.deepEqual(await api.readWorkbookForm(template, await api.renderWorkbookForm(template, runtimeData, options)), { success: true, data })
+assert.deepEqual(runtimeData, runtimeBefore)
+for (const empty of [{ customer: data.customer }, { customer: data.customer, items: null }]) {
+  const before = structuredClone(empty)
+  const report = new ExcelJS.Workbook()
+  await report.xlsx.load(Uint8Array.from(await api.renderWorkbookReport(template, empty, options)).buffer)
+  assert.equal(report.getWorksheet('Report')!.getCell('A5').value, 'Prepared for review')
+  const form = await api.renderWorkbookForm(template, empty, options)
+  assert.deepEqual(await api.readWorkbookForm(template, form), { success: true, data: { customer: data.customer, items: [] } })
+  assert.deepEqual(empty, before)
+}
 await writeFile(resolve(directory, 'report.xlsx'), output)
 const book = new ExcelJS.Workbook()
 await book.xlsx.load(Uint8Array.from(output).buffer)
@@ -50,7 +64,7 @@ assert.equal(report.getCell('B4').dataValidation.type, 'list')
 assert.equal(book.worksheets.filter(sheet => sheet.state === 'veryHidden').length, 1)
 
 await writeFile(resolve(directory, 'form.xlsx'), form)
-assert.deepEqual(await api.readWorkbookForm(template, await readFile(resolve(directory, 'form.xlsx')), options), { success: true, data })
+assert.deepEqual(await api.readWorkbookForm(template, await readFile(resolve(directory, 'form.xlsx'))), { success: true, data })
 const completed = new ExcelJS.Workbook()
 await completed.xlsx.load(Uint8Array.from(form).buffer)
 completed.getWorksheet('Report')!.eachRow(row => row.eachCell(cell => {
@@ -58,19 +72,41 @@ completed.getWorksheet('Report')!.eachRow(row => row.eachCell(cell => {
     cell.value = 'Edited customer'
   }
 }))
-assert.deepEqual(await api.readWorkbookForm(template, Buffer.from(await completed.xlsx.writeBuffer()), options), {
+assert.deepEqual(await api.readWorkbookForm(template, Buffer.from(await completed.xlsx.writeBuffer())), {
   success: true, data: { ...data, customer: { name: 'Edited customer' } },
 })
 
-await assert.rejects(api.renderWorkbookReport(template, { ...data, items: [{ name: 'Bad', status: 'Done', hours: -1 }] }, options),
-  (error: unknown) => error instanceof api.TemplateError && error.issues.some(issue => issue.path === '$data.items[0].hours' && issue.phase === 'data'))
+const invalidData = { ...data, items: [{ name: 'Bad', status: 'Done', hours: -1 }] }
+await api.renderWorkbookReport(template, invalidData, options)
+const invalidResult = await api.readWorkbookForm(template, await api.renderWorkbookForm(template, invalidData, options))
+assert.equal(invalidResult.success, false)
+if (!invalidResult.success) {
+  assert(invalidResult.issues.some(issue => issue.path === '$data.items[0].hours' && issue.rule === 'min'))
+}
 await assert.rejects(api.renderWorkbookReport(template, undefined, options), SyntaxError)
 await assert.rejects(api.renderWorkbookReport(template, data), api.TemplateError)
 await assert.rejects(api.renderWorkbookReport(template, data, { dictionaries: { statuses: [5] } } as unknown as typeof options), SyntaxError)
 console.log('Installed package: tagged XLSX, reports, edited forms and diagnostics: ok')
 
-const customForm = await api.renderWorkbookForm(validationDefinition, validationData, validationOptions)
+const choiceBook = new ExcelJS.Workbook()
+choiceBook.addWorksheet('Input').addRows([
+  ['{#questions}'], ['{.answer}{@choice:.answers; key=id; label=label; return=key; emptySource=input}'], ['{/questions}'],
+])
+const choiceTemplate = await api.importWorkbookXlsx(Buffer.from(await choiceBook.xlsx.writeBuffer()))
+const choiceData = { questions: [{ answer: 'Omitted' }, { answer: 'Undefined', answers: undefined }, { answer: 'Null', answers: null }] }
+assert.deepEqual(await api.readWorkbookForm(choiceTemplate, await api.renderWorkbookForm(choiceTemplate, choiceData)), {
+  success: true, data: { questions: [{ answer: 'Omitted' }, { answer: 'Undefined' }, { answer: 'Null' }] },
+})
+
+const customForm = await api.renderWorkbookForm(validationDefinition, validationData)
 assert.deepEqual(await api.readWorkbookForm(validationDefinition, customForm, validationOptions), { success: true, data: validationData })
-await assert.rejects(api.renderWorkbookReport(validationDefinition, { ...validationData, items: [{ ...validationData.items[0], quantity: 1.234 }] }, validationOptions),
-  (error: unknown) => error instanceof api.TemplateError && error.issues.some(issue => issue.rule === 'decimalPlaces' && issue.index === 3 && issue.message === 'Use at most 2 decimal places'))
+const invalidCustomData = { ...validationData, items: [{ ...validationData.items[0], quantity: 1.234 }] }
+await api.renderWorkbookReport(validationDefinition, invalidCustomData)
+const invalidCustom = await api.renderWorkbookForm(validationDefinition, invalidCustomData)
+assert.deepEqual(await api.readWorkbookForm(validationDefinition, invalidCustom), { success: true, data: invalidCustomData })
+const customResult = await api.readWorkbookForm(validationDefinition, invalidCustom, validationOptions)
+assert.equal(customResult.success, false)
+if (!customResult.success) {
+  assert(customResult.issues.some(issue => issue.rule === 'decimalPlaces' && issue.index === 3 && issue.message === 'Use at most 2 decimal places'))
+}
 console.log('Installed custom validation: typed handlers, messages and form read: ok')

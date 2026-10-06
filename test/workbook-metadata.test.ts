@@ -77,7 +77,7 @@ it.each(['validation', 'comment', 'conditional', 'image'] as const)('places empt
       for (const render of axis === 'rows' ? [renderWorkbookReport, renderWorkbookForm] : [renderWorkbookReport]) {
         const form = render === renderWorkbookForm
         const copies = form ? Math.max(1, count) : count
-        const offset = form ? 2 : 0
+        const offset = form ? 1 : 0
         const expected = axis === 'rows'
           ? [...Array.from({ length: copies }, (_, index) => `B${index + 1 + offset}`), `D${1 + offset}`, `B${Math.max(1, copies) + 1 + offset + Number(form)}`]
           : [...Array.from({ length: copies }, (_, index) => `${String.fromCharCode(66 + index * 2)}1`), `${String.fromCharCode(68 + Math.max(0, copies - 1) * 2)}1`, 'B2']
@@ -200,7 +200,7 @@ it('retains native-only geometry when scopes are flattened for a form', async ()
   const template = await importWorkbookXlsx(await saveWorkbook(book))
   const data = { info: { items: [{ name: 'One' }, { name: 'Two' }] } }
   const form = await renderWorkbookForm(template, data)
-  expect(await locations(form, 'validation')).toEqual(['D3'])
+  expect(await locations(form, 'validation')).toEqual(['D2'])
   expect(await readWorkbookForm(template, form)).toEqual({ success: true, data })
 })
 

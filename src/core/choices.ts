@@ -1,28 +1,35 @@
-import { isDataObject } from './json'
+import { isDataObject, jsonSnapshot } from './json'
+import type { JsonValue } from './json'
 import { isDataPath, readDataPath } from './reference'
 import type { DataReference } from './template'
 import { isDictionaryName } from './dictionaries'
 import type { Dictionaries } from './dictionaries'
-import { assertJson } from './json'
 
 export interface ChoiceRule {
   readonly source: { readonly dictionary: string } | DataReference
   readonly key: string
   readonly label: string
   readonly return?: 'object' | 'key'
+  readonly emptySource?: 'input'
 }
 export function returnsObject(rule: ChoiceRule | undefined): boolean {
   return !!rule && rule.return !== 'key'
+}
+export function allowsChoiceInput(rule: ChoiceRule, items: readonly ChoiceOption[]): boolean {
+  return rule.emptySource === 'input' && !items.length
 }
 export interface ChoiceOption { readonly key: string | number, readonly label: string, readonly value: Readonly<Record<string, unknown>> }
 export interface ResolvedChoice { readonly key: string | number | null, readonly items: readonly ChoiceOption[] }
 
 export function parseChoiceRule(value: unknown): ChoiceRule {
-  if (!isDataObject(value) || Object.keys(value).some(key => !['source', 'key', 'label', 'return'].includes(key)) || !isDataPath(value.key) || !isDataPath(value.label) || !isDataObject(value.source)) {
+  if (!isDataObject(value) || Object.keys(value).some(key => !['source', 'key', 'label', 'return', 'emptySource'].includes(key)) || !isDataPath(value.key) || !isDataPath(value.label) || !isDataObject(value.source)) {
     throw new SyntaxError('Choice requires a source and safe key/label paths')
   }
   if (value.return !== undefined && value.return !== 'object' && value.return !== 'key') {
     throw new SyntaxError('Choice return must be object or key')
+  }
+  if (value.emptySource !== undefined && (value.emptySource !== 'input' || value.return !== 'key')) {
+    throw new SyntaxError('Choice emptySource=input requires return=key')
   }
   const source = value.source
   if ('dictionary' in source) {
@@ -41,9 +48,8 @@ function buildOptions(source: unknown, rule: ChoiceRule): ChoiceOption[] {
   if (!Array.isArray(source)) {
     throw new SyntaxError('Choice source must be an array of objects')
   }
-  assertJson(source)
   const keys = new Set<string>()
-  const options = source.map(item => {
+  const options = (jsonSnapshot(source) as readonly JsonValue[]).map(item => {
     const key = readDataPath(item, rule.key)
     const label = readDataPath(item, rule.label)
     if (!isDataObject(item) || !['string', 'number'].includes(typeof key) || typeof key === 'string' && !key.trim() || typeof key === 'number' && !Number.isFinite(key)) {
@@ -57,7 +63,7 @@ function buildOptions(source: unknown, rule: ChoiceRule): ChoiceOption[] {
       throw new SyntaxError('Choice keys must be unique')
     }
     keys.add(token)
-    return { key: key as string | number, label, value: structuredClone(item) }
+    return { key: key as string | number, label, value: item }
   })
   return options
 }
@@ -66,7 +72,7 @@ function buildOptions(source: unknown, rule: ChoiceRule): ChoiceOption[] {
 export function createChoiceResolver() {
   const sources = new WeakMap<object, Map<string, readonly ChoiceOption[]>>()
   return function resolveChoice(rule: ChoiceRule, root: unknown, current: unknown, dictionaries: Dictionaries): readonly ChoiceOption[] {
-    const source = 'dictionary' in rule.source ? dictionaries[rule.source.dictionary] : readDataPath(rule.source.from === 'root' ? root : current, rule.source.path)
+    const source = 'dictionary' in rule.source ? dictionaries[rule.source.dictionary] : readDataPath(rule.source.from === 'root' ? root : current, rule.source.path) ?? []
     if (!Array.isArray(source)) {
       throw new SyntaxError('Choice source must be an array of objects')
     }

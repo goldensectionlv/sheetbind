@@ -6,7 +6,7 @@ import type { WorkbookTemplate } from '../src/index'
 import { openWorkbook as load, saveWorkbook } from './xlsx'
 
 describe('imported XLSX ownership', () => {
-  it('rejects non-JSON execution data before evaluating accessors across public entry points', async () => {
+  it('rejects unsupported execution values before evaluating accessors across public entry points', async () => {
     const book = new ExcelJS.Workbook()
     book.addWorksheet('Data').getCell('A1').value = '{name}'
     const template = await importWorkbookXlsx(await saveWorkbook(book))
@@ -15,7 +15,7 @@ describe('imported XLSX ownership', () => {
     circular.self = circular
     const invalid = [
       { name: 'Desk', unused: new Date() },
-      { name: 'Desk', unused: undefined },
+      { name: 'Desk', unused: [undefined] },
       { name: 'Desk', unused: () => 'unused' },
       { name: 'Desk', unused: Number.NaN },
       { name: 'Desk', unused: new Array(1) },
@@ -36,11 +36,11 @@ describe('imported XLSX ownership', () => {
     })
   })
 
-  it('locates missing repeat sources and nested fields in the authored workbook', async () => {
+  it('locates invalid repeat sources and missing nested fields in the authored workbook', async () => {
     const book = new ExcelJS.Workbook()
     book.addWorksheet('Items').addRows([['{#items}'], ['{.name}'], ['{/items}']])
     const template = await importWorkbookXlsx(await saveWorkbook(book))
-    for (const [data, path, address] of [[{}, '$data.items', 'A1'], [{ items: [{}] }, '$data.items[0].name', 'A2']] as const) {
+    for (const [data, code, path, address] of [[{ items: {} }, 'invalid-collection', '$data.items', 'A1'], [{ items: [{}] }, 'missing-source', '$data.items[0].name', 'A2']] as const) {
       for (const run of [() => resolveWorkbook(template, data), () => renderWorkbookReport(template, data)]) {
         try {
           await run()
@@ -49,11 +49,11 @@ describe('imported XLSX ownership', () => {
         catch (error) {
           expect(error).toBeInstanceOf(TemplateError)
           expect(error).toBeInstanceOf(TaggedXlsxError)
-          expect((error as TaggedXlsxError).issues).toMatchObject([{ code: 'missing-source', path, sheetName: 'Items', address }])
+          expect((error as TaggedXlsxError).issues).toMatchObject([{ code, path, sheetName: 'Items', address }])
         }
       }
     }
-    await expect(renderWorkbookForm(template, {})).rejects.toMatchObject({ issues: [{ code: 'missing-source', sheetName: 'Items', address: 'A1' }] })
+    await expect(renderWorkbookForm(template, { items: {} })).rejects.toMatchObject({ issues: [{ code: 'invalid-collection', sheetName: 'Items', address: 'A1' }] })
   })
 
   it('accepts only imported handles and owns its source bytes', async () => {

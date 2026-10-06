@@ -18,7 +18,7 @@ This page is for changes to Sheetbind itself. For template behavior and file sup
 ```text
 Tagged XLSX -> import -> WorkbookTemplate
                             |
-Data + dictionaries + rules -+
+Data + dictionaries ---------+
                             |
                   resolve values and repeats
                             |
@@ -31,7 +31,7 @@ Data + dictionaries + rules -+
 
 Import compiles tags into a `WorkbookDefinition`, validates region ownership and retains the source file in `WorkbookTemplate`. Formatting and native Excel features stay in the XLSX package instead of being reconstructed as a second style model.
 
-Execution prepares field rules and dictionary dependencies before expanding repeats, including empty ones. The grid builds row and column plans; values, formulas, sheet settings and native content use those plans to find their output positions. The XLSX writer combines placed values with the retained source content.
+Execution checks the field declarations and dictionary dependencies before expanding repeats, including empty ones. It does not look up or execute validation handlers. The grid builds row and column plans; values, formulas, sheet settings and native content use those plans to find their output positions. The XLSX writer combines placed values with the retained source content.
 
 Form issuance uses the same placement and writing path. It prepares editable fields, permits blank required values and adds the structure needed to recognize records when reading. Its hidden rows participate in coordinate mapping before formulas and other references are written.
 
@@ -54,6 +54,8 @@ Original template + completed XLSX
 ```
 
 The XLSX adapter checks the submitted structure and extracts field values with data paths and cell addresses. Form processing works with this submission, without inspecting ExcelJS cells. It derives the current records from the returned file; it does not match them to original application records.
+
+All list and choice sources travel with the issued workbook. Shared dictionaries and root collections are stored once; row-local sources use hidden references that move when whole rows or record blocks are copied or sorted. The XLSX adapter resolves those references before passing choice contexts to form processing. Reading does not reload application dictionaries, and the return mode only selects an object or its key.
 
 Choice decoding, empty-row handling and field validation share the final data paths. An invalid nonempty input keeps its row. Issues retain their field location while their array indexes follow the same remapping as the result.
 

@@ -3,8 +3,7 @@ import { importWorkbookXlsx, readWorkbookForm } from 'sheetbind'
 
 try {
   const template = await importWorkbookXlsx(await readFile('registration-template.xlsx'))
-  const dictionaries = JSON.parse(await readFile('registration-dictionaries.json', 'utf8'))
-  const result = await readWorkbookForm(template, await readFile('registration-completed.xlsx'), { dictionaries })
+  const result = await readWorkbookForm(template, await readFile('registration-completed.xlsx'))
   if (result.success) {
     console.log(JSON.stringify(result.data, null, 2))
   }

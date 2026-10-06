@@ -58,7 +58,7 @@ it('imports readable choice tags and keeps source scope and value types through 
 it('preserves choice rules through tagged XLSX and submitted values', async () => {
   expect(workbookDictionarySources(definition)).toEqual(['products', 'suppliers'])
   const form = await renderWorkbookForm(definition, data, options)
-  expect(await readWorkbookForm(definition, form, options)).toEqual({ success: true, data: declaredData })
+  expect(await readWorkbookForm(definition, form)).toEqual({ success: true, data: declaredData })
 })
 
 it('renders labels and validates keys without guessing the first duplicate label', async () => {
@@ -73,9 +73,9 @@ it('renders labels and validates keys without guessing the first duplicate label
   const form = await load(await renderWorkbookForm(definition, data, options))
   const selected = find(form.worksheets[0], 'Service [0007]')
   selected.value = 'Service [0008]'
-  expect(await readWorkbookForm(definition, await bytes(form), options)).toEqual({ success: true, data: { ...declaredData, items: [{ ...declaredData.items[0], product: '0008' }, declaredData.items[1]] } })
+  expect(await readWorkbookForm(definition, await bytes(form))).toEqual({ success: true, data: { ...declaredData, items: [{ ...declaredData.items[0], product: '0008' }, declaredData.items[1]] } })
   selected.value = 'Service'
-  expect(codes(await readWorkbookForm(definition, await bytes(form), options))).toContain('choice')
+  expect(codes(await readWorkbookForm(definition, await bytes(form)))).toContain('choice')
   expect(() => resolveWorkbook(definition, { ...data, category: 'unknown' }, options)).toThrow('select a key')
 })
 
@@ -91,18 +91,18 @@ it('reads choices from shared sources after sorting and insertion', async () => 
   sheet.getCell(row + 2, 2).value = 'Service [0008]'
   sheet.getCell(row + 2, 3).value = 'Local supplier'
   sheet.getCell(row + 2, 4).value = 4
-  const result = await readWorkbookForm(definition, await bytes(book), { dictionaries, context: { categories: data.categories } })
+  const result = await readWorkbookForm(definition, await bytes(book))
   expect(result).toEqual({ success: true, data: { category: 'maintenance', items: [declaredData.items[1], declaredData.items[0], { id: 'line-c', product: '0008', supplier: 7, hours: 4 }] } })
 })
 
-it('does not trust uploaded helper dictionaries and requires application context for data sources', async () => {
+it('reads stored source payloads independently of dropdown labels or external context', async () => {
   const book = await load(await renderWorkbookForm(definition, data, options))
   const sheet = book.worksheets[0]
   book.worksheets[1].getCell('A1').value = 'Forged'
-  expect(await readWorkbookForm(definition, await bytes(book), options)).toEqual({ success: true, data: declaredData })
-  expect(codes(await readWorkbookForm(definition, await bytes(book), { dictionaries }))).toContain('choice-source')
+  expect(await readWorkbookForm(definition, await bytes(book))).toEqual({ success: true, data: declaredData })
+  expect(await readWorkbookForm(definition, await bytes(book))).toEqual({ success: true, data: declaredData })
   find(sheet, 'Maintenance').value = 'Forged'
-  expect(codes(await readWorkbookForm(definition, await bytes(book), options))).toContain('choice')
+  expect(codes(await readWorkbookForm(definition, await bytes(book)))).toContain('choice')
 })
 
 it('resolves independent mappings of one source and rejects key or display ambiguity', async () => {
@@ -115,7 +115,7 @@ it('resolves independent mappings of one source and rejects key or display ambig
   const book = await load(await renderWorkbookForm(config, data, options))
   const sheet = book.worksheets[0]
   expect(find(sheet, 'Local supplier').dataValidation.formulae).not.toEqual(find(sheet, 'LOCAL').dataValidation.formulae)
-  expect(await readWorkbookForm(config, await bytes(book), options)).toEqual({ success: true, data: declaredData })
+  expect(await readWorkbookForm(config, await bytes(book))).toEqual({ success: true, data: declaredData })
   const duplicate = { ...dictionaries, suppliers: [{ id: 7, name: 'One' }, { id: 7, name: 'Two' }] }
   await expect(renderWorkbookForm(definition, data, { dictionaries: duplicate })).rejects.toThrow('keys must be unique')
   const collision = { ...dictionaries, suppliers: [{ id: 7, name: 'One' }, { id: 8, name: 'One' }, { id: 9, name: 'One [7]' }] }
@@ -128,8 +128,8 @@ it('supports empty optional choices', async () => {
   })
   const empty = { ...data, category: null, categories: [] }
   const book = await load(await renderWorkbookForm(config, empty, options))
-  expect(book.worksheets[0].getCell('B2').dataValidation).toMatchObject({ type: 'custom', formulae: ['FALSE'], allowBlank: true })
-  expect(await readWorkbookForm(config, await bytes(book), { dictionaries, context: empty })).toEqual({ success: true, data: { ...declaredData, category: null } })
+  expect(book.worksheets[0].getCell('B1').dataValidation).toMatchObject({ type: 'custom', formulae: ['FALSE'], allowBlank: true })
+  expect(await readWorkbookForm(config, await bytes(book))).toEqual({ success: true, data: { ...declaredData, category: null } })
 })
 
 it('rejects choice sources that overlap submitted fields and removed repeat keys', async () => {

@@ -119,7 +119,7 @@ it.each(['products', '$root.products'])('reads sorted, inserted and deleted reco
   ] } })
 })
 
-it.each(['object', 'key'])('keeps per-record choice sources for reports and rejects them in forms (%s)', async result => {
+it.each(['object', 'key'])('keeps per-record choice sources in reports and self-contained forms (%s)', async result => {
   const config = await importAuthoredWorkbook(book => {
     book.addWorksheet('Report').addRows([
       ['{#items}'], ['{.product}{@choice:.available; key=id; label=name; return=' + result + '}'], ['{/items}'],
@@ -132,7 +132,8 @@ it.each(['object', 'key'])('keeps per-record choice sources for reports and reje
   expect(report.worksheets[0].getCell('A1').value).toBe('First')
   expect(report.worksheets[0].getCell('A2').value).toBe('Second')
   for (const data of [input, { items: [] }]) {
-    await expect(renderWorkbookForm(config, data)).rejects.toMatchObject({ issues: [{ code: 'contextual-form-choice' }] })
+    expect(await readWorkbookForm(config, await renderWorkbookForm(config, data))).toEqual({ success: true,
+      data: { items: data.items.map(item => ({ product: item.product })) } })
   }
 })
 

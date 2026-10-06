@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto'
 import type { Worksheet } from 'exceljs'
 import { createWorkbookFormData, referencePath, WorkbookFormInputError } from '../form/workbook'
 import type { DataPath } from '../form/records'
@@ -10,19 +9,15 @@ import { mapWorkbookPrint } from '../grid/workbook-print'
 import type { WorkbookPlan, WorkbookRegionLayout, WorkbookPlacement } from '../grid/workbook-layout'
 import { formatAddress } from './addresses'
 import { xlsxTextIssues } from './report-text'
-import { parseValidation } from '../core/validation'
-import type { FieldRules } from '../core/field-rules'
-import { isDataObject } from '../core/json'
 import { FormulaEdge } from '../grid/workbook-formula'
 import type { FormulaRows } from '../grid/workbook-formula'
 
 export enum FormMarkerKind {
-  Sheet = 'sheet', SheetEnd = '/sheet', Repeat = 'repeat', RepeatEnd = '/repeat', Item = 'item', ItemEnd = '/item',
+  SheetEnd = '/sheet', Repeat = 'repeat', RepeatEnd = '/repeat', Item = 'item', ItemEnd = '/item',
 }
 export const FORM_MARKER_COLUMN = 257
-export const FORM_MARKER_PREFIX = 'sheetbind.form/3:'
+export const FORM_MARKER_PREFIX = 'sheetbind.form/4:'
 type FormMarkerToken =
-  | readonly [FormMarkerKind.Sheet, string]
   | readonly [FormMarkerKind.SheetEnd]
   | readonly [FormMarkerKind.Repeat | FormMarkerKind.RepeatEnd | FormMarkerKind.Item | FormMarkerKind.ItemEnd, number]
 export interface FormMarker { readonly row: number, readonly token: FormMarkerToken }
@@ -30,17 +25,7 @@ interface FormMarkers { readonly column: number, readonly rows: readonly FormMar
 interface FormCarrierDefinition {
   readonly numbers: ReadonlyMap<string, number>
   readonly regions: ReadonlyMap<string, WorkbookRegion>
-  readonly signature: string
   readonly sheets: ReadonlySet<string>
-}
-
-function signatureRules(rules: FieldRules = {}) {
-  const choice = rules.choice
-  return {
-    validation: parseValidation(rules.validation ?? []).map(use => ({ rule: use.rule, args: use.args ?? [] })),
-    ...(rules.list ? { list: rules.list } : {}),
-    ...(choice ? { choice: { ...choice, return: choice.return ?? 'object', source: 'path' in choice.source ? { ...choice.source, from: choice.source.from ?? 'current' } : choice.source } } : {}),
-  }
 }
 
 export function formCarrierDefinition(template: WorkbookDefinition): FormCarrierDefinition {
@@ -48,25 +33,15 @@ export function formCarrierDefinition(template: WorkbookDefinition): FormCarrier
   const numbers = new Map<string, number>()
   const regions = new Map<string, WorkbookRegion>()
   let serial = 0
-  const reference = (value: { path: string, from?: string }) => ({ path: value.path, from: value.from ?? 'current' })
-  const body = (source: WorkbookBody): unknown => ({
-    cells: source.cells.filter(cell => 'path' in cell.value).sort((a, b) => a.at.row - b.at.row || a.at.column - b.at.column).map(cell => ({
-      at: cell.at, size: cell.size,
-      value: 'path' in cell.value ? { ...reference(cell.value), optional: !!cell.value.optional } : cell.value, rules: signatureRules(cell.rules),
-    })),
-    regions: [...source.regions ?? []].sort((a, b) => a.row - b.row).map(region => {
+  const visit = (source: WorkbookBody): void => {
+    for (const region of [...source.regions ?? []].sort((a, b) => a.row - b.row)) {
       numbers.set(region.id, ++serial)
       regions.set(region.id, region)
-      return { row: region.row, height: region.height, column: region.column ?? 1, width: region.width ?? WORKBOOK_LIMITS.columns,
-        source: reference(region.source), body: body(region) }
-    }),
-  })
-  const semantic = template.sheets.filter(sheet => sheets.has(sheet.name)).sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0).map(sheet => ({ name: sheet.name, body: body(sheet) }))
-  const canonical = (value: unknown): unknown => Array.isArray(value)
-    ? value.map(canonical)
-    : isDataObject(value) ? Object.fromEntries(Object.keys(value).sort().map(key => [key, canonical(value[key])])) : value
-  const signature = createHash('sha256').update(JSON.stringify(canonical(semantic))).digest('hex')
-  return { numbers, signature, regions, sheets }
+      visit(region)
+    }
+  }
+  template.sheets.filter(sheet => sheets.has(sheet.name)).sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0).forEach(visit)
+  return { numbers, regions, sheets }
 }
 
 /** Hidden rows delimit the current structure without retaining issued counts or record identities. */
@@ -77,7 +52,7 @@ export function placeFormMarkers(plan: WorkbookPlan, definition: FormCarrierDefi
     if (!definition.sheets.has(sheet.name)) {
       return sheet
     }
-    const events: FormMarker[] = [{ row: 1, token: [FormMarkerKind.Sheet, definition.signature] }]
+    const events: FormMarker[] = []
     const visit = (regions: readonly WorkbookRegionLayout[]): void => {
       for (const region of regions) {
         const id = definition.numbers.get(region.definitionId)!
@@ -162,13 +137,16 @@ export function writeFormMarkers(sheet: Worksheet, markers: FormMarkers): void {
 }
 
 function formMarkerColumn(sheet: Worksheet): number {
-  let column = FORM_MARKER_COLUMN
-  sheet.getRow(1).eachCell(cell => {
-    if (typeof cell.value === 'string' && cell.value.startsWith(FORM_MARKER_PREFIX)) {
-      column = Number(cell.col)
+  const columns = new Set<number>()
+  sheet.eachRow(row => row.eachCell(cell => {
+    if (Number(cell.col) >= FORM_MARKER_COLUMN && typeof cell.value === 'string' && cell.value.startsWith(FORM_MARKER_PREFIX)) {
+      columns.add(Number(cell.col))
     }
-  })
-  return column
+  }))
+  if (columns.size > 1) {
+    throw new WorkbookFormInputError({ phase: 'structure', code: 'invalid-marker', path: '$workbook', sheetName: sheet.name, message: 'form control markers must occupy one column' })
+  }
+  return columns.values().next().value ?? FORM_MARKER_COLUMN
 }
 
 function isFormMarkerToken(value: unknown): value is FormMarkerToken {
@@ -176,8 +154,6 @@ function isFormMarkerToken(value: unknown): value is FormMarkerToken {
     return false
   }
   switch (value[0]) {
-    case FormMarkerKind.Sheet:
-      return value.length === 2 && typeof value[1] === 'string'
     case FormMarkerKind.SheetEnd:
       return value.length === 1
     case FormMarkerKind.Repeat:
@@ -281,7 +257,6 @@ export function formDataFromMarkers(template: WorkbookDefinition, definition: Fo
         expect(FormMarkerKind.RepeatEnd, id)
       }
     }
-    expect(FormMarkerKind.Sheet, definition.signature)
     visit(sheet, [])
     expect(FormMarkerKind.SheetEnd)
     if (cursor !== found.length) {

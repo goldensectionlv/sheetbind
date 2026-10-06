@@ -1,4 +1,3 @@
-import { returnsObject } from '../core/choices'
 import type { Dictionaries } from '../core/dictionaries'
 import type { WorkbookDefinition } from '../grid/workbook'
 import { workbookCells } from '../grid/workbook'
@@ -9,22 +8,28 @@ export interface WorkbookChoiceSources {
   readonly context: Readonly<Record<string, unknown>>
 }
 
-/** Store only the shared sources needed to recover selected objects from a form. */
+/** Keep the issued dictionaries and root sources needed to read any return mode. */
 export function workbookChoiceSources(template: WorkbookDefinition, data: unknown, dictionaries: Dictionaries): WorkbookChoiceSources | undefined {
   const context: Record<string, unknown> = {}
   const selected: Record<string, Dictionaries[string]> = {}
-  const fields = template.sheets.flatMap(workbookCells).filter(cell => returnsObject(cell.rules?.choice))
+  const fields = template.sheets.flatMap(workbookCells).filter(cell => cell.rules?.choice || cell.rules?.list)
   if (!fields.length) {
     return undefined
   }
   for (const cell of fields) {
-    const source = cell.rules!.choice!.source
+    if (cell.rules?.list) {
+      selected[cell.rules.list] = dictionaries[cell.rules.list]
+    }
+    const source = cell.rules?.choice?.source
+    if (!source) {
+      continue
+    }
     if ('dictionary' in source) {
       selected[source.dictionary] = dictionaries[source.dictionary]
     }
-    else {
+    else if (source.from === 'root') {
       const path = source.path.split('.')
-      writeData(context, path, structuredClone(readData(data, path)), true)
+      writeData(context, path, structuredClone(readData(data, path) ?? []), true)
     }
   }
   return { context, dictionaries: selected }

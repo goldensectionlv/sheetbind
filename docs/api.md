@@ -4,28 +4,25 @@ Import functions and types from `sheetbind`. Node.js `Buffer` values can be pass
 
 ## Data and options
 
-Execution data must be a plain JSON object. Nested objects, arrays, strings, finite numbers, booleans and `null` are accepted. Omit absent properties or use `null`; `undefined`, `Date`, functions, accessors, cyclic objects and sparse arrays are rejected. The exported `JsonValue` type describes JSON values.
+Execution data is a plain JavaScript object. Nested objects, arrays, strings, finite numbers, booleans and `null` are accepted. Object properties with `undefined` mean absence at any depth; there is no need to replace them with `null` or remove them before rendering. Forms leave missing fields blank, while required report bindings still report `missing-source`. `Date`, functions, accessors, cyclic objects, sparse arrays and `undefined` array items are rejected. The exported `JsonValue` type describes serializable JSON values, not every accepted input object.
 
 The signatures below use two abbreviations. **`RunOptions` and `ReadOptions` are not exported types**; they describe these parameter shapes:
 
 ```ts
-type RunOptions = ValidationOptions & {
+type RunOptions = {
   readonly dictionaries?: Dictionaries
 }
 
-type ReadOptions = RunOptions & {
-  readonly context?: Readonly<Record<string, unknown>>
-}
+type ReadOptions = ValidationOptions
 ```
 
 | Option | Used by | Purpose |
 | --- | --- | --- |
-| `dictionaries` | Resolve, render, read | Named string or object lists declared by fields |
-| `validationRules` | Resolve, render, read | Custom synchronous field rules |
-| `validationMessages` | Resolve, render, read | Message overrides by rule name |
-| `context` | Read only | Shared choice collections referenced through `$root`; these values do not become submitted data |
+| `dictionaries` | Resolve, render | Named string or object lists declared by fields |
+| `validationRules` | Read | Custom synchronous field rules |
+| `validationMessages` | Read | Message overrides by rule name |
 
-`Dictionaries` is a readonly object whose values are string arrays or arrays of JSON objects. `ValidationOptions` contains `validationRules` and `validationMessages`. A custom handler uses `ValidationRule`; its predicate receives `ValidationContext` (`root`, `current`, `path`). `ValidationMessage` is a string or a function receiving `ValidationMessageContext`, which also includes `value`, `rule`, `args` and `index`. See the [complete handler example](./fields.md).
+`Dictionaries` is a readonly object whose values are string arrays or arrays of data objects. Undefined object properties are omitted from the dictionary snapshots saved in forms; input objects are not changed. `ValidationOptions` contains `validationRules` and `validationMessages`. A custom handler uses `ValidationRule`; its predicate receives `ValidationContext` (`root`, `current`, `path`). `ValidationMessage` is a string or a function receiving `ValidationMessageContext`, which also includes `value`, `rule`, `args` and `index`. See the [complete handler example](./fields.md).
 
 ## Import a template
 
@@ -47,7 +44,7 @@ declare function renderWorkbookReport(
 ): Promise<Buffer>
 ```
 
-Resolves bindings, repeats and field rules, then returns the report bytes. Invalid field values fail rendering. Save the returned buffer to an `.xlsx` file. Formula calculation and retained Excel features are described in [Excel and limitations](./xlsx.md).
+Resolves bindings and repeats, then returns the report bytes. Rendering does not execute `@validate` or require its handlers. It still checks template structure, data bindings and dictionary sources. Save the returned buffer to an `.xlsx` file. Formula calculation and retained Excel features are described in [Excel and limitations](./xlsx.md).
 
 ## Issue a form
 
@@ -59,9 +56,9 @@ declare function renderWorkbookForm(
 ): Promise<Buffer>
 ```
 
-Returns an editable XLSX with the structure needed for reading it later. It checks the template and rule configuration; required fields may be blank at issuance. Field values are validated when the completed form is read.
+Returns an editable XLSX with the structure needed for reading it later. It checks the template and dictionary sources; required fields may be blank at issuance. Validation handlers are only needed when reading the completed form.
 
-An empty array for a repeat containing one row of input fields produces one blank input row. Pass an array of 20 empty objects to issue 20 rows. Forms support repeats down the sheet; see [form editing and reading](./forms.md) for supported edits and multirow records.
+An empty, omitted or `null` array for a repeat containing one row of input fields produces one blank input row. Pass an array of 20 empty objects to issue 20 rows. Forms support repeats down the sheet; see [form editing and reading](./forms.md) for supported edits and multirow records.
 
 ## Read a completed form
 
@@ -83,7 +80,9 @@ type WorkbookFormResult =
 
 There is no partial `data` on failure. Check `result.success` and also handle exceptions from template or application configuration.
 
-For string lists and choices returning a key, supply the issuance dictionaries again. Root collections used by key choices go in `context`. Object choices use the source embedded in the issued file. The [form guide](./forms.md) shows what to retain for reading.
+All list and choice sources are embedded in the issued file, including row-local arrays. Reading only uses `validationRules` and `validationMessages` from the options; dictionaries and context are not read inputs. Keep the original template.
+
+An unknown validation rule is skipped with one `console.warn` per rule name per read. Known rules still run in their original order. Invalid arguments for a known rule and errors inside a supplied handler remain errors.
 
 ## Inspect values and placement
 
@@ -164,7 +163,7 @@ const formula = `INDEX(${prices},MATCH(B3,${labels},0))`
 
 Use the resulting formula in the source workbook. Rendering creates these ranges when an object choice using that dictionary is emitted (`return` omitted or `'object'`). The helper only computes a name; it does not create a range. A property range exists only if that property occurs in the source objects. A contextual source throws `RangeError`; key-returning choices do not create these object-property ranges.
 
-`ChoiceRule` contains `source`, `key`, `label` and optional `return: 'object' | 'key'`. Its source is `{ dictionary: string }` or a `DataReference`.
+`ChoiceRule` contains `source`, `key`, `label` and optional `return: 'object' | 'key'`. `emptySource: 'input'` permits free input for an empty source and requires `return: 'key'`. Its source is `{ dictionary: string }` or a `DataReference`; `.answers` can select an array from each record in both reports and forms. Omitted, `undefined` and `null` data references behave like empty arrays; named dictionaries must still be supplied. See [validation and lists](./fields.md).
 
 ## Errors
 
@@ -184,3 +183,12 @@ Use the resulting formula in the source workbook. Rendering creates these ranges
 `ValidationExecutionError` exposes `rule`, `path` and `cause`. Predicates must return a synchronous boolean; message functions must return a string. A Promise is invalid in either case.
 
 `WorkbookFormIssue` contains `phase: 'structure' | 'value' | 'xlsx'`, `code`, `path`, `message` and optional `sheetName`, `address`, `nodeId`, `rule`, `args`, `index`. Its address belongs to the returned workbook; its data path uses indexes after empty rows are omitted. Some structural failures cannot identify a cell. The [form reader](./forms.md) shows both `try/catch` and `result.success` handling.
+
+## Registering handlers
+
+```ts
+declare function registerFormatter(name: string, formatter: Formatter): void
+declare function registerValidationRule(name: string, rule: ValidationRule): void
+```
+
+Registrations belong to the loaded package instance; register once at application startup. Formatters run during rendering and layout; validators run only on read. Per-call `validationRules` override global rules. Built-in names are reserved; registering an application name again replaces its handler. `Formatter` receives `TemplateValue` and `readonly JsonValue[]` and synchronously returns `TemplateValue`. `FieldRules.format` accepts a pipeline string or `FormatterUse` array (`formatter`, optional `args`); the configuration type is `Formatting`. See [examples](./fields.md#formatting-values).

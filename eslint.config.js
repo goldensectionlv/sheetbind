@@ -54,7 +54,7 @@ export default defineConfig(
   },
   {
     files: ['src/core/**/*.ts'],
-    rules: { 'no-restricted-imports': ['error', { patterns: [{ regex: '^(?!\\./(?:template|json|reference|field-rules|validation|rule-syntax|dictionaries|choices)$)', message: 'Core semantics may depend only on core primitives.' }] }] },
+    rules: { 'no-restricted-imports': ['error', { patterns: [{ regex: '^(?!\\./(?:template|json|reference|field-rules|validation|rule-syntax|dictionaries|choices|formatters)$)', message: 'Core semantics may depend only on core primitives.' }] }] },
   },
   {
     files: ['src/grid/workbook*.ts'],

@@ -1,5 +1,5 @@
 import { readFile, writeFile } from 'node:fs/promises'
-import { importWorkbookXlsx, renderWorkbookReport } from 'sheetbind'
+import { importWorkbookXlsx, renderWorkbookForm, readWorkbookForm } from 'sheetbind'
 import type { ValidationOptions } from 'sheetbind'
 
 const options: ValidationOptions = {
@@ -17,4 +17,6 @@ const options: ValidationOptions = {
 }
 const template = await importWorkbookXlsx(await readFile('rules-template.xlsx'))
 const data = { quantity: 4 }
-await writeFile('rules-report.xlsx', await renderWorkbookReport(template, data, options))
+await writeFile('rules-form.xlsx', await renderWorkbookForm(template, data))
+const result = await readWorkbookForm(template, await readFile('rules-form.xlsx'), options)
+console.log(JSON.stringify(result, null, 2))

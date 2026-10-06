@@ -35,7 +35,7 @@ export function createDataDraft(input: Record<string, unknown>) {
   function replace(path: DataPath, value: unknown): void {
     let container: Record<string, unknown> | unknown[] = data
     for (const part of path.slice(0, -1)) {
-      const child: unknown = Reflect.get(container, part)
+      const child: unknown = Reflect.get(container, part) ?? {}
       if (!isDataObject(child) && !Array.isArray(child)) {
         throw new Error('Field container must be an object')
       }

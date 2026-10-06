@@ -82,8 +82,8 @@ it('maps named ranges around form control rows and preserves form reading', asyn
     const bytes = await renderWorkbookForm(template, data(count))
     const result = await names(bytes)
     // The last bound includes hidden block and region closing rows.
-    expect(result.get('Amounts')?.value).toBe(prefix + (count ? `$B$5:$C$${count * 4 + 4}` : '#REF!'))
-    expect(result.get('ItemLines')?.value).toBe(prefix + (count ? `$5:$${count * 4 + 4}` : '#REF!'))
+    expect(result.get('Amounts')?.value).toBe(prefix + (count ? `$B$4:$C$${count * 4 + 3}` : '#REF!'))
+    expect(result.get('ItemLines')?.value).toBe(prefix + (count ? `$4:$${count * 4 + 3}` : '#REF!'))
     expect(await readWorkbookForm(template, bytes)).toEqual({ success: true, data: data(count) })
   }
 })

@@ -23,7 +23,7 @@ export function issueWorkbookFormData(template: WorkbookDefinition, input: unkno
   const visit = (body: WorkbookBody, context: DataPath): void => {
     for (const region of body.regions ?? []) {
       const path = referencePath(region.source, context)
-      const items = readData(data, path)
+      const items = readData(data, path) ?? []
       if (!Array.isArray(items)) {
         continue
       }
@@ -33,12 +33,6 @@ export function issueWorkbookFormData(template: WorkbookDefinition, input: unkno
         const blank = blanks.get(name) ?? { path, value: {} }
         for (const field of fields) {
           writeData(blank.value, field, null, true)
-        }
-        for (const cell of region.cells) {
-          const source = cell.rules?.choice?.source
-          if (source && 'path' in source && source.from !== 'root') {
-            writeData(blank.value, source.path.split('.'), [], true)
-          }
         }
         blanks.set(name, blank)
       }

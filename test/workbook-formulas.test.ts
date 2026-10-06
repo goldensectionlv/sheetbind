@@ -38,7 +38,7 @@ describe('workbook formulas', () => {
     })
     expect(total).toBeGreaterThan(count + 3)
     expect(form.getWorksheet('Summary')!.getCell('B1').formula).toBe(`'Invoice'!F${total}`)
-    expect(await readWorkbookForm(definition, bytes, { dictionaries })).toEqual({ success: true, data: values })
+    expect(await readWorkbookForm(definition, bytes)).toEqual({ success: true, data: values })
   })
 
   it('keeps unequal nested groups scoped and expands a grand-total range over all groups', async () => {

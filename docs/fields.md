@@ -9,7 +9,22 @@ Write rules in the same cell as the [binding](./templates.md):
 
 Tags for one field can start on separate lines within the same cell. In Excel for Windows, use Alt+Enter. Line breaks between tags do not change the binding or rules; writing them on one line also works.
 
-Here `quantity` is the data field, `required` rejects an empty value, `number` requires a number, and `min:0` rejects negative numbers. Rules run when building a report and reading a completed form. Issuing a form defers value validation until reading.
+Here `quantity` is the data field, `required` rejects an empty value, `number` requires a number, and `min:0` rejects negative numbers. Rules run when reading a completed form. Report rendering and form issuance do not execute validators or require their handlers.
+
+## Global validation registration
+
+Register application rules once at startup:
+
+```ts
+import { registerValidationRule } from 'sheetbind'
+
+registerValidationRule('twoLetters', {
+  validate: value => typeof value === 'string' && /^[A-Z]{2}$/.test(value),
+  message: 'Enter two uppercase letters',
+})
+```
+
+The cell `{code}{@validate:twoLetters}` uses this rule in `readWorkbookForm(template, bytes)` without per-call handlers. Per-call `validationRules` override global registrations. Built-in names cannot be replaced; registering an application name again replaces its handler. Registration belongs to the loaded package instance; register separately in another process or worker.
 
 ## Built-in rules
 
@@ -32,7 +47,7 @@ Rules run from left to right. The first failure stops validation of that field; 
 
 `null`, `""`, and whitespace-only strings count as empty. All built-in rules except `required` skip empty values. `0` and `false` are not empty. Rules do not convert values: the string `"12"` fails `number`, and whitespace is not trimmed.
 
-For an optional field, omit `required`. The `?` binding prefix permits a missing field in report input; it does not cancel `required` when reading a form. If a value is missing, omit the property from the input object: explicit `undefined` is not valid JSON input.
+For an optional field, omit `required`. The `?` binding prefix permits a missing field in report input; it does not cancel `required` when reading a form. An omitted property and a property containing `undefined` both mean absence, including in nested objects. You do not need to replace them with `null` before issuing a form.
 
 ## A list of strings
 
@@ -64,7 +79,7 @@ Cell B1 in `list-report.xlsx` contains `Draft` and offers the `Draft`, `Ready` l
 
 This example creates a report. For a file the user will return to your application, replace `renderWorkbookReport` with `renderWorkbookForm` in both the import and the call. Reading that [form](./forms.md) returns the selected string. A dropdown alone does not make a report readable by `readWorkbookForm`.
 
-The list must contain at least one string. Pass the same list through `dictionaries` when reading the form. A value outside the list produces a `list` issue.
+The list must contain at least one string. The issued form stores this list; no dictionary argument is needed when reading. A value outside the list produces a `list` issue.
 
 ## Selecting an object or a key
 
@@ -144,18 +159,37 @@ const data = {
 }
 ```
 
-A report can use a separate `.availableProducts` array from each record. **Options inside form repeats must be shared:** use a named dictionary or a `$root` array. Per-record sources are rejected. The application checks whether a selected option is allowed for a particular record.
+Both reports and forms can use a separate `.availableProducts` array from each record. All list and choice sources are saved in the issued form. `return=key` changes only the returned value; it does not require a second dictionary input. The application separately checks whether the returned data is still acceptable.
 
-The source required when reading a form depends on the mode:
+## Different options for different rows
 
-| Setting | What to supply when reading |
+Put each question's answers directly on its record:
+
+| Cell | Content |
 | --- | --- |
-| `@list:Statuses` | The original list through `dictionaries` |
-| `@choice:Products; …; return=key` | The original dictionary through `dictionaries` |
-| `@choice:$root.products; …; return=key` | The original array through `context: { products }` |
-| `@choice` without `return=key` | The source is saved in the issued form; no need to supply it again |
+| A1 | `{#questions}` |
+| A2 | `{.question}` |
+| B2 | `{.answer}{@choice:.answers; key=id; label=label; return=key}` |
+| B3 | `{/questions}` |
 
-For `return=key`, retain a snapshot of the source at issuance. The reader matches the label against the supplied source: if a current dictionary gives that label a different ID, the result can change. `context` contains choice sources and is not added to submitted data. In object mode, the application separately checks whether the returned object is still acceptable.
+```ts
+const data = {
+  questions: [
+    { question: 'Colour', answers: [{ id: 'red', label: 'Red' }, { id: 'blue', label: 'Blue' }] },
+    { question: 'Size', answers: [{ id: 'small', label: 'Small' }, { id: 'large', label: 'Large' }] },
+  ],
+}
+const issued = await renderWorkbookForm(template, data)
+const result = await readWorkbookForm(template, completed)
+```
+
+The first row offers `Red / Blue`, and the second offers `Small / Large`. No extra identifier or flattened dictionary is needed. Source arrays do not become submitted fields.
+
+Copy, move, delete and sort **whole rows**, including their hidden source references. For multirow records, include the whole block. Sorting only visible cells can separate values from their local sources. New rows with local options should be made by copying an existing row or block; issue a new form to change the available options.
+
+Omitted, `undefined` and `null` data sources such as `.answers` or `$root.catalog.options` behave like an empty array. You do not need to add `answers: []` to every record. Named dictionaries must still be supplied through `options.dictionaries`.
+
+For questions that accept text when `answers` is empty or absent, add `emptySource=input` together with `return=key`. Populated sources still require a listed value, and `@validate` rules still apply. An empty local source retains a dropdown arrow in Excel but accepts ordinary input.
 
 ## Custom messages
 
@@ -190,11 +224,11 @@ Create an `Input` sheet in `rules-template.xlsx`, or download the [template](/ex
 | A1 | `Quantity` |
 | B1 | `{quantity}{@validate:required\|number\|multipleOf:2}` |
 
-After [installation](./getting-started.md), save [rules-report.ts](/examples/tutorials/rules-report.ts) next to it:
+After [installation](./getting-started.md), save [rules-form.ts](/examples/tutorials/rules-form.ts) next to it:
 
 ```ts
 import { readFile, writeFile } from 'node:fs/promises'
-import { importWorkbookXlsx, renderWorkbookReport } from 'sheetbind'
+import { importWorkbookXlsx, renderWorkbookForm, readWorkbookForm } from 'sheetbind'
 import type { ValidationOptions } from 'sheetbind'
 
 const options: ValidationOptions = {
@@ -212,19 +246,65 @@ const options: ValidationOptions = {
 }
 const template = await importWorkbookXlsx(await readFile('rules-template.xlsx'))
 const data = { quantity: 4 }
-await writeFile('rules-report.xlsx', await renderWorkbookReport(template, data, options))
+await writeFile('rules-form.xlsx', await renderWorkbookForm(template, data))
+const result = await readWorkbookForm(template, await readFile('rules-form.xlsx'), options)
+console.log(JSON.stringify(result, null, 2))
 ```
 
 Run from that directory:
 
 ```sh
-pnpm exec tsx rules-report.ts
+pnpm exec tsx rules-form.ts
 ```
 
-Cell B1 in `rules-report.xlsx` contains `4`. Changing the value to `3` makes rendering throw `TemplateError` with the `multipleOf` rule and the message `Enter a whole number divisible by 2`. Using `multipleOf:0` produces a configuration error before checking the value.
+The script issues `rules-form.xlsx` and reads the saved file. Reading succeeds for `quantity: 4`. Changing the value to `3` still creates the file, but reading returns `success: false` with the `multipleOf` rule and the message `Enter a whole number divisible by 2`. `multipleOf:0` causes a configuration error during reading, before checking the value.
 
 `validateArgs` checks the tag's arguments; a rule without it accepts no arguments. `validate` must synchronously return `true` or `false`. Empty values are skipped by default; set `skipEmpty: false` on the handler to check them. Do not mutate the data or perform asynchronous requests inside the handler.
 
-The XLSX stores the rule's name and arguments. Its implementation stays in the application: supply the same `validationRules` when issuing and reading a form. Built-in rules cannot be replaced. Handler types and execution errors are covered in the [API](./api.md).
+The XLSX stores the rule's name and arguments. Its implementation stays in the application: supply `validationRules` only when reading a form. An unknown rule is skipped with a console warning; other rules still run. Built-in rules cannot be replaced. Handler types and execution errors are covered in the [API](./api.md).
 
 Next: [issue a form, fill it in Excel, and read the result](./forms.md).
+
+## Formatting values
+
+Formatters transform values when rendering reports, issuing forms and calling `resolveWorkbook`. They do not mutate input data. Declare formatting in the cell:
+
+```text
+{deliveryDate | format_date:DD.MM.YYYY}
+{enabled | bool_replace:"Yes","No"}
+{price | float}
+```
+
+The equivalent multiline cell is:
+
+```text
+{deliveryDate}
+{@format:format_date:DD.MM.YYYY}
+```
+
+| Formatter | Result |
+| --- | --- |
+| `float` | Converts numeric text to a finite number; preserves blanks and values that cannot be converted |
+| `bool_replace:"Yes","No"` | First label for truthy values, second for falsy values |
+| `format_date:DD.MM.YYYY` | Formats a date string or Unix timestamp in milliseconds as text; defaults to `DD.MM.YYYY` and uses the process's local date components |
+
+Date masks support `YYYY`, `YY`, `MM`, `M`, `DD`, `D`, `HH`, `H`, `mm`, `m`, `ss`, `s`. Quote masks containing time separators: `format_date:"DD.MM.YYYY HH:mm"`. Unrecognized dates retain their input value. Use Excel number formats such as `0.00` for decimal places on cells that already contain numbers.
+
+Register application formatters once at startup:
+
+```ts
+import { registerFormatter } from 'sheetbind'
+
+registerFormatter('uppercase', value => value === null ? null : String(value).toUpperCase())
+registerFormatter('suffix', (value, args) => String(value ?? '') + String(args[0] ?? ''))
+```
+
+```text
+{code | uppercase | suffix:"!"}
+```
+
+Pipelines run left to right. Each handler receives a value and JSON argument array and synchronously returns a string, finite number, boolean or `null`. Unknown formatters, handler failures and invalid results stop rendering. Built-in names are reserved; registering an application name again replaces its handler. Register separately for each loaded package instance, process or worker.
+
+Formatters **never run on read** and are not inverted: a cell formatted with `bool_replace` returns the text “Yes”, not a boolean. Use `@choice` to return a key or object from a display label. Formatting cannot share a cell with `@choice` or `@list`. Handler registrations are not stored in XLSX.
+
+The [complete runnable example](/examples/tutorials/formatting.ts) issues a form with built-in and custom formatters and reads it using a global rule. After installing dependencies, run `pnpm exec tsx formatting.ts`.

@@ -35,7 +35,7 @@ it.each(['rows', 'columns'] as const)('keeps blank styled cells inside their %s 
       }))
       const repeated = render === renderWorkbookForm ? Math.max(1, count) : count
       expect(colors).toHaveLength(repeated + 2)
-      const offset = render === renderWorkbookForm ? 2 : 0
+      const offset = render === renderWorkbookForm ? 1 : 0
       const expected = axis === 'rows'
         ? [...Array.from({ length: repeated }, (_, index) => `B${index + 1 + offset}`), `D${1 + offset}`, `B${Math.max(1, repeated) + 1 + offset + (render === renderWorkbookForm ? 1 : 0)}`]
         : [...Array.from({ length: repeated }, (_, index) => `${String.fromCharCode(66 + index * 2)}1`), `${String.fromCharCode(68 + Math.max(0, repeated - 1) * 2)}1`, 'B2']
@@ -196,7 +196,7 @@ it('reads only submitted fields while allowing Excel annotations and unrelated w
   }))
   title!.value = { text: 'Updated title', hyperlink: 'https://example.com/updated' }
   title!.note = 'Checked by the reviewer'
-  sheet.getCell('A2').value = 'Edited heading'
+  sheet.getCell('A1').value = 'Edited heading'
   sheet.getCell('Z100').value = 'Personal calculations'
   sheet.mergeCells('Z101:AA102')
   book.addWorksheet('Notes').getCell('A1').value = 'Working notes'
@@ -236,9 +236,9 @@ it('keeps source sheet identities, scoped names and helper strings', async () =>
     expect(workbook).toContain(`<definedName name="Footer" localSheetId="2">'Lines'!$A$${cells.Footer.slice(1)}</definedName>`)
     expect(workbook).toContain('<definedName name="Title" localSheetId="0">\'Reference\'!$A$1</definedName>')
     expect(workbook).toMatch(/<definedName name="_xlnm.Print_Area" localSheetId="1">/)
-    expect(book.getWorksheet('Status')!.pageSetup.printArea).toBe(render === renderWorkbookForm ? 'A2:A2' : 'A1:A1')
+    expect(book.getWorksheet('Status')!.pageSetup.printArea).toBe('A1:A1')
     if (render === renderWorkbookForm) {
-      expect(await readWorkbookForm(template, bytes, options)).toEqual({ success: true, data })
+      expect(await readWorkbookForm(template, bytes)).toEqual({ success: true, data })
     }
   }
 })

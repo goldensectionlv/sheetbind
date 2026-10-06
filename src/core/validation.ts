@@ -128,39 +128,56 @@ const builtins: Readonly<Record<string, ValidationRule>> = Object.freeze({
   maxLength: { validate: maxLength, validateArgs: lengthArgument, message: ({ args }) => `must contain at most ${args[0]} UTF-16 code units` },
 })
 
-/** Each execution owns its handlers; parsing only requires rule definitions. */
-export function createValidation(options: ValidationOptions = {}) {
-  const rules = new Map(Object.entries(builtins))
-  for (const [name, rule] of Object.entries(options.validationRules ?? {})) {
-    if (!ruleName.test(name) || Object.hasOwn(builtins, name) || ['__proto__', 'constructor', 'prototype'].includes(name)) {
-      throw new SyntaxError(`Validation rule name is reserved or invalid: ${name}`)
-    }
-    if (!rule || typeof rule.validate !== 'function' || rule.validateArgs !== undefined && typeof rule.validateArgs !== 'function'
+const registered = new Map<string, ValidationRule>()
+
+function assertHandler(name: string, rule: ValidationRule): void {
+  if (typeof name !== 'string' || !ruleName.test(name) || Object.hasOwn(builtins, name) || ['__proto__', 'constructor', 'prototype'].includes(name)) {
+    throw new SyntaxError(`Validation rule name is reserved or invalid: ${name}`)
+  }
+  if (!rule || typeof rule.validate !== 'function' || rule.validateArgs !== undefined && typeof rule.validateArgs !== 'function'
       || rule.skipEmpty !== undefined && typeof rule.skipEmpty !== 'boolean'
       || rule.message !== undefined && typeof rule.message !== 'string' && typeof rule.message !== 'function') {
-      throw new SyntaxError(`Invalid validation handler: ${name}`)
-    }
-    rules.set(name, rule)
+    throw new SyntaxError(`Invalid validation handler: ${name}`)
+  }
+}
+
+/** Register once at application startup; per-read rules override registered rules. */
+export function registerValidationRule(name: string, rule: ValidationRule): void {
+  assertHandler(name, rule)
+  registered.set(name, { ...rule })
+}
+
+/** Form reading owns its handlers; rendering only carries rule definitions. */
+export function createValidation(options: ValidationOptions = {}) {
+  const rules = new Map([...Object.entries(builtins), ...registered])
+  for (const [name, rule] of Object.entries(options.validationRules ?? {})) {
+    assertHandler(name, rule)
+    rules.set(name, { ...rule })
   }
   for (const message of Object.values(options.validationMessages ?? {})) {
     if (typeof message !== 'string' && typeof message !== 'function') {
       throw new SyntaxError('Runtime validation messages must be strings or functions')
     }
   }
+  const unknownRules = new Set<string>()
   return function prepare(validation: Validation = [], messages: Readonly<Record<string, string>> = {}): ValidateValue {
-    const chain = parseValidation(validation).map(use => {
+    const chain = parseValidation(validation).flatMap((use, index) => {
       const handler = rules.get(use.rule)
       if (!handler) {
-        throw new SyntaxError(`Unknown validation rule: ${use.rule}`)
+        if (!unknownRules.has(use.rule)) {
+          console.warn(`[sheetbind] Unknown validation rule "${use.rule}" was skipped`)
+          unknownRules.add(use.rule)
+        }
+        return []
       }
       const args = use.args ?? []
       if ((handler.validateArgs ? handler.validateArgs(args) : args.length === 0) !== true) {
         throw new SyntaxError(`Invalid arguments for validation rule: ${use.rule}`)
       }
-      return { use, args, handler }
+      return [{ use, args, handler, index }]
     })
     return function validate(value, context) {
-      for (const [index, { use, args, handler }] of chain.entries()) {
+      for (const { use, args, handler, index } of chain) {
         if (handler.skipEmpty !== false && isBlank(value)) {
           continue
         }

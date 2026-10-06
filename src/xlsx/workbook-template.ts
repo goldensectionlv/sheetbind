@@ -14,7 +14,6 @@ import { workbookParts } from './workbook-source'
 import { compileWorkbookSheet } from './workbook-tags'
 import { writeWorkbookPackage } from './workbook-package'
 import { parseDictionaries } from '../core/dictionaries'
-import type { ValidationOptions } from '../core/validation'
 import type { Dictionaries } from '../core/dictionaries'
 import { WorkbookTemplate } from './template'
 import { readWorkbookPrint } from './workbook-print'
@@ -175,7 +174,7 @@ function importRegions(compiled: ReturnType<typeof compileWorkbookSheet>, create
 }
 
 /** Resolve values and placement without exposing the imported definition. */
-export function resolveWorkbook(template: WorkbookTemplate, data: unknown, options: ValidationOptions & { readonly dictionaries?: Dictionaries } = {}): WorkbookLayout {
+export function resolveWorkbook(template: WorkbookTemplate, data: unknown, options: { readonly dictionaries?: Dictionaries } = {}): WorkbookLayout {
   const { definition } = WorkbookTemplate.content(template)
   assertInputData(data)
   return withTemplateLocations(definition, () => resolveDefinition(definition, data, options))
@@ -186,7 +185,7 @@ export function workbookDictionarySources(template: WorkbookTemplate): string[] 
 }
 
 /** Render data into the imported workbook while preserving its native content. */
-export async function renderWorkbookReport(template: WorkbookTemplate, data: unknown, options: ValidationOptions & { readonly dictionaries?: Dictionaries } = {}): Promise<Buffer> {
+export async function renderWorkbookReport(template: WorkbookTemplate, data: unknown, options: { readonly dictionaries?: Dictionaries } = {}): Promise<Buffer> {
   const { definition, source } = WorkbookTemplate.content(template)
   const dictionaries = parseDictionaries(options.dictionaries ?? {})
   assertInputData(data)

@@ -34,7 +34,7 @@ Run from that directory:
 pnpm exec tsx first-form.ts
 ```
 
-Open `first-form-issued.xlsx`. The field is in B2: the form has added a hidden control row before the content. Change the name to `Alex` and save a **separate file named `completed.xlsx`** next to the script. Keep the original template for reading.
+Open `first-form-issued.xlsx`. The field is in B1. The form preserves this address. Change the name to `Alex` and save a **separate file named `completed.xlsx`** next to the script. Keep the original template for reading.
 
 ### 3. Read the completed file
 
@@ -73,7 +73,7 @@ Output:
 }
 ```
 
-Clear B2 and save the file again to get `success: false`. The `issues` array contains a `required` issue with `sheetName: "Input"`, `address: "B2"`, and `path: "$data.customer.name"`. Failed results contain no partial `data`.
+Clear B1 and save the file again to get `success: false`. The `issues` array contains a `required` issue with `sheetName: "Input"`, `address: "B1"`, and `path: "$data.customer.name"`. Failed results contain no partial `data`.
 
 `issues` describes problems with the returned file or entered values. Invalid application settings and file operations can throw exceptions, so use both `result.success` and `try/catch`. See the [API](./api.md) for details.
 
@@ -123,7 +123,6 @@ const issued = await renderWorkbookForm(template, data, { dictionaries })
 
 await mkdir('saved-form', { recursive: true })
 await writeFile('saved-form/template.xlsx', source)
-await writeFile('saved-form/dictionaries.json', JSON.stringify(dictionaries, null, 2))
 await writeFile('saved-form/issued.xlsx', issued)
 ```
 
@@ -133,53 +132,53 @@ pnpm exec tsx issue-form.ts
 
 Twenty `{}` objects create twenty input rows. Required fields may be empty at issuance. The products have identical labels, so the dropdown shows `Paper [001]` and `Paper [002]`.
 
-This is the top of the [issued form](/examples/tutorials/issued.xlsx). Input rows start at 4 and continue through 23; control rows 1 and 3 are hidden.
+This is the top of the [issued form](/examples/tutorials/issued.xlsx). Input rows start at 3 and continue through 22; control row 2 is hidden.
 
 <div class="workbook-preview" tabindex="0" role="region" aria-label="Blank form, columns A–C, top of the table">
 
-[![Issued form: Product, Quantity and Date headers on row 2, with blank input rows starting at 4. Column A provides product lists.](/images/form-issued.png)](/images/form-issued.png)
+[![Issued form: Product, Quantity and Date headers on row 1, with blank input rows starting at 3. Column A provides product lists.](/images/form-issued.png)](/images/form-issued.png)
 
 </div>
 
-This example uses `return=key`. Keep **the dictionary used for issuance** with the template: the reader converts a label to an ID using the supplied dictionary. Current API data may give a different mapping. Object mode and other sources are covered in [validation and lists](./fields.md).
+The form stores the issuance dictionaries in its hidden sheet. Reading needs the original template and the completed file; `return=key` returns the selected ID. See [validation and lists](./fields.md) for other sources.
 
 ### 3. Fill and read
 
-Open `saved-form/issued.xlsx`. Input rows occupy rows 4–23:
+Open `saved-form/issued.xlsx`. Input rows occupy rows 3–22:
 
 | Row | Product | Quantity | Date |
 | --- | --- | --- | --- |
-| 4 | Select `Paper [001]` | Number `2` | Text `2026-01-15` |
-| 5 | Leave empty | | |
-| 6 | Select `Paper [002]` | Number `0` | Leave empty |
+| 3 | Select `Paper [001]` | Number `2` | Text `2026-01-15` |
+| 4 | Leave empty | | |
+| 5 | Select `Paper [002]` | Number `0` | Leave empty |
 
 After filling two rows, the form looks like this:
 
-<div class="workbook-preview" tabindex="0" role="region" aria-label="Completed form, columns A–C, rows 4–6">
+<div class="workbook-preview" tabindex="0" role="region" aria-label="Completed form, columns A–C, rows 3–5">
 
-[![Row 4 contains Paper [001], quantity 2.00 and date 2026-01-15. Row 5 is empty. Row 6 contains Paper [002] and quantity 0.00, with no date.](/images/form-completed.png)](/images/form-completed.png)
+[![Row 3 contains Paper [001], quantity 2.00 and date 2026-01-15. Row 4 is empty. Row 5 contains Paper [002] and quantity 0.00, with no date.](/images/form-completed.png)](/images/form-completed.png)
 
 </div>
 
-Save the file as `completed.xlsx` next to `issue-form.ts`, or download the [completed form](/examples/tutorials/completed.xlsx). Reading requires `saved-form/template.xlsx` and `saved-form/dictionaries.json` from the previous step. Download [read-completed-form.ts](/examples/tutorials/read-completed-form.ts) next to `completed.xlsx` and run:
+Save the file as `completed.xlsx` next to `issue-form.ts`, or download the [completed form](/examples/tutorials/completed.xlsx). Reading requires `saved-form/template.xlsx` from the previous step. Download [read-completed-form.ts](/examples/tutorials/read-completed-form.ts) next to `completed.xlsx` and run:
 
 ```sh
 pnpm exec tsx read-completed-form.ts
 ```
 
-This is a complete handler with `result.success` and `try/catch`, as in the first form. It loads `saved-form/template.xlsx`, `saved-form/dictionaries.json`, and `completed.xlsx` from the current directory.
+This is a complete handler with `result.success` and `try/catch`, as in the first form. It loads `saved-form/template.xlsx` and `completed.xlsx` from the current directory.
 
 The result is also available as a [JSON download](/examples/tutorials/completed.json):
 
 <<< @/public/examples/tutorials/completed.json
 
-Empty row 5 and the remaining unfilled rows are omitted; `0` is preserved. Cell addresses refer to Excel; data indexes refer to the array after empty rows are omitted.
+Empty row 4 and the remaining unfilled rows are omitted; `0` is preserved. Cell addresses refer to Excel; data indexes refer to the array after empty rows are omitted.
 
-To try a reading error, download [invalid.xlsx](/examples/tutorials/invalid.xlsx) and save it in the example directory as `completed.xlsx`. It already contains `Unknown` in A6. Excel's list validation blocks normal entry of that value, so this step uses a prepared file. Running the script again returns `success: false` and a `choice` issue with address `A6` and path `$data.items[1].product`; the [full result](/examples/tutorials/invalid.json) is available to download. Select `Paper [002]` in A6, save the file and read it again.
+To try a reading error, download [invalid.xlsx](/examples/tutorials/invalid.xlsx) and save it in the example directory as `completed.xlsx`. It already contains `Unknown` in A5. Excel's list validation blocks normal entry of that value, so this step uses a prepared file. Running the script again returns `success: false` and a `choice` issue with address `A5` and path `$data.items[1].product`; the [full result](/examples/tutorials/invalid.json) is available to download. Select `Paper [002]` in A5, save the file and read it again.
 
 ## Empty rows and values
 
-For a single-row repeat with input fields, `items: []` creates one blank row. To get a specific number of rows, pass that many `{}` objects as shown above.
+For a single-row repeat with input fields, `items: []`, `items: null` or an omitted `items` property creates one blank row. Nested input tables behave the same way. To get a specific number of rows, pass that many `{}` objects as shown above.
 
 Completely blank single-row records are omitted on read. Partially completed rows are validated; a row with a nonempty invalid value is also retained. `null`, empty text, and whitespace-only text count as empty; `0` and `false` do not. A blank cell in a retained record is returned as `null`.
 
@@ -208,10 +207,10 @@ When a record occupies several rows, copy the whole block with its hidden bounda
 | B3 | `{.email}` |
 | B4 | `{/contacts}` |
 
-In the issued form, the first record occupies entire rows **3:6**, and the second occupies **7:10**. Fields are visible on rows 4:5 and 8:9; the other rows in each block are hidden.
+In the issued form, the first record occupies entire rows **2:5**, and the second occupies **6:9**. Fields are visible on rows 3:4 and 7:8; the other rows in each block are hidden.
 
-1. Enter `3:6` in Excel's Name Box to the left of the formula bar and press Enter. This selects entire rows, including hidden boundaries.
-2. Copy them. Enter `7:7` in the Name Box and press Enter to select hidden row 7. Use Insert Copied Cells to insert entire rows.
+1. Enter `2:5` in Excel's Name Box to the left of the formula bar and press Enter. This selects entire rows, including hidden boundaries.
+2. Copy them. Enter `6:6` in the Name Box and press Enter to select hidden row 6. Use Insert Copied Cells to insert entire rows.
 
 After this single copy operation, save the workbook as `contacts-completed.xlsx` next to `contacts-template.xlsx`. Download [read-contacts.ts](/examples/tutorials/read-contacts.ts) into that directory and run:
 
@@ -239,3 +238,7 @@ Deleting and moving records are separate actions:
 These numbers apply to the original example: inserting rows shifts later blocks. Do not copy only the visible fields. **Clearing a multirow block retains an empty record**, which may fail `required`; deleting the block removes the record. When copying a parent with a nested list, include the whole list and the parent's boundaries.
 
 Reissue forms after changing template bindings, rules, or structure. Keep the original template and rule handlers for reading. Your application defines comparison with earlier data and permitted changes. Other file behavior is covered in [Excel and limitations](./xlsx.md).
+
+## File structure and version
+
+Forms do not prepend a control row or store a template hash. Hidden repeat and sheet-end boundaries describe the current records and allow layout checks. Reading uses bindings and rules from the supplied template without requiring a matching hash. Applications own document type and version checks. Reissue files with the older control-marker format.

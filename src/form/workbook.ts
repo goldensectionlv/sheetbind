@@ -1,4 +1,3 @@
-import { returnsObject } from '../core/choices'
 import { createValidation } from '../core/validation'
 import type { ValidationOptions, ValidateValue } from '../core/validation'
 import type { JsonValue } from '../core/json'
@@ -40,29 +39,27 @@ export function referencePath(reference: DataReference, context: DataPath): Data
 export type WorkbookFormOptions = ValidationOptions & { readonly dictionaries?: Dictionaries }
 export interface PreparedWorkbookField extends Pick<WorkbookCell, 'id' | 'rules'> {
   readonly reference: DataReference
-  readonly validate: ValidateValue
+  readonly validate?: ValidateValue
 }
 export interface PreparedWorkbookForm {
   readonly template: WorkbookDefinition
   readonly layoutTemplate: WorkbookDefinition
   readonly fields: ReadonlyMap<string, PreparedWorkbookField>
   readonly dictionaries: Dictionaries
-  readonly validationOptions: ValidationOptions
 }
 /** Data bindings define input fields; other worksheet content is not submitted. */
 export function prepareWorkbookForm(value: WorkbookDefinition, purpose: 'issue' | 'read', options: WorkbookFormOptions = {}): PreparedWorkbookForm {
   const template = expandWorkbookScopes(value)
   const dictionaries = parseDictionaries(options.dictionaries === undefined ? {} : options.dictionaries)
-  const validationOptions = { validationRules: options.validationRules, validationMessages: options.validationMessages }
   if (template.sheets.some(sheet => workbookRegions(sheet).some(region => region.axis === WorkbookAxis.Columns))) {
     throw new TemplateError([{ phase: 'template', code: 'report-only-region', nodeId: '', path: '$template', message: 'Form records repeat down rows; column repeats support reports' }])
   }
   const definitions = template.sheets.flatMap(sheet => workbookCells(sheet))
-  const prepareValidation = createValidation(validationOptions)
+  const prepareValidation = purpose === 'read' ? createValidation(options) : undefined
   const fields = new Map<string, PreparedWorkbookField>()
   for (const cell of definitions) {
     try {
-      const validate = prepareValidation(cell.rules?.validation, cell.rules?.validationMessages)
+      const validate = prepareValidation?.(cell.rules?.validation, cell.rules?.validationMessages)
       if ('path' in cell.value) {
         fields.set(cell.id, { id: cell.id, reference: cell.value, rules: cell.rules, validate })
       }
@@ -71,20 +68,22 @@ export function prepareWorkbookForm(value: WorkbookDefinition, purpose: 'issue' 
       throw new TemplateError([{ phase: 'template', code: 'invalid-rules', nodeId: cell.id, path: cell.id, message: (error as Error).message }])
     }
   }
-  assertFormDictionaries(definitions, dictionaries, purpose)
+  if (purpose === 'issue') {
+    assertFormDictionaries(definitions, dictionaries)
+  }
   assertFormBindings(template)
   const layoutTemplate = { ...template, sheets: template.sheets.map(sheet => mapWorkbookCells(sheet, cell => layoutFormCell(cell, purpose))) }
-  return { template, layoutTemplate, fields, dictionaries, validationOptions }
+  return { template, layoutTemplate, fields, dictionaries }
 }
 
-function assertFormDictionaries(cells: readonly WorkbookCell[], dictionaries: Dictionaries, purpose: 'issue' | 'read'): void {
+function assertFormDictionaries(cells: readonly WorkbookCell[], dictionaries: Dictionaries): void {
   const sources = new Map<string, boolean>()
   for (const { rules } of cells) {
     if (rules?.list) {
       sources.set(rules.list, true)
     }
     const choice = rules?.choice
-    if (choice && 'dictionary' in choice.source && (purpose === 'issue' || !returnsObject(choice))) {
+    if (choice && 'dictionary' in choice.source) {
       const source = choice.source.dictionary
       sources.set(source, sources.get(source) ?? false)
     }
@@ -140,10 +139,6 @@ function assertFormBindings(template: WorkbookDefinition): void {
         declare(path(cell.value), 'field')
       }
       if (cell.rules?.choice && 'path' in cell.rules.choice.source) {
-        if (context && cell.rules.choice.source.from !== 'root') {
-          throw new TemplateError([{ phase: 'template', code: 'contextual-form-choice', nodeId: cell.id, path: cell.id,
-            message: 'Repeated form choices need a named dictionary or a $root source; per-record sources support reports' }])
-        }
         lookups.push(path(cell.rules.choice.source))
       }
     }

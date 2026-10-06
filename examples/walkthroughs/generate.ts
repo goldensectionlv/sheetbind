@@ -176,7 +176,7 @@ const registrationTemplate = await importWorkbookXlsx(await readFile(file('regis
 const options = { dictionaries }
 const issued = await renderWorkbookForm(registrationTemplate, registrationData, options)
 await writeFile(file('registration-issued.xlsx'), issued)
-assert.deepEqual(await readWorkbookForm(registrationTemplate, issued, options), {
+assert.deepEqual(await readWorkbookForm(registrationTemplate, issued), {
   success: true,
   data: { groups: [{ name: 'Friends', participants: [], contact: null }, { name: 'Family', participants: [], contact: null }] },
 })
@@ -205,11 +205,11 @@ const expected = {
     { name: 'Family', participants: [{ name: 'Taylor', ticket: 'standard', sessions: 1, note: null }], contact: null },
   ],
 }
-assert.deepEqual(await readWorkbookForm(registrationTemplate, await readFile(file('registration-completed.xlsx')), options), { success: true, data: expected })
+assert.deepEqual(await readWorkbookForm(registrationTemplate, await readFile(file('registration-completed.xlsx'))), { success: true, data: expected })
 await json('registration-completed.json', expected)
 input.getCell(inputRows[2], 3).value = -1
 await save('registration-invalid.xlsx', completed)
-const invalid = await readWorkbookForm(registrationTemplate, await readFile(file('registration-invalid.xlsx')), options)
+const invalid = await readWorkbookForm(registrationTemplate, await readFile(file('registration-invalid.xlsx')))
 assert(!invalid.success)
 assert.equal(invalid.issues.length, 1)
 assert.equal(invalid.issues[0].code, 'min')

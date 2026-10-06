@@ -47,7 +47,7 @@ Download [registration-dictionaries.json](/examples/walkthroughs/registration-di
 
 <<< @/public/examples/walkthroughs/registration-dictionaries.json
 
-All participants in both groups share this dictionary. Keep the original template and **this version of the dictionary** for reading the returned file.
+All participants in both groups share this dictionary. It is embedded in the issued form. Keep the original template for reading; the dictionary JSON is only needed when issuing the form.
 
 Download [registration-issue.ts](/examples/walkthroughs/registration-issue.ts):
 
@@ -61,7 +61,7 @@ This creates `registration-issued.xlsx`; you can also download the [blank form](
 
 <div class="workbook-preview workbook-preview-wide" tabindex="0" role="region" aria-label="Registration form with two groups and four blank rows">
 
-[![Friends has participant rows 8–10; Family has row 18. A contact and hidden group boundaries separate the lists.](/images/example-registration-issued.png)](/images/example-registration-issued.png)
+[![Friends has participant rows 7–9; Family has row 17. A contact and hidden group boundaries separate the lists.](/images/example-registration-issued.png)](/images/example-registration-issued.png)
 
 </div>
 
@@ -73,10 +73,10 @@ Open `registration-issued.xlsx` in Excel and enter:
 
 | Row | Participant | Ticket — select from the list | Sessions | Note |
 | --- | --- | --- | --- | --- |
-| 8 | `Alex` | `Standard` | Number `2` | Leave blank |
-| 9 | Leave the entire row blank | | | |
-| 10 | `Sam` | `Student` | Number `0` | `First visit` |
-| 18 | `Taylor` | `Standard` | Number `1` | Leave blank |
+| 7 | `Alex` | `Standard` | Number `2` | Leave blank |
+| 8 | Leave the entire row blank | | | |
+| 9 | `Sam` | `Student` | Number `0` | `First visit` |
+| 17 | `Taylor` | `Standard` | Number `1` | Leave blank |
 
 Keep the group names and leave contacts blank. Save a separate file named **`registration-completed.xlsx`** beside the script, or download the [completed example](/examples/walkthroughs/registration-completed.xlsx):
 
@@ -98,19 +98,19 @@ The application receives these data, also available as a [JSON download](/exampl
 
 <<< @/public/examples/walkthroughs/registration-completed.json
 
-Blank row 9 is omitted from `Friends`, while Sam's `0` is preserved. Tickets become `standard` and `student`; optional blank fields become `null`. A completely blank participant list is read as `[]`, while its named group remains.
+Blank row 8 is omitted from `Friends`, while Sam's `0` is preserved. Tickets become `standard` and `student`; optional blank fields become `null`. A completely blank participant list is read as `[]`, while its named group remains.
 
 ## 4. Test an error and add a participant
 
-In the original completed example, change C10 to the number `-1`, save and read again. Reading fails with a `min` issue at **C10**, path **`$data.groups[0].participants[1].sessions`**. Index `1` accounts for the omitted blank row. Download the [invalid file](/examples/walkthroughs/registration-invalid.xlsx) and [full API result](/examples/walkthroughs/registration-invalid.json) if needed. Restore C10 to `0` and save.
+In the original completed example, change C9 to the number `-1`, save and read again. Reading fails with a `min` issue at **C9**, path **`$data.groups[0].participants[1].sessions`**. Index `1` accounts for the omitted blank row. Download the [invalid file](/examples/walkthroughs/registration-invalid.xlsx) and [full API result](/examples/walkthroughs/registration-invalid.json) if needed. Restore C9 to `0` and save.
 
 To add a participant to `Friends` in the completed file:
 
-1. Select and copy the entire row 8.
-2. Select row 9 and use Insert Copied Cells to insert entire rows.
-3. In the new row 9, change A9 to `Morgan` and C9 to the number `1`. The ticket remains `Standard`.
+1. Select and copy the entire row 7.
+2. Select row 8 and use Insert Copied Cells to insert entire rows.
+3. In the new row 8, change A8 to `Morgan` and C8 to the number `1`. The ticket remains `Standard`.
 4. Save the file and read it again.
 
-`groups[0].participants` will contain `Alex`, `Morgan`, `Sam`; `groups[1].participants` will still contain `Taylor`. Inserting shifts subsequent rows: the former C10 is now C11.
+`groups[0].participants` will contain `Alex`, `Morgan`, `Sam`; `groups[1].participants` will still contain `Taylor`. Inserting shifts subsequent rows: the former C9 is now C10.
 
 Copying a whole group requires its hidden boundaries and nested list; follow the [multirow record instructions](../forms.md#multirow-records). Run validation and form reading on the application server regardless of Excel's input prompts.

@@ -41,7 +41,7 @@ const find = (sheet: ExcelJS.Worksheet, value: ExcelJS.CellValue) => {
 const mutate = async (change: (book: ExcelJS.Workbook) => void) => {
   const book = await open(await renderWorkbookForm(template, data, options))
   change(book)
-  return readWorkbookForm(template, Buffer.from(await book.xlsx.writeBuffer()), options)
+  return readWorkbookForm(template, Buffer.from(await book.xlsx.writeBuffer()))
 }
 const codes = (result: Awaited<ReturnType<typeof readWorkbookForm>>) => {
   expect(result.success).toBe(false)
@@ -56,8 +56,9 @@ describe('shared workbook forms: definition + marked XLSX', () => {
     const bytes = await renderWorkbookForm(wide, { value: 'ready' })
     const book = await open(bytes)
     const sheet = book.getWorksheet('Wide')!
-    expect(sheet.getCell(2, 300).value).toBe('ready')
-    expect(sheet.getCell(1, 301).value).toMatch(/^sheetbind\.form\/3:/)
+    expect(sheet.getCell(1, 300).value).toBe('ready')
+    expect(sheet.getRow(1).hidden).toBeFalsy()
+    expect(sheet.getCell(2, 301).value).toBe(FORM_MARKER_PREFIX + '["/sheet"]')
     expect(await readWorkbookForm(wide, bytes)).toEqual({ success: true, data: { value: 'ready' } })
   })
 
@@ -69,16 +70,16 @@ describe('shared workbook forms: definition + marked XLSX', () => {
       item.note ??= null
     }))
     const bytes = await renderWorkbookForm(original, fieldsProject.data, settings)
-    expect(await readWorkbookForm(original, bytes, settings)).toEqual({ success: true, data: expected })
+    expect(await readWorkbookForm(original, bytes)).toEqual({ success: true, data: expected })
   })
 
   it('omits empty lines and retains zero, false and only declared fields', async () => {
     const initial = { ...data, ignored: 'not returned', items: [{}, { code: '0007', hours: 0, approved: false, ignored: true }] }
     const bytes = await renderWorkbookForm(template, initial, options)
-    expect(await readWorkbookForm(template, bytes, options)).toEqual({ success: true, data: {
+    expect(await readWorkbookForm(template, bytes)).toEqual({ success: true, data: {
       contact: data.contact, items: [{ code: '0007', hours: 0, approved: false }],
     } })
-    expect(await readWorkbookForm(template, await renderWorkbookForm(template, { ...data, items: [] }, options), options)).toEqual({ success: true, data: { contact: data.contact, items: [] } })
+    expect(await readWorkbookForm(template, await renderWorkbookForm(template, { ...data, items: [] }, options))).toEqual({ success: true, data: { contact: data.contact, items: [] } })
   })
 
   it('issues blank required fields, restores DV at final addresses and reports concrete value paths on read', async () => {
@@ -88,14 +89,14 @@ describe('shared workbook forms: definition + marked XLSX', () => {
     const code = find(sheet, '0007')
     expect(code.numFmt).toBe('@')
     expect(code.dataValidation.type).toBe('list')
-    const result = await readWorkbookForm(template, bytes, options)
+    const result = await readWorkbookForm(template, bytes)
     expect(codes(result)).toEqual(['required', 'min'])
     if (!result.success) {
       expect(result.issues.map(issue => issue.path)).toEqual(['$data.contact.name', '$data.items[0].hours'])
     }
     find(sheet, -1).value = 3
-    sheet.getCell('A3').value = 'Taylor Reed'
-    expect(await readWorkbookForm(template, Buffer.from(await book.xlsx.writeBuffer()), options)).toEqual({ success: true, data: { contact: { name: 'Taylor Reed' }, items: [{ code: '0007', hours: 3, approved: null }] } })
+    sheet.getCell('A2').value = 'Taylor Reed'
+    expect(await readWorkbookForm(template, Buffer.from(await book.xlsx.writeBuffer()))).toEqual({ success: true, data: { contact: { name: 'Taylor Reed' }, items: [{ code: '0007', hours: 3, approved: null }] } })
   })
 
   it.each([
@@ -118,7 +119,7 @@ describe('shared workbook forms: definition + marked XLSX', () => {
       cell.numFmt = 'yyyy-mm-dd'
     }],
     ['merges', (book: ExcelJS.Workbook) => {
-      book.getWorksheet('Form')!.unMergeCells('A3:B3')
+      book.getWorksheet('Form')!.unMergeCells('A2:B2')
     }],
     ['form-layout', (book: ExcelJS.Workbook) => {
       book.getWorksheet('Form')!.spliceRows(2, 0, [])
@@ -147,10 +148,10 @@ describe('shared workbook forms: definition + marked XLSX', () => {
     expect(result).not.toHaveProperty('data')
   })
 
-  it('does not silently read a report, another template or a truncated repeat', async () => {
-    expect(codes(await readWorkbookForm(template, await renderWorkbookReport(template, data, options), options))).toContain('form-markers')
+  it('rejects reports and truncated repeats while taking field paths from the supplied template', async () => {
+    expect(codes(await readWorkbookForm(template, await renderWorkbookReport(template, data, options)))).toContain('form-markers')
     const changed = await importAuthoredWorkbook(book => authorForm(book, 'Form', 'another'))
-    expect(codes(await readWorkbookForm(changed, await renderWorkbookForm(template, data, options), options))).toContain('form-markers')
+    expect(await readWorkbookForm(changed, await renderWorkbookForm(template, data, options))).toEqual({ success: true, data: { another: data.contact.name, items: data.items } })
     expect(codes(await mutate(book => {
       const sheet = book.getWorksheet('Form')!
       sheet.spliceRows(Number(find(sheet, '0008').row) - 1, 3)
@@ -158,13 +159,13 @@ describe('shared workbook forms: definition + marked XLSX', () => {
   })
 
   it('rejects invalid files and coordinates outside XLSX before layout', async () => {
-    expect(codes(await readWorkbookForm(template, new Uint8Array([1, 2, 3]), options))).toEqual(['invalid-workbook'])
+    expect(codes(await readWorkbookForm(template, new Uint8Array([1, 2, 3])))).toEqual(['invalid-workbook'])
     const zip = await JSZip.loadAsync(await renderWorkbookForm(template, data, options))
     const xml = await zip.file('xl/worksheets/sheet1.xml')!.async('string')
-    zip.file('xl/worksheets/sheet1.xml', xml.replace('<row r="1"', '<row r="1048577"'))
-    expect(codes(await readWorkbookForm(template, await zip.generateAsync({ type: 'uint8array' }), options))).toEqual(['invalid-workbook'])
+    zip.file('xl/worksheets/sheet1.xml', xml.replace(/(<row\b[^>]*\br=")1"/, '$11048577"'))
+    expect(codes(await readWorkbookForm(template, await zip.generateAsync({ type: 'uint8array' })))).toEqual(['invalid-workbook'])
     zip.file('xl/worksheets/sheet1.xml', xml.replace('ref="A2:B2"', 'ref="A1:XFD1048577"'))
-    expect(codes(await readWorkbookForm(template, await zip.generateAsync({ type: 'uint8array' }), options))).toEqual(['invalid-workbook'])
+    expect(codes(await readWorkbookForm(template, await zip.generateAsync({ type: 'uint8array' })))).toEqual(['invalid-workbook'])
   })
 
   it('checks duplicate references and collection lengths across sheets without conflating record positions', async () => {
@@ -173,12 +174,12 @@ describe('shared workbook forms: definition + marked XLSX', () => {
       authorForm(book, 'Copy')
     })
     const book = await open(await renderWorkbookForm(repeated, data, options))
-    expect(await readWorkbookForm(repeated, Buffer.from(await book.xlsx.writeBuffer()), options)).toEqual({ success: true, data })
+    expect(await readWorkbookForm(repeated, Buffer.from(await book.xlsx.writeBuffer()))).toEqual({ success: true, data })
     find(book.getWorksheet('Copy')!, 'Jordan Lee').value = 'Taylor Reed'
-    expect(codes(await readWorkbookForm(repeated, Buffer.from(await book.xlsx.writeBuffer()), options))).toContain('conflicting-field')
+    expect(codes(await readWorkbookForm(repeated, Buffer.from(await book.xlsx.writeBuffer())))).toContain('conflicting-field')
     const copy = book.getWorksheet('Copy')!
     copy.spliceRows(Number(find(copy, '0008').row), 1)
-    expect(codes(await readWorkbookForm(repeated, Buffer.from(await book.xlsx.writeBuffer()), options))).toContain('conflicting-shape')
+    expect(codes(await readWorkbookForm(repeated, Buffer.from(await book.xlsx.writeBuffer())))).toContain('conflicting-shape')
   })
 
   it('normalizes object scopes and preserves text which resembles an OOXML escape', async () => {
@@ -190,9 +191,9 @@ describe('shared workbook forms: definition + marked XLSX', () => {
     expect(await readWorkbookForm(scoped, bytes)).toEqual({ success: true, data: values })
   })
 
-  it('rejects incompatible trusted definitions and absent dictionaries at the API boundary', async () => {
+  it('requires dictionaries for issuance and rejects incompatible template bindings', async () => {
     await expect(renderWorkbookForm(template, data)).rejects.toBeInstanceOf(TemplateError)
-    await expect(readWorkbookForm(template, new Uint8Array())).rejects.toBeInstanceOf(TemplateError)
+    expect(await readWorkbookForm(template, new Uint8Array())).toMatchObject({ success: false, issues: [{ code: 'invalid-workbook' }] })
     for (const path of ['items', 'items.name']) {
       const collision = await importAuthoredWorkbook(book => authorForm(book, 'Form', path))
       await expect(renderWorkbookForm(collision, data, options)).rejects.toThrow('cannot also own')

@@ -1,4 +1,4 @@
-import { assertJson, isDataObject } from './json'
+import { jsonSnapshot, isDataObject } from './json'
 
 /** Application-supplied values; templates retain only named dependencies. */
 export type Dictionaries = Readonly<Record<string, readonly string[] | readonly Readonly<Record<string, unknown>>[]>>
@@ -9,7 +9,7 @@ export function isDictionaryName(value: unknown): value is string {
 
 /** Object dictionaries are interpreted by each field's explicit key/label mapping. */
 export function parseDictionaries(value: unknown): Dictionaries {
-  assertJson(value)
+  value = jsonSnapshot(value)
   if (!isDataObject(value)) {
     throw new SyntaxError('Dictionaries must be an object of named lists')
   }
@@ -31,5 +31,5 @@ export function parseDictionaries(value: unknown): Dictionaries {
       throw new SyntaxError(`Dictionary ${name} must contain only strings or only objects`)
     }
   }
-  return structuredClone(value) as Dictionaries
+  return value as Dictionaries
 }

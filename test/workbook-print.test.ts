@@ -28,10 +28,10 @@ it('moves print bounds with the report and form while preserving native page set
       footerRow = row.number
     }
   })
-  expect(sheet.pageSetup.printArea).toBe('A2:D' + footerRow)
-  expect(sheet.pageSetup.printTitlesRow).toBe('2:3')
+  expect(sheet.pageSetup.printArea).toBe('A1:D' + footerRow)
+  expect(sheet.pageSetup.printTitlesRow).toBe('1:2')
   expect(sheet.pageSetup.paperSize).toBe(8)
-  expect(await readWorkbookForm(template, form, { dictionaries, context: data })).toEqual({ success: true, data: declaredData })
+  expect(await readWorkbookForm(template, form)).toEqual({ success: true, data: declaredData })
 })
 
 it('preserves a print area beyond column 256', async () => {
@@ -85,6 +85,6 @@ it.each(["Client's projects", "O'Neil's, plans!", 'Team plans'])('quotes print r
       expect(decodeXml(xmlBody(node))).toMatch(new RegExp('^' + `'${name.replace(/'/g, "''")}'!`.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
     }
     const reopened = await load(output)
-    expect(reopened.worksheets[0].pageSetup.printArea).toBe(render === renderWorkbookReport ? 'A1:B2' : 'A2:B3')
+    expect(reopened.worksheets[0].pageSetup.printArea).toBe('A1:B2')
   }
 })

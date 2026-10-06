@@ -61,15 +61,20 @@ describe('format-independent template composition', () => {
     expect(() => instantiate(value('v', { path: 'input' }), { input })).toThrow(TemplateError)
   })
 
-  it('keeps siblings around an empty repeat without synthesizing a record', () => {
-    expect(values(instantiate(group('g', [value('head', { literal: 'Header' }), repeat('items', 'items', value('name', { path: 'name' })), value('end', { literal: 'End' })]), { items: [] }))).toEqual(['Header', 'End'])
+  it.each([{}, { items: null }, { items: [] }])('keeps siblings around an absent or empty repeat without synthesizing a record %#', data => {
+    expect(values(instantiate(group('g', [value('head', { literal: 'Header' }), repeat('items', 'items', value('name', { path: 'name' })), value('end', { literal: 'End' })]), data))).toEqual(['Header', 'End'])
   })
 
-  it.each([undefined, null, {}, 1])('does not reinterpret an invalid collection as empty %#', items => {
+  it.each([{}, 1, '', false])('does not reinterpret an invalid collection as empty %#', items => {
     expect(() => instantiate(repeat('items', 'items', value('name', { path: 'name' })), { items })).toThrow(TemplateError)
   })
 
-  it.each([[null], [1], Array(1)])('rejects malformed and sparse collection items %#', items => {
+  it.each([{}, { details: null }])('keeps object scopes strict when their source is absent %#', data => {
+    const template: Fragment<Content> = { type: 'scope', id: 'details', source: { path: 'details' }, body: value('name', { path: 'name' }) }
+    expect(() => instantiate(template, data)).toThrow(TemplateError)
+  })
+
+  it.each([{ items: [null] }, { items: [1] }, { items: Array(1) }])('rejects malformed and sparse collection items %#', ({ items }) => {
     expect(() => instantiate(repeat('items', 'items', value('name', { path: 'name' })), { items })).toThrow(TemplateError)
   })
 

@@ -26,18 +26,18 @@ await save('first-form-template.xlsx', firstForm)
 const firstFormTemplate = await importWorkbookXlsx(await readFile(resolve(directory, 'first-form-template.xlsx')))
 await writeFile(resolve(directory, 'first-form-issued.xlsx'), await renderWorkbookForm(firstFormTemplate, { customer: { name: 'Sample customer' } }))
 const firstCompleted = await open('first-form-issued.xlsx')
-firstCompleted.worksheets[0].getCell('B2').value = 'Alex'
+firstCompleted.worksheets[0].getCell('B1').value = 'Alex'
 await save('first-form-completed.xlsx', firstCompleted)
 assert.deepEqual(await readWorkbookForm(firstFormTemplate, await readFile(resolve(directory, 'first-form-completed.xlsx'))), {
   success: true, data: { customer: { name: 'Alex' } },
 })
-firstCompleted.worksheets[0].getCell('B2').value = null
+firstCompleted.worksheets[0].getCell('B1').value = null
 await save('first-form-invalid.xlsx', firstCompleted)
 const firstInvalid = await readWorkbookForm(firstFormTemplate, await readFile(resolve(directory, 'first-form-invalid.xlsx')))
 assert.equal(firstInvalid.success, false)
 if (!firstInvalid.success) {
   assert.equal(firstInvalid.issues[0].code, 'required')
-  assert.equal(firstInvalid.issues[0].address, 'B2')
+  assert.equal(firstInvalid.issues[0].address, 'B1')
 }
 
 const rules = new ExcelJS.Workbook()
@@ -149,28 +149,28 @@ await writeFile(resolve(directory, 'issued-dictionaries.json'), JSON.stringify(d
 const formTemplate = await importWorkbookXlsx(await readFile(resolve(directory, 'form-template.xlsx')))
 const issued = await renderWorkbookForm(formTemplate, { items: Array.from({ length: 20 }, () => ({})) }, { dictionaries })
 await writeFile(resolve(directory, 'issued.xlsx'), issued)
-assert.deepEqual(await readWorkbookForm(formTemplate, issued, { dictionaries }), { success: true, data: { items: [] } })
+assert.deepEqual(await readWorkbookForm(formTemplate, issued), { success: true, data: { items: [] } })
 
 // Simulate two user edits separated by blank lines; read the separately saved upload.
 const completed = await open('issued.xlsx')
 const input = completed.worksheets[0]
-input.getCell('A4').value = 'Paper [001]'
-input.getCell('B4').value = 2
-input.getCell('C4').value = '2026-01-15'
-input.getCell('A6').value = 'Paper [002]'
-input.getCell('B6').value = 0
+input.getCell('A3').value = 'Paper [001]'
+input.getCell('B3').value = 2
+input.getCell('C3').value = '2026-01-15'
+input.getCell('A5').value = 'Paper [002]'
+input.getCell('B5').value = 0
 await save('completed.xlsx', completed)
 const expected = { items: [{ product: '001', quantity: 2, date: '2026-01-15' }, { product: '002', quantity: 0, date: null }] }
-assert.deepEqual(await readWorkbookForm(formTemplate, await readFile(resolve(directory, 'completed.xlsx')), { dictionaries }), { success: true, data: expected })
+assert.deepEqual(await readWorkbookForm(formTemplate, await readFile(resolve(directory, 'completed.xlsx'))), { success: true, data: expected })
 await writeFile(resolve(directory, 'completed.json'), JSON.stringify(expected, null, 2))
-input.getCell('A6').value = 'Unknown'
+input.getCell('A5').value = 'Unknown'
 await save('invalid.xlsx', completed)
-const invalid = await readWorkbookForm(formTemplate, await readFile(resolve(directory, 'invalid.xlsx')), { dictionaries })
+const invalid = await readWorkbookForm(formTemplate, await readFile(resolve(directory, 'invalid.xlsx')))
 assert.equal(invalid.success, false)
 if (!invalid.success) {
   assert.equal(invalid.issues.length, 1)
   assert.equal(invalid.issues[0].path, '$data.items[1].product')
-  assert.equal(invalid.issues[0].address, 'A6')
+  assert.equal(invalid.issues[0].address, 'A5')
   assert.equal(invalid.issues[0].code, 'choice')
 }
 await writeFile(resolve(directory, 'invalid.json'), JSON.stringify(invalid, null, 2))

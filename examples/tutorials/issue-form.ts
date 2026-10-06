@@ -11,5 +11,4 @@ const issued = await renderWorkbookForm(template, data, { dictionaries })
 
 await mkdir('saved-form', { recursive: true })
 await writeFile('saved-form/template.xlsx', source)
-await writeFile('saved-form/dictionaries.json', JSON.stringify(dictionaries, null, 2))
 await writeFile('saved-form/issued.xlsx', issued)
