@@ -31,6 +31,14 @@ The code is organized as described in [architecture](./architecture.md). Public 
 
 The docs commands `dev`, `check` and `build` run `docs:prepare` first. It prepares downloadable examples in `docs/public/examples/`; edit their sources in `examples/`, not the generated copies.
 
+## Publishing the documentation
+
+The site is available at [goldensectionlv.github.io/sheetbind/](https://goldensectionlv.github.io/sheetbind/). The `Documentation` workflow builds and publishes it after changes are merged into `main`. It can also be started manually from GitHub Actions on `main`.
+
+The build uses `pnpm docs:check` and `pnpm docs:build`, including the downloadable examples. GitHub Pages serves `docs/.vitepress/dist` through GitHub Actions. Set Pages **Build and deployment → Source** to **GitHub Actions** when configuring the repository.
+
+The `/sheetbind/` base path is defined in `docs/.vitepress/config.ts`. Run `pnpm docs:build` and `pnpm docs:preview` to inspect the production build locally. Open the `/sheetbind/` path shown by the preview server and verify both languages, navigation, images, search, and example downloads before publishing changes to the site configuration.
+
 ## Examples and fixtures
 
 | Location | Purpose |

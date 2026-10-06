@@ -6,6 +6,8 @@ Sheetbind заполняет XLSX-шаблоны данными. Разметь�
 
 Нужны Node.js 22.13 или новее и ExcelJS 4.4.0. Лицензия MIT.
 
+[Документация](https://goldensectionlv.github.io/sheetbind/ru/) содержит примеры с изображениями и книги для скачивания.
+
 ## Первый отчёт
 
 Создайте `first-report-template.xlsx`: в A1 запишите `Customer`, в B1 — `{customer.name}`. Шрифты, цвета и ширину колонок настройте в Excel.
@@ -19,16 +21,16 @@ const data = { customer: { name: 'Sample customer' } }
 await writeFile('report.xlsx', await renderWorkbookReport(template, data))
 ```
 
-В результате B1 содержит `Sample customer`. В инструкции [«Первый отчёт»](./docs/ru/getting-started.md) есть установка пакета, готовый шаблон и команда запуска.
+В результате B1 содержит `Sample customer`. В инструкции [«Первый отчёт»](https://goldensectionlv.github.io/sheetbind/ru/getting-started) есть установка пакета, готовый шаблон и команда запуска.
 
 ## Руководство
 
-- [Шаблоны](./docs/ru/templates.md): значения, повтор строк, вложенные данные и повтор колонок.
-- [Проверки и списки](./docs/ru/fields.md): правила полей и выпадающие списки.
-- [Заполнение формы](./docs/ru/forms.md): выдача XLSX, редактирование и чтение данных.
-- [API](./docs/ru/api.md): функции, параметры, результаты и ошибки.
-- [Excel и ограничения](./docs/ru/xlsx.md): оформление, формулы и поддерживаемые возможности книги.
+- [Шаблоны](https://goldensectionlv.github.io/sheetbind/ru/templates): значения, повтор строк, вложенные данные и повтор колонок.
+- [Проверки и списки](https://goldensectionlv.github.io/sheetbind/ru/fields): правила полей и выпадающие списки.
+- [Заполнение формы](https://goldensectionlv.github.io/sheetbind/ru/forms): выдача XLSX, редактирование и чтение данных.
+- [API](https://goldensectionlv.github.io/sheetbind/ru/api): функции, параметры, результаты и ошибки.
+- [Excel и ограничения](https://goldensectionlv.github.io/sheetbind/ru/xlsx): оформление, формулы и поддерживаемые возможности книги.
 
 Храните размеченный XLSX как шаблон. После редактирования загрузите файл заново через `importWorkbookXlsx`. Формулы пересчитывает Excel; Sheetbind не вычисляет их результат.
 
-Для работы над самой библиотекой есть [разработка](./docs/ru/development.md) и [архитектура](./docs/ru/architecture.md).
+Для работы над самой библиотекой есть [разработка](https://goldensectionlv.github.io/sheetbind/ru/development) и [архитектура](https://goldensectionlv.github.io/sheetbind/ru/architecture).
