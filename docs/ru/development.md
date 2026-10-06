@@ -31,6 +31,14 @@ pnpm test
 
 Команды документации `dev`, `check` и `build` сначала выполняют `docs:prepare`. Он подготавливает файлы для скачивания в `docs/public/examples/`; редактируйте исходники в `examples/`, а не сгенерированные копии.
 
+## Публикация документации
+
+Сайт доступен по адресу [goldensectionlv.github.io/sheetbind/ru/](https://goldensectionlv.github.io/sheetbind/ru/). Workflow `Documentation` собирает и публикует его после слияния изменений в `main`. Его также можно запустить вручную из GitHub Actions для `main`.
+
+Сборка выполняет `pnpm docs:check` и `pnpm docs:build`, включая подготовку скачиваемых примеров. GitHub Pages публикует `docs/.vitepress/dist` через GitHub Actions. При настройке репозитория выберите **GitHub Actions** в разделе Pages **Build and deployment → Source**.
+
+Путь `/sheetbind/` задан в `docs/.vitepress/config.ts`. Для локальной проверки готового сайта выполните `pnpm docs:build` и `pnpm docs:preview`. Откройте путь `/sheetbind/` по адресу preview-сервера и проверьте обе локали, навигацию, изображения, поиск и скачивание примеров перед публикацией изменений конфигурации сайта.
+
 ## Примеры и фикстуры
 
 | Расположение | Назначение |
