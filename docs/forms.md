@@ -246,3 +246,5 @@ Reissue forms after changing template bindings, rules, or structure. Keep the or
 ## File structure and version
 
 Forms do not prepend a control row or store a template hash. Hidden repeat and sheet-end boundaries describe the current records and allow layout checks. Reading uses bindings and rules from the supplied template without requiring a matching hash. Applications own document type and version checks. Reissue files with the older control-marker format.
+
+Reissue older wide forms whose control column depended on the issued records. The column is now reserved beyond the complete template, including content in empty repeats.
