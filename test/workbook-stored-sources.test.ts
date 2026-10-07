@@ -158,8 +158,9 @@ it.each(['named', 'root', 'local', 'list'])('classifies missing saved sources as
   const rule = kind === 'list' ? '{@list:Options}' : `{@choice:${kind === 'named' ? 'Options' : kind === 'root' ? '$root.options' : '.options'}; key=id; label=name; return=key}`
   const template = await importAuthoredWorkbook(book => book.addWorksheet('Input').getCell('A1').value = '{selected}' + rule)
   const options = [{ id: 'a', name: 'Allowed' }]
-  for (const populated of [false, true]) {
-    const book = await load(await renderWorkbookForm(template, { selected: populated ? kind === 'list' ? 'Allowed' : 'a' : null, options }, { dictionaries: { Options: kind === 'list' ? ['Allowed'] : options } }))
+  for (const input of [null, 'Allowed', { error: '#VALUE!' }] as const) {
+    const book = await load(await renderWorkbookForm(template, { selected: null, options }, { dictionaries: { Options: kind === 'list' ? ['Allowed'] : options } }))
+    book.worksheets[0].getCell('A1').value = input
     const range = book.definedNames.getRanges('_sb_object_sources').ranges[0]
     const cell = book.getWorksheet('_sheetbind_lists')!.getCell(range.split('!')[1].split(':')[1].replaceAll('$', ''))
     const payload = JSON.parse(String(cell.value))

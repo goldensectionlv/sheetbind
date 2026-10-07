@@ -5,7 +5,6 @@ import { isBlank } from '../core/validation'
 import { readDataPath } from '../core/reference'
 import type { FieldValue, TemplateValue } from '../core/template'
 import { createWorkbookChoiceDisplay } from '../grid/workbook-choice-display'
-import type { WorkbookChoiceOption } from '../grid/workbook-choice-display'
 import type { PreparedWorkbookField, PreparedWorkbookForm, WorkbookFormIssue, WorkbookFormResult } from './workbook'
 import { WorkbookFormInputError } from './workbook'
 import { readWorkbookRows } from './workbook-rows'
@@ -78,13 +77,11 @@ export function readWorkbookFormFields(prepared: PreparedWorkbookForm, submissio
 }
 
 function decodeFormFields(prepared: PreparedWorkbookForm, submission: WorkbookFormSubmission, options: ReadOptions) {
-  const source = options.context ?? {}
   const data = structuredClone(submission.data) as Record<string, unknown>
   const issues = new Map<WorkbookFormField, WorkbookFormIssue>()
   const fields = new Map<string, FieldValue>()
   const choiceOptions = createChoiceResolver()
   const displayChoice = createWorkbookChoiceDisplay()
-  const choices = new Map<WorkbookFormField, readonly WorkbookChoiceOption[]>()
   const locations = new Map<string, WorkbookFormField['location']>()
   for (const field of submission.fields) {
     if (!locations.has(field.id)) {
@@ -104,13 +101,20 @@ function decodeFormFields(prepared: PreparedWorkbookForm, submission: WorkbookFo
         message: `saved choice source is missing or malformed: ${error.message}` })
     }
   }
-  function resolve(field: PreparedWorkbookField, current?: unknown) {
+  function resolve(field: PreparedWorkbookField, location?: WorkbookFormField['location']) {
     const rule = field.rules!.choice!
-    const reference = rule.source
-    if ('path' in reference && !Array.isArray(readDataPath(reference.from === 'root' ? source : current, reference.path))) {
-      throw new SyntaxError('source must be an array of objects')
+    const source = rule.source
+    if ('dictionary' in source) {
+      return choiceOptions(rule, prepared.dictionaries[source.dictionary])
     }
-    return choiceOptions(rule, source, current, prepared.dictionaries)
+    if (source.from === 'root') {
+      return choiceOptions(rule, readDataPath(options.context, source.path))
+    }
+    const stored = options.local?.[field.id]
+    if (!location || !isDataObject(stored) || !Array.isArray(stored[location.path])) {
+      throw new SyntaxError('local source was not issued for this field')
+    }
+    return choiceOptions(rule, stored[location.path])
   }
   // Validate the issued sources before interpreting user values, including blank fields.
   for (const field of prepared.fields.values()) {
@@ -126,31 +130,14 @@ function decodeFormFields(prepared: PreparedWorkbookForm, submission: WorkbookFo
     })
   }
   for (const field of submission.fields) {
-    if (field.rules?.choice) {
-      const items = savedSource(field, () => {
-        const reference = field.rules!.choice!.source
-        const current: Record<string, unknown> = {}
-        if ('path' in reference && reference.from !== 'root') {
-          const stored = options.local?.[field.id]
-          if (!isDataObject(stored) || !Array.isArray(stored[field.location.path])) {
-            throw new SyntaxError('local source was not issued for this field')
-          }
-          writeData(current, reference.path.split('.'), stored[field.location.path], true)
-        }
-        return displayChoice({ key: null, items: resolve(field, current) }).items
-      }, field.location)
-      choices.set(field, items)
-    }
-  }
-  for (const field of submission.fields) {
     const { location, rules } = field
+    const items = rules?.choice ? savedSource(field, () => displayChoice({ key: null, items: resolve(field, location) }).items, location) : undefined
     if (field.issue) {
       issues.set(field, { phase: 'value', ...field.issue, ...location })
       continue
     }
     let raw: FieldValue = rules?.list ? field.text ?? field.raw : field.raw
-    if (rules?.choice && !isBlank(raw)) {
-      const items = choices.get(field)!
+    if (rules?.choice && items && !isBlank(raw)) {
       const selected = items.find(item => item.text === (field.text ?? raw))
       if (!selected && !allowsChoiceInput(rules.choice, items)) {
         raw = field.text ?? raw

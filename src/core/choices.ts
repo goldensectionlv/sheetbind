@@ -3,7 +3,6 @@ import type { JsonValue } from './json'
 import { isDataPath, readDataPath } from './reference'
 import type { DataReference } from './template'
 import { isDictionaryName } from './dictionaries'
-import type { Dictionaries } from './dictionaries'
 
 export interface ChoiceRule {
   readonly source: { readonly dictionary: string } | DataReference
@@ -44,10 +43,7 @@ export function parseChoiceRule(value: unknown): ChoiceRule {
 }
 
 /** Empty sources are valid; a nonblank selection must still match an available key. */
-function buildOptions(source: unknown, rule: ChoiceRule): ChoiceOption[] {
-  if (!Array.isArray(source)) {
-    throw new SyntaxError('Choice source must be an array of objects')
-  }
+function buildOptions(source: readonly unknown[], rule: ChoiceRule): ChoiceOption[] {
   const keys = new Set<string>()
   const options = (jsonSnapshot(source) as readonly JsonValue[]).map(item => {
     const key = readDataPath(item, rule.key)
@@ -71,8 +67,7 @@ function buildOptions(source: unknown, rule: ChoiceRule): ChoiceOption[] {
 /** A cache belongs to one execution; the same source can have independent projections. */
 export function createChoiceResolver() {
   const sources = new WeakMap<object, Map<string, readonly ChoiceOption[]>>()
-  return function resolveChoice(rule: ChoiceRule, root: unknown, current: unknown, dictionaries: Dictionaries): readonly ChoiceOption[] {
-    const source = 'dictionary' in rule.source ? dictionaries[rule.source.dictionary] : readDataPath(rule.source.from === 'root' ? root : current, rule.source.path) ?? []
+  return function resolveChoice(rule: ChoiceRule, source: unknown): readonly ChoiceOption[] {
     if (!Array.isArray(source)) {
       throw new SyntaxError('Choice source must be an array of objects')
     }

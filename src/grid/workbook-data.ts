@@ -84,7 +84,8 @@ export function resolveWorkbookData(template: WorkbookDefinition, data: unknown,
     if (rules?.choice) {
       let items
       try {
-        items = choiceOptions(rules.choice, data, context.value, dictionaries)
+        const source = rules.choice.source
+        items = choiceOptions(rules.choice, 'dictionary' in source ? dictionaries[source.dictionary] : reference(source, context).value ?? [])
       }
       catch (error) {
         workbookIssue('choice-source', cell.id, (error as Error).message, result.path, 'data')

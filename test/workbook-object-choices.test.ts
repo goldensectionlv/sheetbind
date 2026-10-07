@@ -159,7 +159,7 @@ it('keeps numeric transport precision out of core and rejects ambiguous or malfo
     book.addWorksheet('Choice').getCell('A1').value = '{category}{@validate:object}'
   })
   expect(() => resolveWorkbook(noChoice, { category: value })).toThrow('declared object choice')
-  expect(() => createChoiceResolver()(rule, {}, {}, { options: [{ id: '1', name: 'Same' }, { id: '1', name: 'Other' }] })).toThrow('unique')
+  expect(() => createChoiceResolver()(rule, [{ id: '1', name: 'Same' }, { id: '1', name: 'Other' }])).toThrow('unique')
 })
 
 it.each(['key', 'object'] as const)('keeps unused JSON properties out of formula ranges (%s)', async mode => {
@@ -233,7 +233,7 @@ it('reads a form whose only object choices are inside an empty repeat', async ()
 it('leaves repeated labels unchanged in core without imposing workbook display constraints', () => {
   const choice = { source: { dictionary: 'options' }, key: 'id', label: 'name' }
   const options = [{ id: 'a', name: 'One' }, { id: 'b', name: 'One' }, { id: 'c', name: 'One [a]' }]
-  const result = createChoiceResolver()(choice, {}, {}, { options })
+  const result = createChoiceResolver()(choice, options)
   expect(result).toMatchObject([{ label: 'One' }, { label: 'One' }, { label: 'One [a]' }])
 })
 
