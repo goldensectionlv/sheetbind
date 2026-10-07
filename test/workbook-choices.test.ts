@@ -2,12 +2,11 @@ import { expect, it } from 'vitest'
 import ExcelJS from 'exceljs'
 import { definition, data, declaredData, dictionaries } from '../examples/choices/definition'
 import { WorkbookTemplate } from '../src/xlsx/template'
-import { editExample } from './xlsx'
+import { editExample, importAuthoredWorkbook } from './xlsx'
 import { workbookCells } from '../src/grid/workbook'
 import { workbookDictionarySources, resolveWorkbook, importWorkbookXlsx, renderWorkbookReport } from '../src/xlsx/workbook-template'
 import { renderWorkbookForm, readWorkbookForm } from '../src/xlsx/workbook-form'
 import { saveWorkbook } from './xlsx'
-import { writeWorkbookDropdowns } from '../src/xlsx/workbook-dropdowns'
 
 async function load(bytes: Buffer) {
   const book = new ExcelJS.Workbook()
@@ -142,11 +141,13 @@ it('rejects choice sources that overlap submitted fields and removed repeat keys
   })).rejects.toThrow('Unknown region option')
 })
 
-it('writes more than 256 contextual dropdown sources', () => {
-  const book = new ExcelJS.Workbook()
-  const sheet = book.addWorksheet('Order')
-  const targets = Array.from({ length: 257 }, (_, index) => ({ sheet, address: `A${index + 1}`, rules: {}, items: [`Value ${index}`] }))
-  expect(writeWorkbookDropdowns(book, targets)).toBeDefined()
+it('writes more than 256 contextual dropdown sources through the report API', async () => {
+  const template = await importAuthoredWorkbook(book => book.addWorksheet('Order').addRows([
+    ['{#items}'], ['{.code}{@choice:.options; key=id; label=name; return=key}'], ['{/items}'],
+  ]))
+  const items = Array.from({ length: 257 }, (_, index) => ({ code: index, options: [{ id: index, name: `Value ${index}` }] }))
+  const book = await load(await renderWorkbookReport(template, { items }))
   expect(book.definedNames.model).toHaveLength(257)
-  expect(sheet.getCell('A257').dataValidation.type).toBe('list')
+  expect(book.getWorksheet('Order')!.getCell('A257').dataValidation.type).toBe('list')
+  expect(book.getWorksheet('_sheetbind_lists')!.getCell(1, 257).value).toBe('Value 256')
 })

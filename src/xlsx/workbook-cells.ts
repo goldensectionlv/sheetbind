@@ -1,33 +1,35 @@
 import type JSZip from 'jszip'
 import { columnName } from '../grid/geometry'
-import { formatRange, parseAddress, parseRange } from './addresses'
+import type { TemplateValue } from '../core/template'
+import type { WorkbookFormula } from '../grid/workbook-formula'
+import { formatRange } from './addresses'
 import type { WorkbookPlacedCell, WorkbookPlacedSheet } from '../grid/workbook-layout'
-import { protect } from './report-text'
-import { appendXmlChildren, encodeXml, setXmlAttributes, xmlAttributes, xmlElements } from './xml'
+import { assertXlsxText, protect } from './report-text'
+import { appendXmlChildren, encodeXml, setXmlAttributes, xmlElements } from './xml'
 
 export type WorkbookCells = Awaited<ReturnType<typeof prepareWorkbookCells>>
 
 /** Serialize resolved values into the final workbook string table. */
-export async function prepareWorkbookCells(zip: JSZip, inheritedStrings: readonly string[] = []) {
+export async function prepareWorkbookCells(zip: JSZip) {
   const prior = await zip.file('xl/sharedStrings.xml')?.async('string')
-  const strings = [...inheritedStrings, ...xmlElements(prior ?? '', 'si')]
+  const strings = xmlElements(prior ?? '', 'si')
   const values = new Map<string, number>()
   function text(value: string): number {
     let index = values.get(value)
     if (index !== undefined) {
       return index
     }
+    assertXlsxText(value)
     index = strings.length
     values.set(value, index)
     strings.push(`<si><t xml:space="preserve">${encodeXml(protect(value))}</t></si>`)
     return index
   }
-  function content(cell: WorkbookPlacedCell): { style: number, type?: string, body: string } {
+  function content(value: TemplateValue | WorkbookFormula): { style: number, type?: string, body: string } {
     const style = 0
-    if ('formula' in cell.value) {
-      return { style, body: `<f>${encodeXml(cell.value.formula)}</f>` }
+    if (value !== null && typeof value === 'object') {
+      return { style, body: `<f>${encodeXml(value.formula)}</f>` }
     }
-    const value = cell.choice ? cell.choice.text : cell.value.literal
     if (typeof value === 'string') {
       return { style, type: 's', body: `<v>${text(value)}</v>` }
     }
@@ -36,7 +38,7 @@ export async function prepareWorkbookCells(zip: JSZip, inheritedStrings: readonl
     }
     return { style, body: value === null ? '' : `<v>${value}</v>` }
   }
-  return { content, strings: strings as readonly string[], stringOffset: inheritedStrings.length }
+  return { content, strings: strings as readonly string[] }
 }
 
 /** Cells share one string table for the final package; no intermediate ZIP round-trip. */
@@ -60,14 +62,12 @@ export function cellXml(address: string, content: ReturnType<WorkbookCells['cont
 }
 
 /** Emit each row once, retaining carrier cells, merged edges and unowned source cells. */
-export function worksheetCells(xml: string, sheet: WorkbookPlacedSheet, render: (cell: WorkbookPlacedCell, address: string) => string,
+export function worksheetCells(sheet: WorkbookPlacedSheet, render: (cell: WorkbookPlacedCell, address: string) => string,
   source?: { rows: ReadonlyMap<number, string>, cells: ReadonlyMap<number, ReadonlyMap<number, string>> }) {
-  const generated = new Map(xmlElements(xmlElements(xml, 'sheetData')[0] ?? '', 'row').map(row => [Number(xmlAttributes(row.slice(0, row.indexOf('>') + 1)).r), row]))
+  const settings = new Map((sheet.rows ?? []).map(row => [row.index, row]))
   const definitions = new Map<number, WorkbookPlacedCell[]>()
   const columns = new Map<number, string>()
-  const dimension = xmlElements(xml, 'dimension')[0]
-  const initial = dimension ? parseRange(xmlAttributes(dimension).ref) : { start: { row: 1, column: 1 }, end: { row: 1, column: 1 } }
-  const bounds = { start: { ...initial.start }, end: { ...initial.end } }
+  const bounds = { start: { row: 1, column: 1 }, end: { row: 1, column: 1 } }
   let currentRow = 0
   let currentCells: WorkbookPlacedCell[] = []
   for (const cell of sheet.cells) {
@@ -82,20 +82,16 @@ export function worksheetCells(xml: string, sheet: WorkbookPlacedSheet, render: 
     bounds.end.row = Math.max(bounds.end.row, cell.at.row + cell.size.rows - 1)
     bounds.end.column = Math.max(bounds.end.column, cell.at.column + cell.size.columns - 1)
   }
-  const rows = [...new Set([...generated.keys(), ...definitions.keys(), ...source?.rows.keys() ?? [], ...source?.cells.keys() ?? []])].sort((a, b) => a - b).map(index => {
-    const row = generated.get(index) ?? ''
-    const original = source?.rows.get(index)
-    let head = original ?? (row ? row.slice(0, row.indexOf('>') + 1) : `<row r="${index}"/>`)
-    if (row && original) {
-      const attributes = xmlAttributes(row.slice(0, row.indexOf('>') + 1))
-      head = setXmlAttributes(head, { ht: attributes.ht, customHeight: attributes.customHeight, hidden: attributes.hidden })
+  const rows = [...new Set([...settings.keys(), ...definitions.keys(), ...source?.rows.keys() ?? [], ...source?.cells.keys() ?? []])].sort((a, b) => a - b).map(index => {
+    let head = source?.rows.get(index) ?? `<row r="${index}"/>`
+    const setting = settings.get(index)
+    if (setting) {
+      head = setXmlAttributes(head, { ht: setting.height, customHeight: setting.height === undefined ? undefined : 1, hidden: setting.hidden ? 1 : undefined })
     }
     head = setXmlAttributes(head, { spans: undefined }).replace(/\/>$/, '>')
-    const cells = new Map(xmlElements(row, 'c').map(cell => [parseAddress(xmlAttributes(cell.slice(0, cell.indexOf('>') + 1)).r).column, cell]))
-    for (const [column, cell] of source?.cells.get(index) ?? []) {
-      cells.set(column, cell)
-    }
-    const extra = [...cells].sort(([a], [b]) => a - b)
+    const extra = [...source?.cells.get(index) ?? []].sort(([a], [b]) => a - b)
+    bounds.end.row = Math.max(bounds.end.row, index)
+    bounds.end.column = Math.max(bounds.end.column, extra.at(-1)?.[0] ?? 1)
     const values: string[] = []
     let cursor = 0
     for (const cell of (definitions.get(index) ?? []).sort((a, b) => a.at.column - b.at.column)) {

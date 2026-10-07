@@ -51,11 +51,13 @@ Data + dictionaries ---------+
 
 Import compiles tags into a `WorkbookDefinition`, validates region ownership and retains the source file in `WorkbookTemplate`. Formatting and native Excel features stay in the XLSX package instead of being reconstructed as a second style model.
 
+Writing opens the source package once and applies `WorkbookPlan` directly to its XML: cells, row and column sizes, merges, names and form structure. All written cells share one string table; source style IDs stay valid, with only the required format variants appended. `workbook-lists.ts` writes the shared hidden sheet for dictionaries and saved form sources. The package is then compressed into the final file. There is no intermediate ExcelJS workbook, its serialization or a merge of two packages; ExcelJS is used for template import and form reading.
+
 Execution resolves values and expands regions directly from the workbook definition, retaining their definitions and concrete data paths. There is no separate generic operation tree or identity translation. Field declarations and dictionary dependencies are checked before expanding repeats, including empty ones. Execution does not look up or execute validation handlers. The grid builds row and column plans; values, formulas, sheet settings and native content use those plans to find their output positions. The XLSX writer combines placed values with the retained source content.
 
 Field rules are normalized at import, and dictionaries are validated and copied once at the operation boundary. Internal steps reuse those values without reparsing; dictionary dependencies are checked even for empty repeats.
 
-The dropdown writer receives ready-to-write strings regardless of source kind. It checks text limits and native validation conflicts, deduplicates identical lists and writes Excel ranges.
+The dropdown writer receives ready-to-write strings regardless of source kind, deduplicates identical lists and writes Excel ranges. The shared cell serializer checks text limits. Native validation conflicts and inherited prompts are handled when writing the source worksheet, at final coordinates.
 
 Dictionary ranges for formulas come directly from declared choices and the supplied dictionaries. Formula references determine their columns; repeated cell instances and the properties present in individual records do not determine whether a range exists. Dropdowns and formula ranges share the hidden sheet but are written independently.
 

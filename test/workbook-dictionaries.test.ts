@@ -7,7 +7,6 @@ import { validateList } from '../src/core/field-rules'
 import { TemplateError } from '../src/core/template'
 import { resolveWorkbook, workbookDictionarySources, renderWorkbookReport, importWorkbookXlsx } from '../src/xlsx/workbook-template'
 import { exampleFile } from './xlsx'
-import { writeWorkbookDropdowns } from '../src/xlsx/workbook-dropdowns'
 import { renderWorkbookForm } from '../src/xlsx/workbook-form'
 import { importAuthoredWorkbook } from './xlsx'
 
@@ -73,42 +72,6 @@ describe('named string dictionaries', () => {
     expect(lists.getCell('A5').numFmt).toBe('@')
     expect(lists.getCell('A307').value).toBe('TASK-300')
     expect((await load(await renderWorkbookReport(project.definition, { ...project.data, sites: [] }, options))).worksheets).toHaveLength(1)
-  })
-
-  it('uses fresh names, reuses lists across sheets and preserves authored prompts', async () => {
-    const book = new ExcelJS.Workbook()
-    const sheet = book.addWorksheet('_SHEETBIND_LISTS')
-    const second = book.addWorksheet('Second')
-    sheet.getCell('A1').value = 'Foreign content'
-    book.definedNames.add("'_SHEETBIND_LISTS'!$A$1", '_SB_LIST_1')
-    const existing = { type: 'any', formulae: [], showInputMessage: true, promptTitle: 'Choose code', prompt: 'Provided by the application', errorTitle: 'Custom error' }
-    Reflect.set(sheet.getCell('B2'), 'dataValidation', existing)
-    const rules = { validation: [{ rule: 'string' }] }
-    const items = ['00042', 'a,b', 'say "yes"']
-    writeWorkbookDropdowns(book, [{ sheet, address: 'B2', rules, items }, { sheet: second, address: 'C4', rules, items }, { sheet, address: 'D2', rules, items: ['Other'] }])
-    const saved = await load(Buffer.from(await book.xlsx.writeBuffer()))
-    const first = saved.worksheets[0]
-    expect(saved.worksheets.map(sheet => sheet.name)).toEqual(['_SHEETBIND_LISTS', 'Second', '_sheetbind_lists_2'])
-    expect(saved.definedNames.model.map(entry => entry.name)).toEqual(['_SB_LIST_1', '_sb_list_2', '_sb_list_3'])
-    expect(first.getCell('A1').value).toBe('Foreign content')
-    expect(first.getCell('B2').dataValidation).toMatchObject({ type: 'list', formulae: ['_sb_list_2'], allowBlank: true, showInputMessage: true, promptTitle: existing.promptTitle, prompt: existing.prompt, errorTitle: existing.errorTitle })
-    expect(saved.worksheets[1].getCell('C4').dataValidation.formulae).toEqual(['_sb_list_2'])
-    expect(existing.type).toBe('any')
-    expect(existing.formulae).toEqual([])
-    expect(saved.worksheets[2].getCell('B1').value).toBe('Other')
-  })
-
-  it('rejects a conflicting validation or unrepresentable text before changing the workbook', () => {
-    const book = new ExcelJS.Workbook()
-    const sheet = book.addWorksheet('Report')
-    const rules = { validation: [{ rule: 'string' }] }
-    sheet.getCell('A2').dataValidation = { type: 'whole', operator: 'greaterThan', formulae: [0] }
-    expect(() => writeWorkbookDropdowns(book, [{ sheet, address: 'A1', rules, items: ['ok'] }, { sheet, address: 'A2', rules, items: ['ok'] }])).toThrow('Existing validation')
-    expect(book.worksheets).toHaveLength(1)
-    expect(sheet.getCell('A1').dataValidation).toBeUndefined()
-    expect(() => writeWorkbookDropdowns(book, [{ sheet, address: 'A1', rules, items: ['\u0001'] }])).toThrow('XML cannot represent')
-    expect(book.worksheets).toHaveLength(1)
-    expect(book.definedNames.model).toEqual([])
   })
 
   it('merges native prompts by their exact ranges when rendering reports and forms', async () => {

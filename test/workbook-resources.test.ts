@@ -9,18 +9,21 @@ it.each(['_sb_list_1', '_SB_LIST_1', '_sb_object_sources', '_SB_OBJECT_SOURCES']
     book.addWorksheet('Input').addRow(['{status}{@list:Statuses}', 42, { formula: `SUM(${name})` }])
     book.definedNames.add('Input!$B$1', name)
     book.addWorksheet('_SHEETBIND_LISTS').getCell('A1').value = 'Authored sheet'
+    book.addWorksheet('Second').getCell('C4').value = '{other}{@list:Statuses}'
   })
   const options = { dictionaries: { Statuses: ['Open'] } }
   for (const render of [renderWorkbookReport, renderWorkbookForm, renderWorkbookForm]) {
-    const bytes = await render(template, { status: 'Open' }, options)
+    const bytes = await render(template, { status: 'Open', other: 'Open' }, options)
     const book = await openWorkbook(bytes)
     expect(book.definedNames.getRanges(name).ranges).toEqual(['Input!$B$1'])
     expect(book.getWorksheet('Input')!.getCell('C1').formula).toBe(`SUM(${name})`)
     expect(book.getWorksheet('_SHEETBIND_LISTS')!.getCell('A1').value).toBe('Authored sheet')
+    const first = book.getWorksheet('Input')!.getCell('A1').dataValidation.formulae
+    expect(book.getWorksheet('Second')!.getCell('C4').dataValidation.formulae).toEqual(first)
     const names = book.definedNames.model.map(entry => entry.name.toLowerCase())
     expect(new Set(names).size).toBe(names.length)
     if (render === renderWorkbookForm) {
-      expect(await readWorkbookForm(template, bytes)).toEqual({ success: true, data: { status: 'Open' } })
+      expect(await readWorkbookForm(template, bytes)).toEqual({ success: true, data: { status: 'Open', other: 'Open' } })
     }
   }
 })

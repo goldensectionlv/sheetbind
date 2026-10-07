@@ -9,22 +9,19 @@ import { sourceFormula } from './source-coordinates'
 import { relocateFilterRanges } from './source-metadata'
 import type { sourceStyles } from './source-styles'
 import { formatAddress, formatRange, parseAddress, parseRange } from './addresses'
+import { FORM_MARKER_PREFIX } from './workbook-form-markers'
+import type { FormMarkers } from './workbook-form-markers'
 import { decodeXml, encodeXml, setXmlAttributes, setXmlElement, xmlAttributes, xmlBody, xmlElements } from './xml'
 
-export function offsetWorkbookStrings(xml: string, offset: number): string {
-  if (!offset) {
-    return xml
-  }
-  return xml.replace(/(<c\b[^>]*\bt="s"[^>]*><v>)(\d+)(<\/v>)/g, (_, start, value, end) => start + (Number(value) + offset) + end)
-}
-
 /** Keep worksheet features in place and replace only the rows/cells the layout owns. */
-export function sourceWorksheet(xml: string, fresh: string, options: {
+export function sourceWorksheet(xml: string, options: {
   readonly output: WorkbookPlacedSheet
   readonly map: SourceCoordinates
   readonly maps: ReadonlyMap<string, SourceCoordinates>
   readonly styles: Awaited<ReturnType<typeof sourceStyles>>
   readonly writer: WorkbookCells
+  readonly validations: string
+  readonly markers?: FormMarkers
   readonly form?: boolean
 }) {
   const { output, map, maps, styles, writer } = options
@@ -57,18 +54,27 @@ export function sourceWorksheet(xml: string, fresh: string, options: {
       }
     }
   }
-  fresh = fresh.replace(/<c\b[^>]*>/g, node => setXmlAttributes(node, { s: styles.generated(Number(xmlAttributes(node).s ?? 0)) }))
-  const rows = worksheetCells(fresh, output, (definition, address) => {
-    const content = writer.content(definition)
+  if (options.markers) {
+    const column = options.markers.column
+    for (const { row, token } of options.markers.rows) {
+      const cells = extra.get(row) ?? new Map<number, string>()
+      cells.set(column, cellXml(formatAddress({ row, column }), writer.content(FORM_MARKER_PREFIX + JSON.stringify(token))))
+      extra.set(row, cells)
+    }
+  }
+  const rows = worksheetCells(output, (definition, address) => {
+    const content = writer.content('formula' in definition.value ? definition.value : definition.choice ? definition.choice.text : definition.value.literal)
     const original = definition.xlsx && definition.xlsx.part === map.part ? originals.get(definition.xlsx.address) : undefined
-    return original ? original.render(address, content.type, definition, content.body) : cellXml(address, { ...content, style: styles.generated(content.style) })
+    return original ? original.render(address, content.type, definition, content.body) : cellXml(address, { ...content, style: styles.style(0) })
   }, { rows: sourceRows, cells: extra })
+  const merges = output.cells.filter(cell => cell.size.rows > 1 || cell.size.columns > 1).map(cell =>
+    `<mergeCell ref="${formatRange({ start: cell.at, end: { row: cell.at.row + cell.size.rows - 1, column: cell.at.column + cell.size.columns - 1 } })}"/>`)
   xml = mapWorksheetReferences(xml, map, maps)
   xml = setXmlElement(xml, 'sheetData', '<sheetData/>')
-  xml = setXmlElement(xml, 'cols', mergeColumns(xml, fresh, map))
-  xml = setXmlElement(xml, 'mergeCells', xmlElements(fresh, 'mergeCells')[0] ?? '')
+  xml = setXmlElement(xml, 'cols', mergeColumns(xml, output, map))
+  xml = setXmlElement(xml, 'mergeCells', merges.length ? `<mergeCells count="${merges.length}">${merges.join('')}</mergeCells>` : '')
   xml = setXmlElement(xml, 'dimension', rows.dimension)
-  xml = setXmlElement(xml, 'dataValidations', mergeValidations(xml, fresh, map.name))
+  xml = setXmlElement(xml, 'dataValidations', mergeValidations(xml, options.validations, map.name))
   return orderWorksheet(xml).replace('<sheetData/>', () => rows.data)
 }
 
@@ -173,7 +179,7 @@ function mapWorksheetReferences(xml: string, map: SourceCoordinates, maps: Reado
   xml = xml.replace(/<hyperlinks\b[^>]*>\s*<\/hyperlinks>/g, '')
   return xml.replace('<sheetData/>', data)
 }
-function mergeColumns(xml: string, fresh: string, map: SourceCoordinates): string {
+function mergeColumns(xml: string, output: WorkbookPlacedSheet, map: SourceCoordinates): string {
   const columns = new Map<number, string>()
   for (const node of xmlElements(xmlElements(xml, 'cols')[0] ?? '', 'col')) {
     const attr = xmlAttributes(node)
@@ -183,11 +189,8 @@ function mergeColumns(xml: string, fresh: string, map: SourceCoordinates): strin
       }
     }
   }
-  for (const node of xmlElements(xmlElements(fresh, 'cols')[0] ?? '', 'col')) {
-    const attr = xmlAttributes(node)
-    for (let index = Number(attr.min); index <= Number(attr.max); index++) {
-      columns.set(index, setXmlAttributes(columns.get(index) ?? node, { min: index, max: index, width: attr.width, hidden: attr.hidden, customWidth: attr.customWidth }))
-    }
+  for (const { index, width, hidden } of output.columns ?? []) {
+    columns.set(index, setXmlAttributes(columns.get(index) ?? '<col/>', { min: index, max: index, width, hidden: hidden ? 1 : undefined, customWidth: width === undefined ? undefined : 1 }))
   }
   return columns.size ? `<cols>${[...columns].sort(([a], [b]) => a - b).map(([, node]) => node).join('')}</cols>` : ''
 }
@@ -210,7 +213,7 @@ function withoutValidation(range: GridRange, cut: GridRange): GridRange[] {
   ].filter(part => part.start.row <= part.end.row && part.start.column <= part.end.column)
 }
 
-/** Source rules are available only here, after both books have reached final coordinates. */
+/** Merge generated dropdowns with native rules at their final coordinates. */
 function mergeValidations(xml: string, fresh: string, sheetName: string): string {
   const read = (xml: string) => xmlElements(xml, 'dataValidation').map(node => {
     const attributes = xmlAttributes(node.split('>')[0])

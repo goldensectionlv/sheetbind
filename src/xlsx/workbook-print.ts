@@ -2,8 +2,8 @@ import type ExcelJS from 'exceljs'
 import type JSZip from 'jszip'
 import type { WorkbookPrint } from '../grid/workbook-print'
 import { formatAddress, parseRange } from './addresses'
-import { decodeXml, xmlAttributes } from './xml'
-import { decodeXstring } from './report-text'
+import { decodeXml, encodeXml, xmlAttributes } from './xml'
+import { decodeXstring, protect } from './report-text'
 
 /** Read coordinate-bearing print settings; page formatting stays in the source XLSX. */
 export async function readWorkbookPrint(zip: JSZip, book: ExcelJS.Workbook): Promise<Map<string, WorkbookPrint>> {
@@ -34,11 +34,16 @@ export async function readWorkbookPrint(zip: JSZip, book: ExcelJS.Workbook): Pro
   return new Map(book.worksheets.flatMap((sheet, index) => Object.keys(settings[index]).length ? [[sheet.name, settings[index]] as const] : []))
 }
 
-export function writeWorkbookPrint(sheet: ExcelJS.Worksheet, print: WorkbookPrint | undefined): void {
+export function workbookPrintNames(sheetName: string, sheetIndex: number, print: WorkbookPrint | undefined): string[] {
+  const names: string[] = []
+  const prefix = `'${sheetName.replace(/'/g, "''")}'!`
+  const write = (name: string, range: string) => names.push(`<definedName name="${name}" localSheetId="${sheetIndex}">${encodeXml(protect(prefix + range))}</definedName>`)
   if (print?.area) {
-    sheet.pageSetup.printArea = `${formatAddress(print.area.start)}:${formatAddress(print.area.end)}`
+    const absolute = (address: string) => address.replace(/^([A-Z]+)(\d+)$/, (_, column, row) => `$${column}$${row}`)
+    write('_xlnm.Print_Area', `${absolute(formatAddress(print.area.start))}:${absolute(formatAddress(print.area.end))}`)
   }
   if (print?.repeatRows) {
-    sheet.pageSetup.printTitlesRow = `${print.repeatRows.start}:${print.repeatRows.end}`
+    write('_xlnm.Print_Titles', `$${print.repeatRows.start}:$${print.repeatRows.end}`)
   }
+  return names
 }

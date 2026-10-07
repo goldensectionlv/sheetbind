@@ -3,29 +3,19 @@ import { parseDictionaries } from '../core/dictionaries'
 import { jsonSnapshot, assertJson, isDataObject } from '../core/json'
 import type { WorkbookChoiceSources } from '../form/workbook-choice-sources'
 import { WorkbookFormInputError } from '../form/workbook'
-import { formatAddress, parseRange, XLSX_MAX_COLUMN, XLSX_MAX_ROW } from './addresses'
+import { parseRange } from './addresses'
 import type { WorkbookResources } from './workbook-resources'
+import type { WriteWorkbookListColumn } from './workbook-lists'
 
 const NAME = '_sb_object_sources'
 const VERSION = 'sheetbind.choices/2'
 
 /** Store the issued lists and choice payloads independently of the return mode. */
-export function writeWorkbookChoiceSources(book: Workbook, sheetName: string, sources: WorkbookChoiceSources, resources: WorkbookResources): void {
-  const name = resources.allocate(NAME)
-  const sheet = book.getWorksheet(sheetName) ?? book.addWorksheet(sheetName, { state: 'veryHidden' })
+export function writeWorkbookChoiceSources(sources: WorkbookChoiceSources, resources: WorkbookResources, writeColumn: WriteWorkbookListColumn): void {
   const payload = jsonSnapshot(sources)
   const json = JSON.stringify(payload).replace(/[^\x20-\x7e]/g, character => `\\u${character.charCodeAt(0).toString(16).padStart(4, '0')}`)
-  const column = sheet.columnCount + 1
   const chunks = [VERSION, ...json.match(/.{1,30000}/g)!]
-  if (column > XLSX_MAX_COLUMN || chunks.length > XLSX_MAX_ROW) {
-    throw new RangeError('Form source payload exceeds the XLSX worksheet limits')
-  }
-  chunks.forEach((text, index) => {
-    const cell = sheet.getCell(index + 1, column)
-    cell.value = text
-    cell.numFmt = '@'
-  })
-  book.definedNames.add(`'${sheetName}'!${formatAddress({ row: 1, column })}:${formatAddress({ row: chunks.length, column })}`, name)
+  writeColumn(resources.allocate(NAME), chunks)
 }
 
 export function readWorkbookChoiceSources(book: Workbook, sheetName: string): Omit<WorkbookChoiceSources, 'local'> & { readonly local: Readonly<Record<string, unknown>> } {

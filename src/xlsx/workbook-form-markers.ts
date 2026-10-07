@@ -8,7 +8,6 @@ import { workbookCells, WORKBOOK_LIMITS } from '../grid/workbook'
 import { mapWorkbookPrint } from '../grid/workbook-print'
 import type { WorkbookPlan, WorkbookRegionLayout } from '../grid/workbook-layout'
 import { formatAddress } from './addresses'
-import { xlsxTextIssues } from './report-text'
 import { FormulaEdge } from '../grid/workbook-formula'
 import type { FormulaRows } from '../grid/workbook-formula'
 
@@ -21,7 +20,7 @@ type FormMarkerToken =
   | readonly [FormMarkerKind.SheetEnd]
   | readonly [FormMarkerKind.Repeat | FormMarkerKind.RepeatEnd | FormMarkerKind.Item | FormMarkerKind.ItemEnd, number]
 export interface FormMarker { readonly row: number, readonly token: FormMarkerToken }
-interface FormMarkers { readonly column: number, readonly rows: readonly FormMarker[] }
+export interface FormMarkers { readonly column: number, readonly rows: readonly FormMarker[] }
 interface FormCarrierDefinition {
   readonly numbers: ReadonlyMap<string, number>
   readonly regions: ReadonlyMap<string, WorkbookRegion>
@@ -124,17 +123,6 @@ export function placeFormMarkers(plan: WorkbookPlan, definition: FormCarrierDefi
     } }
   }) }
   return { plan: placed, markers, formulaRows }
-}
-
-export function writeFormMarkers(sheet: Worksheet, markers: FormMarkers): void {
-  for (const marker of markers.rows) {
-    const text = FORM_MARKER_PREFIX + JSON.stringify(marker.token)
-    const issue = xlsxTextIssues(text)[0]
-    if (issue) {
-      throw new RangeError(issue.message)
-    }
-    sheet.getCell(marker.row, markers.column).value = text
-  }
 }
 
 function formMarkerColumn(sheet: Worksheet): number {

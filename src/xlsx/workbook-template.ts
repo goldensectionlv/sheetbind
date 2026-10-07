@@ -1,4 +1,3 @@
-import { createWorkbookOutput } from './workbook-output'
 import ExcelJS from 'exceljs'
 import JSZip from 'jszip'
 import { assertInputData } from '../core/json'
@@ -23,7 +22,7 @@ import { readWorkbookFormula } from './workbook-formula'
 import { readSourceContent } from './source-metadata'
 import { TaggedXlsxError, withTemplateLocations } from './tagged-template'
 import { loadWorkbook } from './workbook-input'
-import { readWorkbookResources, createWorkbookResources, workbookParts } from './workbook-resources'
+import { readWorkbookResources, workbookParts } from './workbook-resources'
 
 function unsupported(what: string): never {
   throw new RangeError(`${what} is outside the supported template model`)
@@ -191,6 +190,5 @@ export async function renderWorkbookReport(template: WorkbookTemplate, data: unk
   const dictionaries = parseDictionaries(options.dictionaries ?? {})
   assertInputData(data)
   const plan = withTemplateLocations(definition, () => planWorkbook(definition, data, { dictionaries }))
-  const output = createWorkbookOutput(plan, dictionaries, createWorkbookResources(resources))
-  return writeWorkbookPackage(output, { source, plan })
+  return writeWorkbookPackage({ source, plan, dictionaries, resources })
 }

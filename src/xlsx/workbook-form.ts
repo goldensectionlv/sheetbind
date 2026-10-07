@@ -14,37 +14,27 @@ import { placeWorkbook } from '../grid/workbook-layout'
 import type { WorkbookLayout } from '../grid/workbook-layout'
 import { WorkbookTemplate } from './template'
 import { resolveWorkbookFormulas } from '../grid/workbook-formulas'
-import { createWorkbookOutput } from './workbook-output'
 import { formatAddress, formatRange, parseRange } from './addresses'
 import { loadWorkbook } from './workbook-input'
-import { createWorkbookResources } from './workbook-resources'
-import { workbookListSheetName } from './workbook-dropdowns'
-import { readWorkbookChoiceSources, writeWorkbookChoiceSources } from './workbook-choice-sources'
+import { workbookListSheetName } from './workbook-lists'
+import { readWorkbookChoiceSources } from './workbook-choice-sources'
 import { xlsxTextIssues } from './report-text'
 import { readFormValue } from './form-value'
-import { formCarrierDefinition, formDataFromMarkers, placeFormMarkers, readFormMarkers, writeFormMarkers } from './workbook-form-markers'
+import { formCarrierDefinition, formDataFromMarkers, placeFormMarkers, readFormMarkers } from './workbook-form-markers'
 import { writeWorkbookPackage } from './workbook-source'
 import { TaggedXlsxError, withTemplateLocations } from './tagged-template'
 
 /** Issue input fields and structural boundaries. Blank required fields can be completed later. */
 export async function renderWorkbookForm(value: WorkbookTemplate, data: unknown, options: { readonly dictionaries?: Dictionaries } = {}): Promise<Buffer> {
-  const { definition, source } = WorkbookTemplate.content(value)
+  const { definition, source, resources } = WorkbookTemplate.content(value)
   const dictionaries = parseDictionaries(options.dictionaries === undefined ? {} : options.dictionaries)
   const prepared = withTemplateLocations(definition, () => prepareWorkbookForm(definition, 'issue'))
   const issued = issueWorkbookFormData(prepared.template, data)
   const placed = withTemplateLocations(prepared.template, () => placeWorkbook(prepared.template, issued, { dictionaries, purpose: 'issue' }))
   const carrier = placeFormMarkers(placed, formCarrierDefinition(prepared.template))
   const plan = resolveWorkbookFormulas(carrier.plan, carrier.formulaRows)
-  const resources = createWorkbookResources(WorkbookTemplate.content(value).resources)
-  const workbook = createWorkbookOutput(plan, dictionaries, resources)
-  for (const [name, markers] of carrier.markers) {
-    writeFormMarkers(workbook.getWorksheet(name)!, markers)
-  }
   const choices = workbookChoiceSources(plan, issued, dictionaries)
-  if (choices) {
-    writeWorkbookChoiceSources(workbook, workbookListSheetName(prepared.template.sheets.map(sheet => sheet.name)), choices, resources)
-  }
-  return writeWorkbookPackage(workbook, { source, plan, form: true, carriers: carrier.formulaRows })
+  return writeWorkbookPackage({ source, plan, dictionaries, resources, form: { markers: carrier.markers, rows: carrier.formulaRows, choices } })
 }
 
 /** Definition + completed form -> data/issues, using only the sources issued with the form. */
