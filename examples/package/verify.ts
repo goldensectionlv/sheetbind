@@ -84,7 +84,11 @@ if (!invalidResult.success) {
   assert(invalidResult.issues.some(issue => issue.path === '$data.items[0].hours' && issue.rule === 'min'))
 }
 await assert.rejects(api.renderWorkbookReport(template, undefined, options), SyntaxError)
-await assert.rejects(api.renderWorkbookReport(template, data), api.TemplateError)
+const withoutDictionaries = new ExcelJS.Workbook()
+await withoutDictionaries.xlsx.load(Uint8Array.from(await api.renderWorkbookReport(template, data)).buffer)
+assert.equal(withoutDictionaries.getWorksheet('Report')!.getCell('B4').value, data.items[0].status)
+assert.equal(withoutDictionaries.getWorksheet('Report')!.getCell('B4').dataValidation, undefined)
+assert.deepEqual(await api.readWorkbookForm(template, await api.renderWorkbookForm(template, data)), { success: true, data })
 await assert.rejects(api.renderWorkbookReport(template, data, { dictionaries: { statuses: [5] } } as unknown as typeof options), SyntaxError)
 console.log('Installed package: tagged XLSX, reports, edited forms and diagnostics: ok')
 

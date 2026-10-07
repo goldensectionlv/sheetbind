@@ -1,8 +1,8 @@
 import { defineConfig } from 'tsup'
+import { writeFile } from 'node:fs/promises'
+import { createRequire } from 'node:module'
 
-// Dual ESM + CJS build with type declarations. esbuild (tsup) bundles the
-// extensionless relative imports, so the source needs no `.js` suffixes. ExcelJS
-// remains the consumer's peer dependency in both the runtime and declarations.
+// Both entry points share one runtime and one declaration of the opaque template.
 export default defineConfig({
   clean: true,
   dts: true,
@@ -10,7 +10,14 @@ export default defineConfig({
   // Let Rollup emit CJS chunks and maps; tsup's CJS transform leaks absolute paths.
   treeshake: true,
   external: ['exceljs'],
-  format: ['esm', 'cjs'],
+  format: ['cjs'],
   sourcemap: true,
   target: 'node22',
+  async onSuccess() {
+    const require = createRequire(import.meta.url)
+    const entry = require.resolve('./dist/index.cjs')
+    delete require.cache[entry]
+    const names = Object.keys(require(entry)).sort()
+    await writeFile('dist/index.js', `import api from './index.cjs'\nexport const { ${names.join(', ')} } = api\n`)
+  },
 })

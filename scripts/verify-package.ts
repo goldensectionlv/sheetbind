@@ -41,7 +41,7 @@ async function main(): Promise<void> {
     assert.equal(pack.name, 'sheetbind')
     assert.equal(pack.version, manifest.version)
     const files = pack.files.map(file => file.path)
-    for (const required of ['package.json', 'LICENSE', 'README.md', 'README.ru.md', 'dist/index.js', 'dist/index.cjs', 'dist/index.d.ts', 'dist/index.d.cts']) {
+    for (const required of ['package.json', 'LICENSE', 'README.md', 'README.ru.md', 'dist/index.js', 'dist/index.cjs', 'dist/index.d.cts']) {
       assert(files.includes(required), `Missing package file: ${required}`)
     }
     for (const file of files) {
@@ -71,7 +71,12 @@ async function main(): Promise<void> {
     await writeFile(path.join(consumer, 'types.ts'), `
   import { renderWorkbookReport, resolveWorkbook } from 'sheetbind'
   import type { WorkbookTemplate, WorkbookFormResult, WorkbookLayout, WorkbookCellInstance } from 'sheetbind'
+  import type { WorkbookTemplate as CommonJsTemplate } from 'sheetbind' with { 'resolution-mode': 'require' }
   declare const template: WorkbookTemplate
+  declare const commonJsTemplate: CommonJsTemplate
+  const sharedEsm: WorkbookTemplate = commonJsTemplate
+  const sharedCjs: CommonJsTemplate = template
+  void [sharedEsm, sharedCjs]
   const layout = resolveWorkbook(template, {}) satisfies WorkbookLayout
   const cell = layout.sheets[0].cells[0] satisfies WorkbookCellInstance
   const position: number = cell.at.row
@@ -171,8 +176,24 @@ async function main(): Promise<void> {
     run(process.execPath, ['smoke.cjs'], consumer)
     await writeFile(path.join(consumer, 'smoke.mjs'), `
   import assert from 'node:assert/strict'
+  import { createRequire } from 'node:module'
+  import ExcelJS from 'exceljs'
   import * as api from 'sheetbind'
+  const cjs = createRequire(import.meta.url)('sheetbind')
   assert.equal(Object.hasOwn(api, 'WorkbookTemplate'), false)
+  assert.deepEqual(Object.keys(api).sort(), Object.keys(cjs).sort())
+  for (const name of Object.keys(api)) assert.equal(api[name], cjs[name])
+  cjs.registerFormatter('mixedDouble', value => Number(value) * 2)
+  api.registerValidationRule('mixedFour', { validate: value => value === 4 })
+  const book = new ExcelJS.Workbook()
+  book.addWorksheet('Input').getCell('A1').value = '{v | mixedDouble}{@validate:mixedFour}'
+  const source = await book.xlsx.writeBuffer()
+  for (const [producer, consumer] of [[cjs, api], [api, cjs]]) {
+    const template = await producer.importWorkbookXlsx(source)
+    const form = await consumer.renderWorkbookForm(template, { v: 2 })
+    assert.deepEqual(await producer.readWorkbookForm(template, form), { success: true, data: { v: 4 } })
+  }
+  console.log('Installed mixed ESM/CommonJS: templates, formatters and validators: ok')
   `)
     run(process.execPath, ['smoke.mjs'], consumer)
     console.log(`Package verification: ${files.length} files, installed ESM/CJS/types: ok`)
