@@ -187,15 +187,6 @@ describe('shared workbook forms: definition + marked XLSX', () => {
     expect(codes(await readWorkbookForm(repeated, Buffer.from(await book.xlsx.writeBuffer())))).toContain('conflicting-shape')
   })
 
-  it('normalizes object scopes and preserves text which resembles an OOXML escape', async () => {
-    const scoped = await importAuthoredWorkbook(book => {
-      book.addWorksheet('Scoped').addRows([['{#with contact}'], ['{.name}'], ['{/with}']])
-    })
-    const values = { contact: { name: '_x000a_ = SUM(A1)\nText' } }
-    const bytes = await renderWorkbookForm(scoped, values)
-    expect(await readWorkbookForm(scoped, bytes)).toEqual({ success: true, data: values })
-  })
-
   it('requires dictionaries for issuance and rejects incompatible template bindings', async () => {
     await expect(renderWorkbookForm(template, data)).rejects.toBeInstanceOf(TemplateError)
     expect(await readWorkbookForm(template, new Uint8Array())).toMatchObject({ success: false, issues: [{ code: 'invalid-workbook' }] })

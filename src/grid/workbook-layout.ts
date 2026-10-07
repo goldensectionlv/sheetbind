@@ -6,7 +6,7 @@ import type { FieldRules } from '../core/field-rules'
 import type { GridAddress, GridOffset } from './geometry'
 import { createWorkbookChoiceDisplay } from '../core/choices'
 import type { WorkbookChoice } from '../core/choices'
-import { workbookCells, workbookRegions, workbookRows, workbookIssue, WorkbookAxis, WORKBOOK_LIMITS } from './workbook'
+import { workbookCells, workbookRegions, workbookRows, workbookIssue, WORKBOOK_LIMITS } from './workbook'
 import type { WorkbookCell, WorkbookSheet, WorkbookDefinition, WorkbookRow, WorkbookColumn } from './workbook'
 import { mapWorkbookPrint } from './workbook'
 import type { WorkbookPrint } from './workbook'
@@ -15,7 +15,7 @@ import { resolveWorkbookFormulas } from './workbook-formulas'
 import { axisPositions, mapAxis, planWorkbookAxes } from './workbook-axis'
 import type { AxisPlan, WorkbookAxes } from './workbook-axis'
 import { FormulaEdge } from './workbook-formula'
-import { placeWorkbookPoint, workbookCoordinates } from './workbook-coordinates'
+import { placeWorkbookPoint, placeWorkbookRegion, workbookCoordinates } from './workbook-coordinates'
 import type { WorkbookCoordinates, WorkbookIndexes } from './workbook-coordinates'
 
 /** Public resolved cell; source-package details stay in the internal placement. */
@@ -46,22 +46,11 @@ export interface WorkbookLayout {
 export interface WorkbookPlacedCell extends WorkbookCellInstance { readonly xlsx?: WorkbookCell['xlsx'] }
 export interface WorkbookPlacedSheet extends Omit<WorkbookSheet, 'cells' | 'regions'> { readonly cells: readonly WorkbookPlacedCell[] }
 
-/** Placement provenance for consumers that need the boundaries of expanded bodies. */
-export interface WorkbookRegionLayout {
-  readonly definitionId: string
-  readonly dataPath: string
-  readonly type: 'scope' | 'repeat'
-  readonly row: number
-  readonly height: number
-  readonly column?: number
-  readonly width?: number
-  readonly instances: readonly { readonly row: number, readonly height: number, readonly regions: readonly WorkbookRegionLayout[] }[]
-}
 /** A sheet and its geometry travel together through every placement stage. */
 export interface WorkbookSheetPlan {
   readonly definition: WorkbookSheet
+  readonly data: WorkbookData
   readonly sheet: WorkbookPlacedSheet
-  readonly regions: readonly WorkbookRegionLayout[]
   readonly axes: WorkbookAxes
   readonly coordinates: WorkbookCoordinates
   readonly extent: { readonly rows: number, readonly columns: number }
@@ -149,15 +138,7 @@ export function placeWorkbookSheet(sheet: WorkbookSheet, group: WorkbookData): W
         value: 'path' in cell.value ? { literal } : cell.value, rules: cell.rules, xlsx: cell.xlsx, origin: source, contextPath, choice }
     })
   }
-  function bounds(id: string, value: Pick<Origin, 'iterations'>) {
-    const region = views.get(id)!
-    const indexes = context(value).indexes
-    const row = mapAxis(axes.rows, region.row, FormulaEdge.Start, indexes)!
-    const column = mapAxis(axes.columns, region.column ?? 1, FormulaEdge.Start, indexes)!
-    return { row, column, height: mapAxis(axes.rows, region.row + region.height - 1, FormulaEdge.End, indexes)! - row + 1,
-      width: mapAxis(axes.columns, (region.column ?? 1) + (region.width ?? WORKBOOK_LIMITS.columns) - 1, FormulaEdge.End, indexes)! - column + 1 }
-  }
-  function layout(body: WorkbookData, id?: string): WorkbookRegionLayout[] {
+  function layout(body: WorkbookData, id?: string): void {
     const definition = body.definition
     if (id) {
       const copies = instances.get(id) ?? []
@@ -173,29 +154,20 @@ export function placeWorkbookSheet(sheet: WorkbookSheet, group: WorkbookData): W
       extent.rows = Math.max(extent.rows, end.row)
       extent.columns = Math.max(extent.columns, end.column)
     }
-    const placedRegions: WorkbookRegionLayout[] = []
     for (const node of [...body.regions].sort((a, b) => a.definition.row - b.definition.row)) {
       const region = node.definition
-      const placed = bounds(region.id, body)
+      const placed = placeWorkbookRegion(axes, views.get(region.id)!, context(body).indexes)
       if (placed.row + placed.height - 1 > WORKBOOK_LIMITS.rows) {
         workbookIssue('row-limit', region.id, 'Repeated rows exceed the XLSX row limit', node.path, 'data')
       }
       if (region.width !== undefined && placed.column + placed.width - 1 > WORKBOOK_LIMITS.columns) {
         workbookIssue('column-limit', region.id, 'Repeated columns exceed the XLSX column limit', node.path, 'data')
       }
-      const placedInstances = node.instances.map(instance => ({ ...bounds(region.id, instance), regions: layout(instance, region.id) }))
-      const last = placedInstances.at(-1)
-      const extent = region.type !== 'repeat'
-        ? {}
-        : region.axis === WorkbookAxis.Columns
-          ? { width: last ? last.column + last.width - placed.column : 0 }
-          : { height: last ? last.row + last.height - placed.row : 0 }
-      placedRegions.push({ definitionId: region.id, dataPath: node.path, type: region.type, ...placed, ...extent, instances: placedInstances })
+      node.instances.forEach(instance => layout(instance, region.id))
     }
     cells.push(...placeCells(body.cells, body.path))
-    return placedRegions
   }
-  const placedRegions = layout(group)
+  layout(group)
   const print = mapWorkbookPrint(sheet.print, {
     rowStart: row => mapAxis(axes.rows, row, FormulaEdge.Start)!, rowEnd: row => mapAxis(axes.rows, row, FormulaEdge.End)!,
     columnStart: column => mapAxis(axes.columns, column, FormulaEdge.Start)!, columnEnd: column => mapAxis(axes.columns, column, FormulaEdge.End)!,
@@ -218,7 +190,7 @@ export function placeWorkbookSheet(sheet: WorkbookSheet, group: WorkbookData): W
     }
   }
   const placed = { ...structuredClone(settings), ...(print ? { print } : {}), rows, columns, cells: cells.sort((a, b) => a.at.row - b.at.row || a.at.column - b.at.column) }
-  return { definition: sheet, sheet: placed, regions: placedRegions, axes, coordinates: workbookCoordinates(sheet, axes, instances), authored, extent }
+  return { definition: sheet, data: group, sheet: placed, axes, coordinates: workbookCoordinates(sheet, axes, instances), authored, extent }
 }
 
 function placeSettings<T extends { readonly index: number }>(settings: readonly T[], axis: AxisPlan, limit: number): T[] {

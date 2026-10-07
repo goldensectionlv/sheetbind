@@ -24,12 +24,14 @@ The library has three operations: rendering a report, issuing a form and reading
 | --- | --- | --- |
 | Source XLSX inside `WorkbookTemplate` | Formatting and native Excel features | The writer retains source package parts and changes affected fragments |
 | `WorkbookDefinition` | Template bindings, regions and geometry with source cell references | Data resolution, placement, form preparation and diagnostics |
-| `WorkbookData` | Values and repeat instances with concrete data paths | Axis planning and placement; exists only for the current call |
-| `WorkbookPlan` | Sheet plans containing the definition, placed cells, regions, axes and coordinate mapping | Formulas, form control rows and the XLSX writer |
+| `WorkbookData` | Values and repeat instances with concrete data paths | Axis planning, placement and form boundaries; exists only for the current call |
+| `WorkbookPlan` | Sheet plans containing the definition, shared repeat instances, placed cells, axes and coordinate mapping | Formulas, form control rows and the XLSX writer |
 
 `WorkbookLayout`, returned by `resolveWorkbook`, is an independent public projection of placed cells. It is a consumer result rather than another editable template. The public entry into the current model is tagged XLSX import.
 
 Within `WorkbookPlan`, each `WorkbookSheetPlan` retains one sheet and its geometry. Stages pass these plans together; matching a sheet with its axes and regions does not depend on indexes in parallel arrays. The original definition and axes retain logical coordinates, while placed cells receive final positions and formulas in sequence. The XLSX adapter also accounts for removed tag rows and inserted form control rows.
+
+Placement retains the existing `WorkbookData` instances instead of constructing another region tree. Form markers traverse those instances and obtain their boundaries through the same axis mapping used for placement. Reports do not build a separate form-region layout.
 
 The XLSX writer consumes these placed cells directly. Form input formatting is applied while writing source cell styles; it does not require another copy of the workbook or a second output-cell model. Explicit number formats from the template remain authoritative.
 
@@ -64,6 +66,8 @@ The dropdown writer receives ready-to-write strings regardless of source kind, d
 Dictionary ranges for formulas come directly from declared choices and the supplied dictionaries. Formula references determine their columns; repeated cell instances and the properties present in individual records do not determine whether a range exists. Dropdowns and formula ranges share the hidden sheet but are written independently.
 
 Form issuance uses the same placement and writing path. It prepares editable fields, permits blank required values and adds the structure needed to recognize records when reading. Its hidden rows participate in coordinate mapping before formulas and other references are written.
+
+Form preparation expands object scopes into explicit field and collection paths. This small normalization keeps markers, saved choice sources and validation contexts tied to repeat records. It changes neither placement rules nor the source template. Scope behavior is checked through rendered and returned XLSX files, rather than by requiring a particular intermediate tree shape.
 
 ## Reading a form
 

@@ -45,6 +45,13 @@ export function placeWorkbookPoint(axes: WorkbookAxes, at: GridAddress, indexes:
   return row === undefined || column === undefined ? undefined : { row, column }
 }
 
+export function placeWorkbookRegion(axes: WorkbookAxes, region: WorkbookRegionView, indexes: WorkbookIndexes) {
+  const row = mapAxis(axes.rows, region.row, FormulaEdge.Start, indexes)!
+  const column = mapAxis(axes.columns, region.column ?? 1, FormulaEdge.Start, indexes)!
+  return { row, column, height: mapAxis(axes.rows, region.row + region.height - 1, FormulaEdge.End, indexes)! - row + 1,
+    width: mapAxis(axes.columns, (region.column ?? 1) + (region.width ?? WORKBOOK_LIMITS.columns) - 1, FormulaEdge.End, indexes)! - column + 1 }
+}
+
 export type WorkbookCoordinates = ReturnType<typeof workbookCoordinates>
 function mergeRanges(ranges: GridRange[]): GridRange[] {
   for (const axis of ['column', 'row'] as const) {

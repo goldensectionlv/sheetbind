@@ -5,11 +5,12 @@ import { dataPath } from './form-records'
 import type { Origin } from '../core/template'
 import { isWorkbookFormRow, workbookFormRowFields } from './form-records'
 import type { WorkbookFormRows } from './form-records'
-import type { WorkbookBody, WorkbookRegion, WorkbookDefinition } from '../grid/workbook'
-import { workbookCells, WORKBOOK_LIMITS } from '../grid/workbook'
+import type { WorkbookBody, WorkbookRegionView, WorkbookDefinition } from '../grid/workbook'
+import { workbookCells, workbookRegions, WORKBOOK_LIMITS } from '../grid/workbook'
 import { mapWorkbookPrint } from '../grid/workbook'
-import type { WorkbookPlan, WorkbookRegionLayout } from '../grid/workbook-layout'
+import type { WorkbookPlan } from '../grid/workbook-layout'
 import { placeWorkbookSheet } from '../grid/workbook-layout'
+import { placeWorkbookRegion } from '../grid/workbook-coordinates'
 import type { WorkbookData } from '../grid/workbook-data'
 import { formatAddress } from '../grid/geometry'
 import { FormulaEdge } from '../grid/workbook-formula'
@@ -27,19 +28,18 @@ export interface FormMarker { readonly row: number, readonly token: FormMarkerTo
 export interface FormMarkers { readonly column: number, readonly rows: readonly FormMarker[] }
 interface FormCarrierDefinition {
   readonly numbers: ReadonlyMap<string, number>
-  readonly regions: ReadonlyMap<string, WorkbookRegion>
+  readonly regions: ReadonlyMap<string, WorkbookRegionView>
   readonly sheets: ReadonlySet<string>
 }
 
 export function formCarrierDefinition(template: WorkbookDefinition): FormCarrierDefinition {
   const sheets = new Set(template.sheets.filter(sheet => sheet.regions?.length || workbookCells(sheet).some(cell => 'path' in cell.value)).map(sheet => sheet.name))
   const numbers = new Map<string, number>()
-  const regions = new Map<string, WorkbookRegion>()
+  const regions = new Map(template.sheets.flatMap(sheet => workbookRegions(sheet).map(region => [region.id, region] as const)))
   let serial = 0
   const visit = (source: WorkbookBody): void => {
     for (const region of [...source.regions ?? []].sort((a, b) => a.row - b.row)) {
       numbers.set(region.id, ++serial)
-      regions.set(region.id, region)
       visit(region)
     }
   }
@@ -52,28 +52,32 @@ export function placeFormMarkers(plan: WorkbookPlan, definition: FormCarrierDefi
   const markers = new Map<string, FormMarkers>()
   const formulaRows = new Map<string, FormulaRows>()
   const placed: WorkbookPlan = { sheets: plan.sheets.map(source => {
-    const { sheet, regions, extent } = source
+    const { sheet, data, axes, extent } = source
     if (!definition.sheets.has(sheet.name)) {
       return source
     }
     const events: FormMarker[] = []
-    const visit = (regions: readonly WorkbookRegionLayout[]): void => {
-      for (const region of regions) {
-        const id = definition.numbers.get(region.definitionId)!
-        events.push({ row: region.row, token: [FormMarkerKind.Repeat, id] })
-        if (isWorkbookFormRow(definition.regions.get(region.definitionId)!)) {
-          events.push({ row: region.row + region.height, token: [FormMarkerKind.RepeatEnd, id] })
-          continue
+    const indexes = (body: WorkbookData) => new Map(body.iterations.map(item => [item.nodeId, item.index]))
+    const visit = (body: WorkbookData): void => {
+      for (const node of [...body.regions].sort((a, b) => a.definition.row - b.definition.row)) {
+        const region = definition.regions.get(node.definition.id)!
+        const id = definition.numbers.get(region.id)!
+        let end = placeWorkbookRegion(axes, region, indexes(body)).row
+        events.push({ row: end, token: [FormMarkerKind.Repeat, id] })
+        const row = isWorkbookFormRow(region)
+        for (const instance of node.instances) {
+          const placed = placeWorkbookRegion(axes, region, indexes(instance))
+          end = placed.row + placed.height
+          if (!row) {
+            events.push({ row: placed.row, token: [FormMarkerKind.Item, id] })
+            visit(instance)
+            events.push({ row: end, token: [FormMarkerKind.ItemEnd, id] })
+          }
         }
-        for (const instance of region.instances) {
-          events.push({ row: instance.row, token: [FormMarkerKind.Item, id] })
-          visit(instance.regions)
-          events.push({ row: instance.row + instance.height, token: [FormMarkerKind.ItemEnd, id] })
-        }
-        events.push({ row: region.row + region.height, token: [FormMarkerKind.RepeatEnd, id] })
+        events.push({ row: end, token: [FormMarkerKind.RepeatEnd, id] })
       }
     }
-    visit(regions)
+    visit(data)
     let end = Math.max(2, extent.rows + 1)
     let markerColumn = Math.max(FORM_MARKER_COLUMN, extent.columns + 1)
     for (const row of sheet.rows ?? []) {

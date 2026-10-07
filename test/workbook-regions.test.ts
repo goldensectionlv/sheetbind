@@ -2,11 +2,11 @@ import ExcelJS from 'exceljs'
 import { describe, expect, it } from 'vitest'
 import * as project from '../examples/regions/template'
 import { TemplateError } from '../src/core/template'
-import { expandWorkbookScopes } from '../src/xlsx/form-definition'
 import type { WorkbookCell, WorkbookDefinition } from '../src/grid/workbook'
 import { resolveWorkbook as resolveDefinition } from '../src/grid/workbook-layout'
 import { WorkbookTemplate } from '../src/xlsx/workbook-template'
 import { resolveWorkbook, renderWorkbookReport, importWorkbookXlsx } from '../src/xlsx/workbook-template'
+import { renderWorkbookForm, readWorkbookForm } from '../src/index'
 import { importAuthoredWorkbook, openWorkbook } from './xlsx'
 
 const cell = (id: string, row: number, column = 1): WorkbookCell => ({ id, at: { row, column }, size: { rows: 1, columns: 1 }, value: { literal: id } })
@@ -72,7 +72,7 @@ describe('scope and repeat placement', () => {
     })).rejects.toThrow()
   })
 
-  it('flattens scopes into paths while preserving XLSX geometry and source formatting', async () => {
+  it('preserves scoped fields, XLSX geometry and source formatting in reports and forms', async () => {
     const template = await importAuthoredWorkbook(book => {
       const sheet = book.addWorksheet('Scoped')
       sheet.addRows([
@@ -86,20 +86,20 @@ describe('scope and repeat placement', () => {
       sheet.getRow(6).height = 9
       sheet.getRow(6).hidden = true
     })
-    const definition = WorkbookTemplate.content(template).definition
-    const expanded = expandWorkbookScopes(definition)
-    expect(expanded.sheets[0].regions!.map(region => region.type)).toEqual(['repeat'])
-    expect(expandWorkbookScopes(expanded)).toEqual(expanded)
     for (const count of [0, 1, 3]) {
       const data = { name: 'Root name', company: { provider: { name: '0007' } }, items: Array.from({ length: count }, (_, index) => ({ name: index })) }
-      const values = (cells: readonly WorkbookCell[]) => cells.map(cell => ({ at: cell.at, size: cell.size, value: cell.value }))
-      expect(values(resolveDefinition(expanded, data).sheets[0].cells)).toEqual(values(resolveWorkbook(template, data).sheets[0].cells))
-      const output = await load(await renderWorkbookReport(template, data))
-      expect(output.getCell('A3').value).toBe('0007')
-      expect(output.getCell('A4').value).toBe('Root name')
-      expect(output.getCell('A3').font.bold).toBe(true)
-      expect(output.model.merges).toContain('A3:C3')
-      expect(output.getRow(5).hidden).toBe(true)
+      const issued = await renderWorkbookForm(template, data)
+      for (const bytes of [await renderWorkbookReport(template, data), issued]) {
+        const output = await load(bytes)
+        expect(output.getCell('A3').value).toBe('0007')
+        expect(output.getCell('A4').value).toBe('Root name')
+        expect(output.getCell('A3').font.bold).toBe(true)
+        expect(output.model.merges).toContain('A3:C3')
+        expect(output.getRow(5).hidden).toBe(true)
+      }
+      expect(await readWorkbookForm(template, issued)).toEqual({ success: true, data: {
+        ...data, company: { provider: { name: '0007', address: { city: null } } },
+      } })
     }
   })
 

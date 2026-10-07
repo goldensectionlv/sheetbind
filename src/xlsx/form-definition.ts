@@ -169,8 +169,8 @@ export function createWorkbookFormData() {
   }
 }
 
-/** Remove object scopes using explicit paths; repeats establish a new current item. */
-export function expandWorkbookScopes(template: WorkbookDefinition): WorkbookDefinition {
+/** Forms use explicit paths and repeat-record contexts; geometry is still placed by the shared engine. */
+function expandWorkbookScopes(template: WorkbookDefinition): WorkbookDefinition {
   const expand = <T extends WorkbookBody>(body: T, prefix?: WorkbookRegion['source'], local = false): T => {
     const qualify = (reference: WorkbookRegion['source']) => reference.from === 'root' || !prefix
       ? reference
