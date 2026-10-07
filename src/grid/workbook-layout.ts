@@ -1,7 +1,6 @@
 import { resolveWorkbookData } from './workbook-data'
 import type { WorkbookData, WorkbookDataOptions } from './workbook-data'
 import type { Origin, TemplateValue } from '../core/template'
-import type { Dictionaries } from '../core/dictionaries'
 import type { FieldRules } from '../core/field-rules'
 import type { GridAddress, GridOffset } from './geometry'
 import { createWorkbookChoiceDisplay } from '../core/choices'
@@ -57,18 +56,6 @@ export interface WorkbookSheetPlan {
   readonly authored: ReadonlyMap<string, WorkbookCell>
 }
 export interface WorkbookPlan { readonly sheets: readonly WorkbookSheetPlan[] }
-
-/** Expose independent resolved cells without changing the compiled definition. */
-export function resolveWorkbook(config: WorkbookDefinition, data: unknown, options: { dictionaries?: Dictionaries } = {}): WorkbookLayout {
-  const plan = planWorkbook(config, data, options)
-  return { sheets: plan.sheets.map(({ sheet }) => ({
-    ...structuredClone({ id: sheet.id, name: sheet.name, state: sheet.state, rows: sheet.rows, columns: sheet.columns, print: sheet.print }),
-    cells: sheet.cells.map(cell => structuredClone({
-      id: cell.id, definitionId: cell.definitionId, at: cell.at, size: cell.size, rules: cell.rules,
-      origin: cell.origin, contextPath: cell.contextPath, choice: cell.choice, value: cell.value,
-    })),
-  })) }
-}
 
 /** Accept a normalized definition. Placement never reparses or modifies the input. */
 export function planWorkbook(config: WorkbookDefinition, data: unknown, options: WorkbookDataOptions = {}): WorkbookPlan {

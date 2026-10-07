@@ -1,5 +1,4 @@
-import { isDataObject, jsonSnapshot } from './json'
-import type { JsonValue } from './json'
+import { isDataObject } from './json'
 import { readDataPath } from './template'
 import type { DataReference } from './template'
 
@@ -19,10 +18,10 @@ export function allowsChoiceInput(rule: ChoiceRule, items: readonly ChoiceOption
 export interface ChoiceOption { readonly key: string | number, readonly label: string, readonly value: Readonly<Record<string, unknown>> }
 export interface ResolvedChoice { readonly key: string | number | null, readonly items: readonly ChoiceOption[] }
 
-/** Empty sources are valid; a nonblank selection must still match an available key. */
+/** Options borrow validated source records; consumers copy only values they retain. */
 function buildOptions(source: readonly unknown[], rule: ChoiceRule): ChoiceOption[] {
   const keys = new Set<string>()
-  const options = (jsonSnapshot(source) as readonly JsonValue[]).map(item => {
+  return source.map(item => {
     const key = readDataPath(item, rule.key)
     const label = readDataPath(item, rule.label)
     if (!isDataObject(item) || !['string', 'number'].includes(typeof key) || typeof key === 'string' && !key.trim() || typeof key === 'number' && !Number.isFinite(key)) {
@@ -38,7 +37,6 @@ function buildOptions(source: readonly unknown[], rule: ChoiceRule): ChoiceOptio
     keys.add(token)
     return { key: key as string | number, label, value: item }
   })
-  return options
 }
 
 /** A cache belongs to one execution; the same source can have independent projections. */

@@ -82,7 +82,7 @@ describe('imported XLSX ownership', () => {
     sheet.pageSetup.printArea = 'A1:B3'
     const template = await importWorkbookXlsx(await saveWorkbook(book))
     const data = { items: [{ status: 'planned' }, { status: 'planned' }] }
-    const options = { dictionaries: { statuses: [{ id: 'planned', name: 'Planned' }] } }
+    const options = { dictionaries: { statuses: [{ id: 'planned', name: 'Planned', details: { rank: 0 } }] } }
     const layout = resolveWorkbook(template, data, options)
     const expected = structuredClone(layout)
     const [first, second] = layout.sheets[0].cells
@@ -95,6 +95,7 @@ describe('imported XLSX ownership', () => {
     Object.assign(first.size, { rows: 99 })
     Object.assign(first.rules!, { validation: 'number' })
     Object.assign(first.choice!.items[0], { text: 'Changed label' })
+    Object.assign(first.choice!.items[0].value.details!, { rank: 99 })
     Object.assign(first.origin.iterations[0], { index: 99 })
     Object.assign(layout.sheets[0].rows![0], { height: 99 })
     Object.assign(layout.sheets[0].columns![0], { width: 99 })
@@ -102,7 +103,7 @@ describe('imported XLSX ownership', () => {
     expect(second).toEqual(expected.sheets[0].cells[1])
     expect(resolveWorkbook(template, data, options)).toEqual(expected)
     expect(data.items).toEqual([{ status: 'planned' }, { status: 'planned' }])
-    expect(options.dictionaries.statuses).toEqual([{ id: 'planned', name: 'Planned' }])
+    expect(options.dictionaries.statuses).toEqual([{ id: 'planned', name: 'Planned', details: { rank: 0 } }])
   })
 })
 

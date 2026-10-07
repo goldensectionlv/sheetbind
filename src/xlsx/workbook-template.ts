@@ -1,10 +1,10 @@
 import ExcelJS from 'exceljs'
 import JSZip from 'jszip'
-import { assertInputData } from '../core/json'
+import { assertInputData, jsonSnapshot } from '../core/json'
 import { validateWorkbookDefinition, collectWorkbookDictionarySources, workbookRegions, WORKBOOK_LIMITS, mapWorkbookPrint, workbookCells } from '../grid/workbook'
 import type { GridRange } from '../grid/geometry'
 import { partitionWorkbookRange } from '../grid/workbook-coordinates'
-import { planWorkbook, resolveWorkbook as resolveDefinition } from '../grid/workbook-layout'
+import { planWorkbook } from '../grid/workbook-layout'
 import type { WorkbookLayout } from '../grid/workbook-layout'
 import type { WorkbookCell, WorkbookRegion, WorkbookRow, WorkbookSheet, WorkbookDefinition } from '../grid/workbook'
 import { formatAddress, parseRange } from '../grid/geometry'
@@ -177,7 +177,15 @@ function importRegions(compiled: ReturnType<typeof compileWorkbookSheet>, create
 export function resolveWorkbook(template: WorkbookTemplate, data: unknown, options: { readonly dictionaries?: Dictionaries } = {}): WorkbookLayout {
   const { definition } = WorkbookTemplate.content(template)
   assertInputData(data)
-  return withTemplateLocations(definition, () => resolveDefinition(definition, data, { dictionaries: parseDictionaries(options.dictionaries ?? {}) }))
+  const plan = withTemplateLocations(definition, () => planWorkbook(definition, data, { dictionaries: parseDictionaries(options.dictionaries ?? {}) }))
+  return { sheets: plan.sheets.map(({ sheet }) => ({
+    ...structuredClone({ id: sheet.id, name: sheet.name, state: sheet.state, rows: sheet.rows, columns: sheet.columns, print: sheet.print }),
+    cells: sheet.cells.map(cell => ({
+      ...structuredClone({ id: cell.id, definitionId: cell.definitionId, at: cell.at, size: cell.size, rules: cell.rules,
+        origin: cell.origin, contextPath: cell.contextPath, value: cell.value }),
+      choice: cell.choice && { ...cell.choice, items: cell.choice.items.map(item => ({ ...item, value: jsonSnapshot(item.value) as Record<string, unknown> })) },
+    })),
+  })) }
 }
 
 export function workbookDictionarySources(template: WorkbookTemplate): string[] {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import ExcelJS from 'exceljs'
 import { data, definition } from '../examples/comparison/definition'
-import { resolveWorkbook as resolveDefinition } from '../src/grid/workbook-layout'
+import { planWorkbook } from '../src/grid/workbook-layout'
 import { WorkbookTemplate } from '../src/xlsx/workbook-template'
 import { validateWorkbookDefinition } from '../src/grid/workbook'
 import type { WorkbookDefinition } from '../src/grid/workbook'
@@ -60,7 +60,7 @@ describe('two axis report placement', () => {
     }] }
     const counts = [[3, 0, 1], [0, 3, 0], [1, 1, 1]]
     const input = { ...data, offers: data.offers.map((offer, index) => ({ ...offer, lines: offer.lines.map((line, row) => ({ ...line, notes: Array.from({ length: counts[index][row] }, (_, n) => ({ text: `Note ${n}` })) })) })) }
-    const cells = resolveDefinition(template, input).sheets[0].cells
+    const cells = planWorkbook(template, input).sheets[0].sheet.cells
     expect(cells.filter(cell => 'literal' in cell.value && ['Item A', 'Item B', 'Item C'].includes(String(cell.value.literal))).map(cell => cell.at.row)).toEqual([4, 8, 12])
     expect(cells.filter(cell => 'formula' in cell.value && cell.value.formula.startsWith('IFERROR')).map(cell => cell.at.row)).toEqual([14, 14, 14])
     expect(cells.find(cell => cell.at.row === 12 && cell.at.column === 8)?.value).toEqual({ formula: 'IF(G12="","",G12*$B12)' })
@@ -72,8 +72,8 @@ describe('two axis report placement', () => {
       { ...region, id: 'a', row: 2, height: 1, column: 1, width: 2 },
       { ...region, id: 'b', row: 2, height: 2, column: 3, width: 2 },
     ] }] })).toThrow('reserve the same band')
-    expect(resolveDefinition({ sheets: [{ id: 's', name: 'Sheet', cells: [], regions: [
+    expect(planWorkbook({ sheets: [{ id: 's', name: 'Sheet', cells: [], regions: [
       { ...region, id: 'a', row: 1, height: 1, column: 1, width: 129, axis: 'columns' },
-    ] }] }, { items: [{}, {}] }).sheets[0].cells).toEqual([])
+    ] }] }, { items: [{}, {}] }).sheets[0].sheet.cells).toEqual([])
   })
 })

@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import * as project from '../examples/regions/template'
 import { TemplateError } from '../src/core/template'
 import type { WorkbookCell, WorkbookDefinition } from '../src/grid/workbook'
-import { resolveWorkbook as resolveDefinition } from '../src/grid/workbook-layout'
+import { planWorkbook } from '../src/grid/workbook-layout'
 import { WorkbookTemplate } from '../src/xlsx/workbook-template'
 import { resolveWorkbook, renderWorkbookReport, importWorkbookXlsx } from '../src/xlsx/workbook-template'
 import { renderWorkbookForm, readWorkbookForm } from '../src/index'
@@ -159,7 +159,7 @@ describe('scope and repeat placement', () => {
       { id: 'b', type: 'repeat', row: 6, height: 3, source: { path: 'b' }, cells: [cell('b-cell', 2)], rows: [{ index: 3, hidden: true }] },
     ] }] }
     for (const [a, b, footer] of [[0, 0, 7], [2, 0, 11], [0, 2, 13], [2, 2, 17]]) {
-      const result = resolveDefinition(config, { a: Array.from({ length: a }, () => ({})), b: Array.from({ length: b }, () => ({})) }).sheets[0]
+      const result = planWorkbook(config, { a: Array.from({ length: a }, () => ({})), b: Array.from({ length: b }, () => ({})) }).sheets[0].sheet
       expect(result.cells.find(cell => cell.definitionId === 'footer')!.at.row).toBe(footer)
     }
   })

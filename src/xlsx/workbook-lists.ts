@@ -1,5 +1,5 @@
 import type { Workbook } from 'exceljs'
-import { parseDictionaries } from '../core/dictionaries'
+import { validateDictionaryShape } from '../core/dictionaries'
 import type { Dictionaries } from '../core/dictionaries'
 import { createChoiceResolver, createWorkbookChoiceDisplay } from '../core/choices'
 import type { ChoiceRule } from '../core/choices'
@@ -204,7 +204,7 @@ export function readWorkbookChoiceSources(book: Workbook, sheetName: string) {
     if (Object.keys(payload).some(key => !['context', 'dictionaries', 'local'].includes(key))) {
       throw new Error('unknown source property')
     }
-    return { context: payload.context, dictionaries: parseDictionaries(payload.dictionaries), local: payload.local ?? {} }
+    return { context: payload.context, dictionaries: validateDictionaryShape(payload.dictionaries), local: payload.local ?? {} }
   }
   catch {
     throw new WorkbookFormInputError({ phase: 'xlsx', code: 'choice-source', path: '$workbook', message: 'form dictionary source data is missing or malformed' })

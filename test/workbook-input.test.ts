@@ -62,6 +62,10 @@ it('omits undefined dictionary properties from saved named, root and local choic
   const data = { named: object, root: object, catalog: [object], items: [{ local: object, options: [object] }] }
   const dictionaries = { Options: [object] }
   const before = structuredClone({ data, dictionaries })
+  const layout = resolveWorkbook(template, data, { dictionaries })
+  expect(layout.sheets[0].cells.map(cell => cell.choice?.items[0].value)).toStrictEqual([normalized, normalized, normalized])
+  Object.assign(layout.sheets[0].cells[2].choice!.items[0].value.nested!, { zero: 99 })
+  expect(layout.sheets[0].cells[1].choice!.items[0].value).toStrictEqual(normalized)
   await renderWorkbookReport(template, data, { dictionaries })
   const issued = await renderWorkbookForm(template, data, { dictionaries })
   const book = await openWorkbook(issued)
@@ -87,9 +91,17 @@ it('omits undefined dictionary properties from saved named, root and local choic
 it('keeps persisted JSON strict and rejects accessors without executing them', async () => {
   expect(() => assertJson({ optional: undefined })).toThrow(SyntaxError)
   const getter = vi.fn(() => 'Option')
-  const template = await importAuthoredWorkbook(book => book.addWorksheet('Input').getCell('A1').value = '{value}{@choice:Options; key=id; label=label}')
   const item = { id: '006', label: 'Option', optional: undefined }
   Object.defineProperty(item, 'label', { get: getter, enumerable: true })
-  await expect(renderWorkbookForm(template, {}, { dictionaries: { Options: [item] } })).rejects.toThrow(SyntaxError)
+  for (const source of ['Options', '$root.options', '.options']) {
+    const template = await importAuthoredWorkbook(book => book.addWorksheet('Input').getCell('A1').value = `{value}{@choice:${source}; key=id; label=label}`)
+    const named = source === 'Options'
+    const data = named ? { value: null } : { value: null, options: [item] }
+    const options = named ? { dictionaries: { Options: [item] } } : {}
+    expect(() => resolveWorkbook(template, data, options)).toThrow(SyntaxError)
+    for (const render of [renderWorkbookForm, renderWorkbookReport]) {
+      await expect(render(template, data, options)).rejects.toThrow(SyntaxError)
+    }
+  }
   expect(getter).not.toHaveBeenCalled()
 })

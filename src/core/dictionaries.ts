@@ -7,9 +7,13 @@ export function isDictionaryName(value: unknown): value is string {
     && !['__proto__', 'constructor', 'prototype'].includes(value)
 }
 
-/** Object dictionaries are interpreted by each field's explicit key/label mapping. */
+/** Own application dictionaries before asynchronous workbook writing. */
 export function parseDictionaries(value: unknown): Dictionaries {
-  value = jsonSnapshot(value)
+  return validateDictionaryShape(jsonSnapshot(value))
+}
+
+/** The caller has already validated the JSON content; this check does not copy it. */
+export function validateDictionaryShape(value: unknown): Dictionaries {
   if (!isDataObject(value)) {
     throw new SyntaxError('Dictionaries must be an object of named lists')
   }
