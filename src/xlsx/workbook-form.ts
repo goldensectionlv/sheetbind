@@ -23,7 +23,7 @@ import { readWorkbookChoiceSources, writeWorkbookChoiceSources } from './workboo
 import { xlsxTextIssues } from './report-text'
 import { readFormValue } from './form-value'
 import { formCarrierDefinition, formDataFromMarkers, placeFormMarkers, readFormMarkers, writeFormMarkers } from './workbook-form-markers'
-import { writeWorkbookPackage } from './workbook-package'
+import { writeWorkbookPackage } from './workbook-source'
 import { TaggedXlsxError, withTemplateLocations } from './tagged-template'
 
 type ReadOptions = ValidationOptions

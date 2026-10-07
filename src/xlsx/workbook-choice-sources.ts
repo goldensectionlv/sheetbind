@@ -1,6 +1,6 @@
 import type { Workbook } from 'exceljs'
 import { parseDictionaries } from '../core/dictionaries'
-import { jsonSnapshot, parseJsonObject } from '../core/json'
+import { jsonSnapshot, assertJson, isDataObject } from '../core/json'
 import type { WorkbookChoiceSources } from '../form/workbook-choice-sources'
 import { WorkbookFormInputError } from '../form/workbook'
 import { formatAddress, parseRange, XLSX_MAX_COLUMN, XLSX_MAX_ROW } from './addresses'
@@ -53,11 +53,15 @@ export function readWorkbookChoiceSources(book: Workbook, sheetName: string): Om
       }
       text += value
     }
-    const payload = parseJsonObject(JSON.parse(text))
+    const payload: unknown = JSON.parse(text)
+    assertJson(payload)
+    if (!isDataObject(payload) || !isDataObject(payload.context) || payload.local !== undefined && !isDataObject(payload.local)) {
+      throw new Error('invalid source payload')
+    }
     if (Object.keys(payload).some(key => !['context', 'dictionaries', 'local'].includes(key))) {
       throw new Error('unknown source property')
     }
-    return { context: parseJsonObject(payload.context), dictionaries: parseDictionaries(payload.dictionaries), local: parseJsonObject(payload.local ?? {}) }
+    return { context: payload.context, dictionaries: parseDictionaries(payload.dictionaries), local: payload.local ?? {} }
   }
   catch {
     throw new WorkbookFormInputError({ phase: 'xlsx', code: 'choice-source', path: '$workbook', message: 'form dictionary source data is missing or malformed' })

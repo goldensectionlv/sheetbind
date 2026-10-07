@@ -46,9 +46,8 @@ export function issueWorkbookFormData(template: WorkbookDefinition, input: unkno
   return data
 }
 
-/** Only empty input lines are omitted; zero, false and partially filled records remain submitted. */
-export function readWorkbookRows(input: Readonly<Record<string, unknown>>, rows: readonly WorkbookFormRows[], invalid: readonly DataPath[] = []) {
-  const data = structuredClone(input) as Record<string, unknown>
+/** Compact privately owned decoded data; zero, false and partially filled records remain. */
+export function readWorkbookRows(data: Record<string, unknown>, rows: readonly WorkbookFormRows[], invalid: readonly DataPath[] = []) {
   const entered = new Set(invalid.flatMap(path => path.flatMap((part, index) => typeof part === 'number' ? [dataPath(path.slice(0, index + 1))] : [])))
   const collections = new Map<string, { path: DataPath, fields: DataPath[] }>()
   for (const row of rows) {

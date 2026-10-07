@@ -8,14 +8,6 @@ export function isDataObject(value: unknown): value is Record<string, unknown> {
   return prototype === Object.prototype || prototype === null
 }
 
-export function parseJsonObject(value: unknown): Record<string, unknown> {
-  assertJson(value)
-  if (!isDataObject(value)) {
-    throw new SyntaxError('Expected a JSON object')
-  }
-  return structuredClone(value)
-}
-
 /** Validate execution data without copying it or evaluating accessors. */
 export function assertInputData(value: unknown): asserts value is Record<string, unknown> {
   if (!isDataObject(value)) {

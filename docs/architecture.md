@@ -74,4 +74,4 @@ Choice decoding, empty-row handling and field validation share the final data pa
 - **Form structure and values are separate.** Uploaded values cannot redefine a region. Validation runs on the completed submission; comparison with stored business records belongs to the application.
 - **Locations are added at the format boundary.** Core issues contain data paths and node IDs. The XLSX adapter adds authored addresses to template errors and returned-file addresses to form issues.
 
-The relevant entry points are `xlsx/workbook-template.ts`, `grid/workbook-layout.ts`, `xlsx/workbook-form.ts`, `form/workbook-read.ts` and `xlsx/workbook-package.ts`. Keep concrete regression cases in tests; use the [development checks](./development.md) to verify the affected boundary.
+The relevant entry points are `xlsx/workbook-template.ts`, `grid/workbook-data.ts`, `grid/workbook-layout.ts`, `xlsx/workbook-form.ts`, `form/workbook-read.ts` and `xlsx/workbook-source.ts`. Keep concrete regression cases in tests; use the [development checks](./development.md) to verify the affected boundary.

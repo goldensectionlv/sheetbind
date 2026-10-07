@@ -1,4 +1,4 @@
-import { allowsChoiceInput, createChoiceResolver, selectedChoice, returnsObject } from '../core/choices'
+import { allowsChoiceInput, createChoiceResolver, returnsObject } from '../core/choices'
 import { equalJson, isDataObject } from '../core/json'
 import { validateList } from '../core/field-rules'
 import { isBlank } from '../core/validation'
@@ -60,13 +60,6 @@ export function readWorkbookFormFields(prepared: PreparedWorkbookForm, submissio
     }
     const rules = field.rules ?? {}
     const raw = readData(data, path)
-    const choices = decoded.choices.get(field)
-    if (rules.choice && !isBlank(raw) && choices && !allowsChoiceInput(rules.choice, choices)) {
-      const selected = selectedChoice(rules.choice, choices, raw)
-      if (!selected || returnsObject(rules.choice) && !equalJson(raw, selected.value)) {
-        issues.push({ phase: 'value', code: 'choice', message: 'select a value from the declared choice source', ...location })
-      }
-    }
     const issue = field.validate?.(raw, { root: data, current: readData(data, context) as Record<string, unknown>, path: location.path })
       ?? validateList(raw, rules, rules.list ? prepared.dictionaries[rules.list] as readonly string[] : undefined)
     if (issue) {
@@ -175,5 +168,5 @@ function decodeFormFields(prepared: PreparedWorkbookForm, submission: WorkbookFo
       writeData(data, field.path, raw)
     }
   }
-  return { data, choices, issues }
+  return { data, issues }
 }

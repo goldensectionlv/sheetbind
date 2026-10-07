@@ -98,7 +98,7 @@ export function resolveWorkbookData(template: WorkbookDefinition, data: unknown,
         choice = { items, key: blank ? null : typeof key === 'string' || typeof key === 'number' ? key : String(result.value) }
       }
     }
-    let resolved = scalar(result.value) ? result.value : structuredClone(result.value)
+    let resolved = result.value
     if (format && scalar(resolved)) {
       try {
         resolved = format(resolved)

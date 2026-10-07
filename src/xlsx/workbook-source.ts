@@ -1,4 +1,6 @@
-import type JSZip from 'jszip'
+import JSZip from 'jszip'
+import type { Workbook } from 'exceljs'
+import { prepareWorkbookCells, writeWorkbookStrings } from './workbook-cells'
 import type { WorkbookAxes } from '../grid/workbook-axis'
 import type { WorkbookCoordinates } from '../grid/workbook-coordinates'
 import type { FormulaRows } from '../grid/workbook-formula'
@@ -11,7 +13,7 @@ import { offsetWorkbookStrings, sourceWorksheet } from './source-worksheet'
 import { relocateSourceMetadata } from './source-metadata'
 import type { WorkbookCells } from './workbook-cells'
 import { appendXmlChildren, decodeXml, encodeXml, setXmlAttributes, setXmlElement, xmlAttributes, xmlElements } from './xml'
-import { decodeXstring, protect } from './report-text'
+import { decodeXstring, protect, escapeReportText } from './report-text'
 import { workbookParts } from './workbook-resources'
 
 export interface WorkbookSource {
@@ -22,7 +24,7 @@ export interface WorkbookSource {
   readonly coordinates: readonly WorkbookCoordinates[]
   readonly carriers?: ReadonlyMap<string, FormulaRows>
 }
-export interface GeneratedWorkbook {
+interface GeneratedWorkbook {
   readonly zip: JSZip
   readonly parts: Awaited<ReturnType<typeof workbookParts>>
   readonly cells: WorkbookCells
@@ -41,7 +43,7 @@ function sourceSheets(source: WorkbookSource, parts: GeneratedWorkbook['parts'])
 }
 
 /** Overlay rendered sheets; strings are committed by the package writer after all cells are emitted. */
-export async function preserveWorkbookSource(zip: JSZip, generated: GeneratedWorkbook, source: WorkbookSource): Promise<void> {
+async function preserveWorkbookSource(zip: JSZip, generated: GeneratedWorkbook, source: WorkbookSource): Promise<void> {
   const bindings = sourceSheets(source, await workbookParts(zip))
   const maps = new Map([...bindings.values()].map(binding => [binding.original.name.toLowerCase(), binding.coordinates]))
   const styles = await sourceStyles(zip, generated.zip)
@@ -123,4 +125,17 @@ function mergeWorkbookNames(workbook: string, generated: string, maps: ReadonlyM
     }
   }
   return setXmlElement(workbook, 'definedNames', names.length ? `<definedNames>${names.map(entry => entry.xml).join('')}</definedNames>` : '')
+}
+
+/** Apply resolved values and geometry to the source before the only compression pass. */
+export async function writeWorkbookPackage(workbook: Workbook, source: WorkbookSource): Promise<Buffer> {
+  const generated = await JSZip.loadAsync(await workbook.xlsx.writeBuffer({ zip: { compression: 'STORE' } }))
+  await escapeReportText(generated)
+  const original = await JSZip.loadAsync(source.source)
+  const inheritedStrings = xmlElements(await original.file('xl/sharedStrings.xml')?.async('string') ?? '', 'si')
+  const parts = await workbookParts(generated)
+  const cells = await prepareWorkbookCells(generated, inheritedStrings)
+  await preserveWorkbookSource(original, { zip: generated, parts, cells }, source)
+  await writeWorkbookStrings(original, cells.strings)
+  return original.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' })
 }

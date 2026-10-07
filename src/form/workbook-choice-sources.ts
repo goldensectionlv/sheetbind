@@ -31,7 +31,7 @@ export function workbookChoiceSources(template: WorkbookDefinition, data: unknow
     }
     else if (source.from === 'root') {
       const path = source.path.split('.')
-      writeData(context, path, structuredClone(readData(data, path) ?? []), true)
+      writeData(context, path, readData(data, path) ?? [], true)
     }
   }
   const local: Record<string, Record<string, readonly Readonly<Record<string, unknown>>[]>> = {}
