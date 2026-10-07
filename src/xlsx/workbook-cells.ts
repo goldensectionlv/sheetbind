@@ -10,9 +10,17 @@ import { appendXmlChildren, encodeXml, setXmlAttributes, setXmlElement, xmlAttri
 
 export type WorkbookCells = Awaited<ReturnType<typeof prepareWorkbookCells>>
 
+const defaultStyles = '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+  + '<fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts>'
+  + '<fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>'
+  + '<borders count="1"><border/></borders>'
+  + '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'
+  + '<cellXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/></cellXfs>'
+  + '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>'
+
 /** One writer owns shared strings and derived styles for all output cells. */
 export async function prepareWorkbookCells(zip: JSZip) {
-  const xml = await zip.file('xl/styles.xml')!.async('string')
+  const xml = await zip.file('xl/styles.xml')?.async('string') ?? defaultStyles
   const originals = xmlElements(xmlElements(xml, 'cellXfs')[0] ?? '', 'xf')
   const all = [...originals]
   const textStyles = new Map<number, number>()
@@ -67,28 +75,28 @@ export async function prepareWorkbookCells(zip: JSZip) {
   }
   return { content, style, textStyle,
     async save() {
-      if (all.length !== originals.length) {
-        zip.file('xl/styles.xml', setXmlElement(xml, 'cellXfs', `<cellXfs count="${all.length}">${all.join('')}</cellXfs>`))
+      if (all.length !== originals.length || !zip.file('xl/styles.xml')) {
+        await writeCellPart(zip, 'styles', setXmlElement(xml, 'cellXfs', `<cellXfs count="${all.length}">${all.join('')}</cellXfs>`))
       }
-      await writeWorkbookStrings(zip, strings)
+      if (strings.length) {
+        await writeCellPart(zip, 'sharedStrings', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" uniqueCount="${strings.length}">${strings.join('')}</sst>`)
+      }
     } }
 }
 
-/** Cells share one string table for the final package; no intermediate ZIP round-trip. */
-async function writeWorkbookStrings(zip: JSZip, strings: readonly string[]): Promise<void> {
-  if (!strings.length) {
-    return
-  }
-  const present = zip.file('xl/sharedStrings.xml') !== null
-  zip.file('xl/sharedStrings.xml', new TextEncoder().encode(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" uniqueCount="${strings.length}">${strings.join('')}</sst>`))
+/** Style and string tables are optional in the source package. */
+async function writeCellPart(zip: JSZip, part: 'styles' | 'sharedStrings', xml: string): Promise<void> {
+  const path = `xl/${part}.xml`
+  const present = zip.file(path) !== null
+  zip.file(path, new TextEncoder().encode(xml))
   if (present) {
     return
   }
   const relations = await zip.file('xl/_rels/workbook.xml.rels')!.async('string')
   const types = await zip.file('[Content_Types].xml')!.async('string')
-  const id = workbookRelationshipId(relations, 'sheetbindStrings')
-  zip.file('xl/_rels/workbook.xml.rels', appendXmlChildren(relations, 'Relationships', [`<Relationship Id="${id}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings" Target="sharedStrings.xml"/>`]))
-  zip.file('[Content_Types].xml', appendXmlChildren(types, 'Types', ['<Override PartName="/xl/sharedStrings.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"/>']))
+  const id = workbookRelationshipId(relations, part === 'styles' ? 'sheetbindStyles' : 'sheetbindStrings')
+  zip.file('xl/_rels/workbook.xml.rels', appendXmlChildren(relations, 'Relationships', [`<Relationship Id="${id}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/${part}" Target="${part}.xml"/>`]))
+  zip.file('[Content_Types].xml', appendXmlChildren(types, 'Types', [`<Override PartName="/${path}" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.${part}+xml"/>`]))
 }
 
 export function cellXml(address: string, content: ReturnType<WorkbookCells['content']>): string {

@@ -1,7 +1,7 @@
 import ExcelJS from 'exceljs'
 import JSZip from 'jszip'
 import { describe, expect, it, vi } from 'vitest'
-import { importWorkbookXlsx, renderWorkbookReport, renderWorkbookForm, resolveWorkbook, TaggedXlsxError, TemplateError } from '../src/index'
+import { importWorkbookXlsx, renderWorkbookReport, renderWorkbookForm, readWorkbookForm, resolveWorkbook, TaggedXlsxError, TemplateError } from '../src/index'
 import type { WorkbookTemplate } from '../src/index'
 import { openWorkbook as load, saveWorkbook } from './xlsx'
 
@@ -108,6 +108,29 @@ describe('imported XLSX ownership', () => {
 })
 
 describe('native XLSX preservation', () => {
+  it('renders a workbook without a style part and preserves form value types', async () => {
+    const book = new ExcelJS.Workbook()
+    book.addWorksheet('Input').addRow(['{code}{@validate:string}', '{amount}', '{enabled}', '{status}{@list:Statuses}'])
+    const zip = await JSZip.loadAsync(await saveWorkbook(book))
+    zip.remove('xl/styles.xml')
+    for (const path of ['xl/_rels/workbook.xml.rels', '[Content_Types].xml']) {
+      zip.file(path, (await zip.file(path)!.async('string')).replace(/<(?:Relationship|Override)\b[^>]*(?:\/styles"|\/styles.xml")[^>]*\/>/g, ''))
+    }
+    const source = await zip.generateAsync({ type: 'nodebuffer' })
+    const template = await importWorkbookXlsx(source)
+    const data = { code: '0007', amount: 12.5, enabled: false, status: 'Open' }
+    for (const render of [renderWorkbookReport, renderWorkbookForm]) {
+      const bytes = await render(template, data, { dictionaries: { Statuses: ['Open'] } })
+      const sheet = (await load(bytes)).getWorksheet('Input')!
+      expect(['A1', 'B1', 'C1', 'D1'].map(address => sheet.getCell(address).value)).toEqual(Object.values(data))
+      if (render === renderWorkbookForm) {
+        expect(sheet.getCell('A1').numFmt).toBe('@')
+        expect(await readWorkbookForm(await importWorkbookXlsx(source), bytes)).toEqual({ success: true, data })
+      }
+    }
+    expect(zip.file('xl/styles.xml')).toBeNull()
+  })
+
   it('preserves merged member formatting and blank styled cells', async () => {
     const book = new ExcelJS.Workbook()
     const sheet = book.addWorksheet('Merged')

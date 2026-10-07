@@ -6,6 +6,8 @@ Sheetbind reads unencrypted `.xlsx` templates and returns `.xlsx` files. Edit th
 
 Fonts, fills, borders, alignment, number formats, themes, row heights and column widths come from the template. A repeated region copies its formatting, including styled empty cells. Empty cells with notes, validation, conditional formatting or drawing anchors also participate in placement.
 
+A plain workbook without a style table is supported. Rendering adds the default styles needed for its output cells and form input formats.
+
 Content beside a repeat keeps the rows or columns it occupies. This can leave space between blocks of different sizes. A blank-looking cell or a gap does not by itself create a submitted record; form records follow the rules in [form reading](./forms.md).
 
 Merged cells inside a repeat follow their copy. A merge outside it can stretch across inserted rows or columns. Keep structural tags outside merged cells and follow the [region layout rules](./templates.md).
