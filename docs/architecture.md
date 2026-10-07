@@ -6,8 +6,8 @@ This page is for changes to Sheetbind itself. For template behavior and file sup
 
 | Directory | Responsibility | Does not own |
 | --- | --- | --- |
-| `src/core/` | Data references, contexts, repeats, field rules and choices | Cells, XLSX and file I/O |
-| `src/grid/` | Workbook definitions, rectangular regions, placement and formula references | XLSX serialization and application state |
+| `src/core/` | Data references, values, field rules and choices | Cells, XLSX and file I/O |
+| `src/grid/` | Workbook definitions, region contexts and repeats, placement and formula references | XLSX serialization and application state |
 | `src/form/` | Input fields, submitted records, choice decoding and validation | Reading or writing Excel cells |
 | `src/xlsx/` | Tag import, source XLSX content, file writing and form structure in the workbook | Application data loading or business workflows |
 
@@ -31,7 +31,7 @@ Data + dictionaries ---------+
 
 Import compiles tags into a `WorkbookDefinition`, validates region ownership and retains the source file in `WorkbookTemplate`. Formatting and native Excel features stay in the XLSX package instead of being reconstructed as a second style model.
 
-Execution checks the field declarations and dictionary dependencies before expanding repeats, including empty ones. It does not look up or execute validation handlers. The grid builds row and column plans; values, formulas, sheet settings and native content use those plans to find their output positions. The XLSX writer combines placed values with the retained source content.
+Execution resolves values and expands regions directly from the workbook definition, retaining their definitions and concrete data paths. There is no separate generic operation tree or identity translation. Field declarations and dictionary dependencies are checked before expanding repeats, including empty ones. Execution does not look up or execute validation handlers. The grid builds row and column plans; values, formulas, sheet settings and native content use those plans to find their output positions. The XLSX writer combines placed values with the retained source content.
 
 Form issuance uses the same placement and writing path. It prepares editable fields, permits blank required values and adds the structure needed to recognize records when reading. Its hidden rows participate in coordinate mapping before formulas and other references are written.
 

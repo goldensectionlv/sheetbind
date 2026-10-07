@@ -1,0 +1,84 @@
+import { expect, it } from 'vitest'
+import { resolveWorkbook, renderWorkbookReport } from '../src/index'
+import type { WorkbookTemplate } from '../src/index'
+import { importAuthoredWorkbook, openWorkbook } from './xlsx'
+
+const scalarTemplate = await importAuthoredWorkbook(book => book.addWorksheet('Values').getCell('A1').value = '{input}')
+const repeatTemplate = await importAuthoredWorkbook(book => book.addWorksheet('Values').addRows([
+  ['Header'], ['{#items}'], ['{.name}'], ['{/items}'], ['End'],
+]))
+function values(template: WorkbookTemplate, data: unknown) {
+  return resolveWorkbook(template, data).sheets[0].cells.map(cell => 'literal' in cell.value ? cell.value.literal : cell.value)
+}
+
+it.each(['00123', '=SUM(A1:A2) {value}', '_x0041_', '', 0, false, null])('preserves scalar %j through XLSX', async input => {
+  expect(values(scalarTemplate, { input })).toEqual([input])
+  const book = await openWorkbook(await renderWorkbookReport(scalarTemplate, { input }))
+  expect(book.worksheets[0].getCell('A1').value).toBe(input)
+})
+
+it.each([{}, [], NaN, Infinity, new Date()])('rejects undeclared structured or nonfinite values %#', input => {
+  expect(() => values(scalarTemplate, { input })).toThrow()
+})
+
+it.each([{}, { items: null }, { items: [] }])('keeps siblings around an absent or empty repeat %#', data => {
+  expect(values(repeatTemplate, data)).toEqual(['Header', 'End'])
+})
+
+it.each([{}, 1, '', false])('does not reinterpret an invalid collection as empty %#', items => {
+  expect(() => values(repeatTemplate, { items })).toThrow('repeat source must be an array')
+})
+
+it.each([{ items: [null] }, { items: [1] }, { items: Array(1) }])('rejects malformed and sparse collection items %#', ({ items }) => {
+  expect(() => values(repeatTemplate, { items })).toThrow()
+})
+
+it('does not fall back to a parent when the current field is absent', async () => {
+  expect(() => values(repeatTemplate, { name: 'Wrong', items: [{}] })).toThrow('source is missing')
+  const optional = await importAuthoredWorkbook(book => book.addWorksheet('Values').addRows([
+    ['{#items}'], ['{?.name}'], ['{/items}'],
+  ]))
+  expect(values(optional, { name: 'Wrong', items: [{}] })).toEqual([null])
+})
+
+it.each([{}, { details: null }])('keeps object scopes strict when their source is absent %#', async data => {
+  const template = await importAuthoredWorkbook(book => book.addWorksheet('Scope').addRows([
+    ['{#with details}'], ['{.name}'], ['{/with}'],
+  ]))
+  expect(() => values(template, data)).toThrow()
+})
+
+it('composes scopes, nested repeats and explicit root access with concrete origins', async () => {
+  const template = await importAuthoredWorkbook(book => book.addWorksheet('Nested').addRows([
+    ['{#items}'], ['{$root.title}'], ['{#with .details}'], ['{.code}'], ['{/with}'],
+    ['{#notes}'], ['{.text}'], ['{/notes}'], ['{/items}'],
+  ]))
+  const data = { title: 'Overview', items: [{ details: { code: '001' }, notes: [{ text: 'Ready' }, { text: 'Next' }] }] }
+  expect(values(template, data)).toEqual(['Overview', '001', 'Ready', 'Next'])
+  const cell = resolveWorkbook(template, data).sheets[0].cells.at(-1)!
+  expect(cell.origin).toMatchObject({ nodeId: cell.definitionId, dataPath: '$data.items[0].notes[1].text', iterations: [{ index: 0 }, { index: 1 }] })
+  expect(cell.contextPath).toBe('$data.items[0].notes[1]')
+})
+
+it('validates bindings inside empty repeats when importing the template', async () => {
+  await expect(importAuthoredWorkbook(book => book.addWorksheet('Unsafe').addRows([
+    ['{#items}'], ['{.constructor.name}'], ['{/items}'],
+  ]))).rejects.toThrow()
+})
+
+it('supports null-prototype objects without accepting inherited values', () => {
+  expect(values(scalarTemplate, Object.assign(Object.create(null), { input: 'Own' }))).toEqual(['Own'])
+  expect(() => values(scalarTemplate, Object.create({ input: 'Inherited' }))).toThrow()
+})
+
+it('returns independent geometry and replays without changing template or input', () => {
+  const data = { items: [{ name: 'Atlas' }, { name: 'Beacon' }] }
+  const snapshot = structuredClone(data)
+  const first = resolveWorkbook(repeatTemplate, data)
+  const second = resolveWorkbook(repeatTemplate, data)
+  expect(second).toEqual(first)
+  Object.assign(first.sheets[0].cells[1].at, { row: 999 })
+  expect(first.sheets[0].cells[2].at.row).toBe(3)
+  expect(resolveWorkbook(repeatTemplate, data)).toEqual(second)
+  expect(data).toEqual(snapshot)
+})

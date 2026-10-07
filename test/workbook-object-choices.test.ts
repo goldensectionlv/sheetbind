@@ -5,7 +5,6 @@ import { resolveWorkbook, renderWorkbookReport } from '../src/xlsx/workbook-temp
 import { readWorkbookForm, renderWorkbookForm } from '../src/xlsx/workbook-form'
 import { workbookChoiceRange } from '../src/xlsx/workbook-choice-fields'
 import { createChoiceResolver } from '../src/core/choices'
-import { instantiate } from '../src/core/template'
 import { saveWorkbook, editExample, importAuthoredWorkbook } from './xlsx'
 import { parseRange } from '../src/xlsx/addresses'
 
@@ -151,8 +150,6 @@ it('requires valid embedded source data and does not fall back to guessing by la
 it('keeps numeric transport precision out of core and rejects ambiguous or malformed object rules', async () => {
   const rule = { source: { dictionary: 'options' }, key: 'id', label: 'name' }
   const value = { id: 1234567890123456, name: 'Long key' }
-  const resolved = instantiate({ type: 'value', id: 'choice', value: { path: 'selected' }, rules: { validation: [{ rule: 'object' }], choice: rule } }, { selected: value }, { dictionaries: { options: [value] } })
-  expect(resolved).toMatchObject({ value })
   const config = await importAuthoredWorkbook(book => {
     book.addWorksheet('Choice').getCell('A1').value = '{category}{@validate:object}{@choice:options; key=id; label=name}'
   })
@@ -236,8 +233,8 @@ it('reads a form whose only object choices are inside an empty repeat', async ()
 it('leaves repeated labels unchanged in core without imposing workbook display constraints', () => {
   const choice = { source: { dictionary: 'options' }, key: 'id', label: 'name' }
   const options = [{ id: 'a', name: 'One' }, { id: 'b', name: 'One' }, { id: 'c', name: 'One [a]' }]
-  const result = instantiate({ type: 'value', id: 'selected', value: { path: 'selected' }, rules: { choice } }, { selected: options[0] }, { dictionaries: { options } })
-  expect(result).toMatchObject({ value: options[0], choice: { key: 'a', items: [{ label: 'One' }, { label: 'One' }, { label: 'One [a]' }] } })
+  const result = createChoiceResolver()(choice, {}, {}, { options })
+  expect(result).toMatchObject([{ label: 'One' }, { label: 'One' }, { label: 'One [a]' }])
 })
 
 it('shares sources when two sheets show different fields of the same records', async () => {

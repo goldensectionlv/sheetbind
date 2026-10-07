@@ -58,7 +58,7 @@ export default defineConfig(
   },
   {
     files: ['src/grid/workbook*.ts'],
-    rules: { 'no-restricted-imports': ['error', { patterns: [{ regex: '^(?!\\./(?:geometry|workbook-choice-display|workbook(?:-[a-z]+)*)$|\\.\\./core/(?:template|json|reference|field-rules|validation|rule-syntax|dictionaries|choices)$)', message: 'Workbook layout depends on core and grid, not XLSX or UI.' }] }] },
+    rules: { 'no-restricted-imports': ['error', { patterns: [{ regex: '^(?!\\./[a-z-]+$|\\.\\./core/[a-z-]+$)', message: 'Workbook layout depends on core and grid, not XLSX or UI.' }] }] },
   },
   {
     files: ['src/form/**/*.ts'],
