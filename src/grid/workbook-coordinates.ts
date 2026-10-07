@@ -2,8 +2,8 @@ import type { GridAddress, GridRange } from './geometry'
 import { mapAxis } from './workbook-axis'
 import type { WorkbookAxes } from './workbook-axis'
 import { FormulaEdge } from './workbook-formula'
-import { workbookRegions, WORKBOOK_LIMITS } from './workbook'
-import type { WorkbookBody, WorkbookRegionView } from './workbook'
+import { WORKBOOK_LIMITS } from './workbook'
+import type { WorkbookRegionView } from './workbook'
 
 export type WorkbookIndexes = ReadonlyMap<string, number>
 const root: WorkbookIndexes = new Map()
@@ -73,8 +73,7 @@ function mergeRanges(ranges: GridRange[]): GridRange[] {
   return ranges
 }
 
-export function workbookCoordinates(body: WorkbookBody, axes: WorkbookAxes, instances: ReadonlyMap<string, readonly WorkbookIndexes[]>) {
-  const regions = workbookRegions(body)
+export function workbookCoordinates(regions: readonly WorkbookRegionView[], axes: WorkbookAxes, instances: ReadonlyMap<string, readonly WorkbookIndexes[]>) {
   const contexts = (owner?: WorkbookRegionView) => owner ? instances.get(owner.id) ?? [] : [root]
   return {
     points(at: GridAddress): GridAddress[] {

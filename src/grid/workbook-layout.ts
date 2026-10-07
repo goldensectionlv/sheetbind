@@ -5,7 +5,7 @@ import type { FieldRules } from '../core/field-rules'
 import type { GridAddress, GridOffset } from './geometry'
 import type { WorkbookChoice } from '../core/choices'
 import { workbookCells, workbookRegions, workbookRows, workbookIssue, WORKBOOK_LIMITS } from './workbook'
-import type { WorkbookCell, WorkbookSheet, WorkbookDefinition, WorkbookRow, WorkbookColumn } from './workbook'
+import type { WorkbookCell, WorkbookSheet, WorkbookDefinition, WorkbookRow, WorkbookColumn, WorkbookRegionView } from './workbook'
 import { mapWorkbookPrint } from './workbook'
 import type { WorkbookPrint } from './workbook'
 import type { WorkbookFormula } from './workbook-formula'
@@ -53,6 +53,7 @@ export interface WorkbookSheetPlan {
   readonly coordinates: WorkbookCoordinates
   readonly extent: { readonly rows: number, readonly columns: number }
   readonly authored: ReadonlyMap<string, WorkbookCell>
+  readonly regions: ReadonlyMap<string, WorkbookRegionView>
 }
 export interface WorkbookPlan { readonly sheets: readonly WorkbookSheetPlan[] }
 
@@ -72,7 +73,8 @@ export function placeWorkbookSheet(sheet: WorkbookSheet, group: WorkbookData): W
   const axes = planWorkbookAxes(group)
   const extent = { rows: 0, columns: 0 }
   const authored = new Map(workbookCells(sheet).map(cell => [cell.id, cell]))
-  const views = new Map(workbookRegions(sheet).map(region => [region.id, region]))
+  const regions = workbookRegions(sheet)
+  const views = new Map(regions.map(region => [region.id, region]))
   const instances = new Map<string, WorkbookIndexes[]>()
   function placeCells(body: WorkbookData, indexes: WorkbookIndexes): WorkbookPlacedCell[] {
     const suffix = JSON.stringify(body.iterations) + ']'
@@ -157,7 +159,7 @@ export function placeWorkbookSheet(sheet: WorkbookSheet, group: WorkbookData): W
     }
   }
   const placed = { id: sheet.id, name: sheet.name, state: sheet.state, ...(print ? { print } : {}), rows, columns, cells: cells.sort((a, b) => a.at.row - b.at.row || a.at.column - b.at.column) }
-  return { definition: sheet, data: group, sheet: placed, axes, coordinates: workbookCoordinates(sheet, axes, instances), authored, extent }
+  return { definition: sheet, data: group, sheet: placed, axes, coordinates: workbookCoordinates(regions, axes, instances), authored, regions: views, extent }
 }
 
 function placeSettings<T extends { readonly index: number }>(settings: readonly T[], axis: AxisPlan, limit: number): T[] {

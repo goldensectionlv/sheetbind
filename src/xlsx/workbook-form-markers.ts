@@ -5,8 +5,8 @@ import { referencePath, dataPath } from './form-records'
 import type { Origin } from '../core/template'
 import { isWorkbookFormRow, workbookFormRowFields } from './form-records'
 import type { WorkbookFormRows } from './form-records'
-import type { WorkbookBody, WorkbookRegionView, WorkbookDefinition } from '../grid/workbook'
-import { workbookCells, workbookRegions, WORKBOOK_LIMITS } from '../grid/workbook'
+import type { WorkbookBody, WorkbookDefinition } from '../grid/workbook'
+import { WORKBOOK_LIMITS } from '../grid/workbook'
 import { mapWorkbookPrint } from '../grid/workbook'
 import type { WorkbookPlan } from '../grid/workbook-layout'
 import { placeWorkbookSheet } from '../grid/workbook-layout'
@@ -28,14 +28,12 @@ interface FormMarker { readonly row: number, readonly token: FormMarkerToken }
 export interface FormMarkers { readonly column: number, readonly rows: readonly FormMarker[] }
 interface FormCarrierDefinition {
   readonly numbers: ReadonlyMap<string, number>
-  readonly regions: ReadonlyMap<string, WorkbookRegionView>
   readonly sheets: ReadonlySet<string>
 }
 
 export function formCarrierDefinition(template: WorkbookDefinition): FormCarrierDefinition {
-  const sheets = new Set(template.sheets.filter(sheet => sheet.regions?.length || workbookCells(sheet).some(cell => 'path' in cell.value)).map(sheet => sheet.name))
+  const sheets = new Set(template.sheets.filter(sheet => sheet.regions?.length || sheet.cells.some(cell => 'path' in cell.value)).map(sheet => sheet.name))
   const numbers = new Map<string, number>()
-  const regions = new Map(template.sheets.flatMap(sheet => workbookRegions(sheet).map(region => [region.id, region] as const)))
   let serial = 0
   const visit = (source: WorkbookBody): void => {
     for (const region of [...source.regions ?? []].sort((a, b) => a.row - b.row)) {
@@ -44,7 +42,7 @@ export function formCarrierDefinition(template: WorkbookDefinition): FormCarrier
     }
   }
   template.sheets.filter(sheet => sheets.has(sheet.name)).sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0).forEach(visit)
-  return { numbers, regions, sheets }
+  return { numbers, sheets }
 }
 
 /** Hidden rows delimit the current structure without retaining issued counts or record identities. */
@@ -52,7 +50,7 @@ export function placeFormMarkers(plan: WorkbookPlan, definition: FormCarrierDefi
   const markers = new Map<string, FormMarkers>()
   const formulaRows = new Map<string, FormulaRows>()
   const placed: WorkbookPlan = { sheets: plan.sheets.map(source => {
-    const { sheet, data, axes, extent } = source
+    const { sheet, data, axes, extent, regions } = source
     if (!definition.sheets.has(sheet.name)) {
       return source
     }
@@ -60,7 +58,7 @@ export function placeFormMarkers(plan: WorkbookPlan, definition: FormCarrierDefi
     const indexes = (body: WorkbookData) => new Map(body.iterations.map(item => [item.nodeId, item.index]))
     const visit = (body: WorkbookData): void => {
       for (const node of [...body.regions].sort((a, b) => a.definition.row - b.definition.row)) {
-        const region = definition.regions.get(node.definition.id)!
+        const region = regions.get(node.definition.id)!
         const id = definition.numbers.get(region.id)!
         let end = placeWorkbookRegion(axes, region, indexes(body)).row
         events.push({ row: end, token: [FormMarkerKind.Repeat, id] })
