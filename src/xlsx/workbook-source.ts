@@ -33,7 +33,7 @@ export async function writeWorkbookPackage(source: WorkbookSource): Promise<Buff
   const parts = await workbookParts(zip)
   const originals = new Map([...parts.values()].map(part => [part.part, part]))
   const bindings = source.plan.sheets.map(plan => ({
-    original: originals.get(plan.definition.xlsx!.part)!,
+    original: originals.get(plan.definition.xlsx.part)!,
     output: plan.sheet,
     coordinates: sourceCoordinates(plan, source.form?.rows.get(plan.sheet.name.toLowerCase())),
   }))

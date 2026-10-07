@@ -106,7 +106,7 @@ export async function importWorkbookXlsx(bytes: Uint8Array): Promise<WorkbookTem
       const value = field?.expression ?? (formula === undefined ? { literal } : { formula })
       target.push({ id: createId('cell'), at: { row: owner ? index - owner.row + 1 : index, column: column - (owner ? owner.node.column - 1 : 0) },
         size: { rows: range ? compiled.authoredRow(range.end.row, FormulaEdge.End)! - index + 1 : 1, columns: range ? range.end.column - range.start.column + 1 : 1 },
-        value, xlsx: { part, address: cell.address, value: field && 'literal' in field.expression ? { literal: scalar } : value },
+        value, xlsx: { address: cell.address, value: field && 'literal' in field.expression ? { literal: scalar } : value },
         ...(field?.rules ? { rules: field.rules } : {}) })
       sourceCells.push(cell.address)
     }
@@ -243,7 +243,7 @@ export function inspectWorkbookTemplate(template: WorkbookTemplate, options: { r
   const known = options.dictionaries && new Set(options.dictionaries)
   for (const sheet of WorkbookTemplate.content(template).definition.sheets) {
     for (const cell of workbookCells(sheet)) {
-      const location = { phase: 'template' as const, nodeId: cell.id, path: cell.xlsx?.address ?? cell.id, sheetName: sheet.name, address: cell.xlsx?.address }
+      const location = { phase: 'template' as const, nodeId: cell.id, path: cell.xlsx.address, sheetName: sheet.name, address: cell.xlsx.address }
       if (cell.rules?.format) {
         try {
           prepareFormatting(cell.rules.format)

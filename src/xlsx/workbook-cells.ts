@@ -120,7 +120,7 @@ export function cellXml(address: string, content: ReturnType<WorkbookCells['cont
 
 /** Emit each row once, retaining carrier cells, merged edges and unowned source cells. */
 export function worksheetCells(sheet: WorkbookPlacedSheet, render: (cell: WorkbookPlacedCell, address: string) => string,
-  source?: { rows: ReadonlyMap<number, string>, cells: ReadonlyMap<number, ReadonlyMap<number, string>> }) {
+  source: { rows: ReadonlyMap<number, string>, cells: ReadonlyMap<number, ReadonlyMap<number, string>> }) {
   const settings = new Map((sheet.rows ?? []).map(row => [row.index, row]))
   const definitions = new Map<number, WorkbookPlacedCell[]>()
   const columns = new Map<number, string>()
@@ -139,14 +139,14 @@ export function worksheetCells(sheet: WorkbookPlacedSheet, render: (cell: Workbo
     bounds.end.row = Math.max(bounds.end.row, cell.at.row + cell.size.rows - 1)
     bounds.end.column = Math.max(bounds.end.column, cell.at.column + cell.size.columns - 1)
   }
-  const rows = [...new Set([...settings.keys(), ...definitions.keys(), ...source?.rows.keys() ?? [], ...source?.cells.keys() ?? []])].sort((a, b) => a - b).map(index => {
-    let head = source?.rows.get(index) ?? `<row r="${index}"/>`
+  const rows = [...new Set([...settings.keys(), ...definitions.keys(), ...source.rows.keys(), ...source.cells.keys()])].sort((a, b) => a - b).map(index => {
+    let head = source.rows.get(index) ?? `<row r="${index}"/>`
     const setting = settings.get(index)
     if (setting) {
       head = setXmlAttributes(head, { ht: setting.height, customHeight: setting.height === undefined ? undefined : 1, hidden: setting.hidden ? 1 : undefined })
     }
     head = setXmlAttributes(head, { spans: undefined }).replace(/\/>$/, '>')
-    const extra = [...source?.cells.get(index) ?? []].sort(([a], [b]) => a - b)
+    const extra = [...source.cells.get(index) ?? []].sort(([a], [b]) => a - b)
     bounds.end.row = Math.max(bounds.end.row, index)
     bounds.end.column = Math.max(bounds.end.column, extra.at(-1)?.[0] ?? 1)
     const values: string[] = []

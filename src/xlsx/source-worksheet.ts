@@ -27,12 +27,7 @@ export function sourceWorksheet(xml: string, options: {
   const sourceRows = new Map<number, string>()
   const extra = new Map<number, Map<number, string>>()
   const originals = new Map<string, ReturnType<typeof sourceCell>>()
-  const owned = new Set<string>()
-  for (const cell of output.cells) {
-    if (cell.xlsx && cell.xlsx.part === map.part) {
-      owned.add(cell.xlsx.address)
-    }
-  }
+  const owned = new Set(output.cells.map(cell => cell.xlsx.address))
   for (const row of xmlElements(xmlElements(xml, 'sheetData')[0] ?? '', 'row')) {
     const index = Number(xmlAttributes(row.split('>')[0]).r)
     for (const target of map.rows(index)) {
@@ -63,7 +58,7 @@ export function sourceWorksheet(xml: string, options: {
   }
   const rows = worksheetCells(output, (definition, address) => {
     const content = writer.content('formula' in definition.value ? definition.value : definition.choice ? definition.choice.text : definition.value.literal)
-    const original = definition.xlsx && definition.xlsx.part === map.part ? originals.get(definition.xlsx.address) : undefined
+    const original = originals.get(definition.xlsx.address)
     return original ? original.render(address, content.type, definition, content.body) : cellXml(address, { ...content, style: writer.style(0) })
   }, { rows: sourceRows, cells: extra })
   const merges = output.cells.filter(cell => cell.size.rows > 1 || cell.size.columns > 1).map(cell =>
@@ -84,7 +79,7 @@ function sourceCell(xml: string, map: SourceCoordinates, maps: ReadonlyMap<strin
   const body = xmlBody(xml)
   const variants = new Map<string, string>()
   function render(address: string, type: string | undefined, definition: WorkbookPlacedCell, content: string): string {
-    const before = definition.xlsx!.value
+    const before = definition.xlsx.value
     const unchanged = 'literal' in definition.value && 'literal' in before && before.literal === definition.value.literal
     if (unchanged) {
       type = attributes.t

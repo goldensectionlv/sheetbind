@@ -13,7 +13,7 @@ export interface WorkbookCell {
   readonly value: WorkbookValue
   readonly rules?: FieldRules
   /** Original XLSX cell; the adapter preserves content outside the supported model. */
-  readonly xlsx?: { readonly part: string, readonly address: string, readonly value: WorkbookValue }
+  readonly xlsx: { readonly address: string, readonly value: WorkbookValue }
 }
 export interface WorkbookRow { readonly index: number, readonly height?: number, readonly hidden?: boolean }
 export interface WorkbookColumn { readonly index: number, readonly width?: number, readonly hidden?: boolean }
@@ -29,7 +29,7 @@ export interface WorkbookBody {
 export interface WorkbookRegion extends WorkbookBody {
   readonly id: string
   /** Authored opening marker, retained for adapter diagnostics. */
-  readonly xlsx?: { readonly address: string }
+  readonly xlsx: { readonly address: string }
   readonly type: 'scope' | 'repeat'
   readonly source: DataReference
   readonly row: number
@@ -44,7 +44,7 @@ export interface WorkbookSheet extends WorkbookBody {
   readonly state?: 'visible' | 'hidden' | 'veryHidden'
   readonly columns?: readonly WorkbookColumn[]
   readonly print?: WorkbookPrint
-  readonly xlsx?: { readonly part: string, readonly markers: readonly number[], readonly cells: readonly string[] }
+  readonly xlsx: { readonly part: string, readonly markers: readonly number[], readonly cells: readonly string[] }
 }
 /** Internal bindings and placement compiled from a workbook. */
 export interface WorkbookDefinition { readonly sheets: readonly WorkbookSheet[] }

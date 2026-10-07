@@ -9,7 +9,7 @@ import type { GridAddress, GridRange } from '../grid/geometry'
 /** Source XLSX coordinates to final XLSX coordinates, including tag removal and form control rows. */
 export interface SourceCoordinates {
   readonly name: string
-  readonly part?: string
+  readonly part: string
   readonly row: (position: number, edge?: FormulaEdge) => number | undefined
   readonly rows: (position: number) => readonly number[]
   readonly column: (position: number, edge?: FormulaEdge) => number | undefined
@@ -27,16 +27,14 @@ export interface SourceCoordinates {
 /** One source-to-output coordinate transform for cells and coordinate-bearing Excel metadata. */
 export function sourceCoordinates(plan: WorkbookSheetPlan, carrier?: FormulaRows): SourceCoordinates {
   const { definition: source, sheet: output, axes, coordinates } = plan
-  const markers = source.xlsx?.markers ?? []
-  const cells = new Map<string, GridAddress[]>(source.xlsx?.cells.map(address => [address, []]) ?? [])
+  const markers = source.xlsx.markers
+  const cells = new Map<string, GridAddress[]>(source.xlsx.cells.map(address => [address, []]))
   const addresses = new Map<string, string[]>()
   const ranges = new Map<string, readonly GridRange[]>()
   for (const cell of output.cells) {
-    if (cell.xlsx && cell.xlsx.part === source.xlsx?.part) {
-      const positions = cells.get(cell.xlsx.address) ?? []
-      positions.push(cell.at)
-      cells.set(cell.xlsx.address, positions)
-    }
+    const positions = cells.get(cell.xlsx.address) ?? []
+    positions.push(cell.at)
+    cells.set(cell.xlsx.address, positions)
   }
   const authored = (row: number, edge: FormulaEdge) => row - markers.filter(marker => edge === FormulaEdge.End ? marker <= row : marker < row).length
   function row(position: number, edge = FormulaEdge.Cell): number | undefined {
@@ -134,7 +132,7 @@ export function sourceCoordinates(plan: WorkbookSheetPlan, carrier?: FormulaRows
     }
     return result
   }
-  return { name: output.name, part: source.xlsx?.part, row, rows, column, columns, point: address => points(address)[0], points, range, references }
+  return { name: output.name, part: source.xlsx.part, row, rows, column, columns, point: address => points(address)[0], points, range, references }
 }
 
 /** Excel formula syntax stays opaque; only local A1 references are relocated. */

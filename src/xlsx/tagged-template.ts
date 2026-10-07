@@ -37,7 +37,7 @@ export function withTemplateLocations<T>(template: WorkbookDefinition, run: () =
     }
     const locations = new Map(template.sheets.flatMap(sheet => [
       ...workbookCells(sheet), ...workbookRegions(sheet),
-    ].map(node => [node.id, { sheetName: sheet.name, address: node.xlsx?.address }] as const)))
+    ].map(node => [node.id, { sheetName: sheet.name, address: node.xlsx.address }] as const)))
     throw new TaggedXlsxError(error.issues.map(issue => ({ ...issue, ...locations.get(issue.nodeId) })), { cause: error })
   }
 }

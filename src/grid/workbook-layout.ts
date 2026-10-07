@@ -41,7 +41,7 @@ export interface WorkbookLayout {
 }
 
 /** Internal placement retains the source references needed by the XLSX writer. */
-export interface WorkbookPlacedCell extends WorkbookCellInstance { readonly xlsx?: WorkbookCell['xlsx'] }
+export interface WorkbookPlacedCell extends WorkbookCellInstance { readonly xlsx: WorkbookCell['xlsx'] }
 export interface WorkbookPlacedSheet extends Pick<WorkbookSheet, 'id' | 'name' | 'state' | 'rows' | 'columns' | 'print'> { readonly cells: readonly WorkbookPlacedCell[] }
 
 /** A sheet and its geometry travel together through every placement stage. */

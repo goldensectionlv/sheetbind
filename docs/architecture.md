@@ -1,60 +1,43 @@
 # Architecture
 
-This page is for changes to Sheetbind itself. For template behavior and file support, see [templates](./templates.md), [forms](./forms.md) and [Excel and limitations](./xlsx.md).
+This page describes Sheetbind's implementation. For user-facing behavior, see [templates](./templates.md), [forms](./forms.md) and [Excel and limitations](./xlsx.md).
 
-Sheetbind targets XLSX. DOCX and other formats are outside its architectural requirements. The directories below group current library tasks; they do not define a universal document core with pluggable format implementations.
+Sheetbind is one package for XLSX reports and editable forms. Its public entry point is `src/index.ts`; templates enter through `importWorkbookXlsx`.
 
 ## Modules
 
-| Directory | Responsibility | Does not own |
-| --- | --- | --- |
-| `src/core/` | Data paths, values, field rules and choice labels | Worksheet traversal and file I/O |
-| `src/grid/` | Workbook model, XLSX coordinates and limits, repeats, placement and formula references | Reading and writing package parts |
-| `src/xlsx/` | Template import, reports, form issuance and reading, native content preservation | Application data loading or business workflows |
+| Directory | Responsibility |
+| --- | --- |
+| `src/core/` | Data paths, values, field rules, formatters, validation and choice labels |
+| `src/grid/` | Workbook definitions, XLSX coordinates and limits, repeats, placement and formula references |
+| `src/xlsx/` | Template import, reports, form issuance and reading, native content preservation |
 
-`src/index.ts` defines the public package API. An internal export does not become public automatically. ESLint separates value rules and geometry from file reading and writing. Forms belong to XLSX and have no separate format-independent layer.
+ESLint keeps value rules and geometry independent of file I/O. The main entry files are `xlsx/workbook-template.ts`, `grid/workbook-data.ts`, `grid/workbook-layout.ts`, `xlsx/workbook-form.ts` and `xlsx/workbook-source.ts`.
 
-Template import, storage and inspection live in `xlsx/workbook-template.ts`; form issuance and reading live in `xlsx/workbook-form.ts`. Field preparation is in `xlsx/form-definition.ts`, and record operations are in `xlsx/form-records.ts`. `xlsx/workbook-lists.ts` owns the hidden worksheet: dropdowns, dictionary ranges referenced by formulas, and saved form sources with their reader. Separate files for axes, formulas, markers and native XLSX parts correspond to distinct algorithms.
+Form field preparation lives in `xlsx/form-definition.ts`, record operations in `xlsx/form-records.ts`, and structural boundaries in `xlsx/workbook-form-markers.ts`. `xlsx/workbook-lists.ts` writes dropdowns, dictionary ranges and saved form sources, and reads those sources back. Files for axes, formulas and native XLSX parts each own their algorithm. Internal exports are private unless exposed by `src/index.ts`.
 
-## Models and ownership
+## Data and ownership
 
-The workbook model and its ownership and geometry checks live together in `grid/workbook.ts`.
+| Representation | Contents and consumers |
+| --- | --- |
+| Source XLSX inside `WorkbookTemplate` | Original formatting and native Excel features; the writer preserves unaffected package content |
+| `WorkbookDefinition` | Bindings, regions, geometry and required source references; used by execution, forms and diagnostics |
+| `WorkbookData` | Expanded values and repeat instances with concrete data paths; shared by axes, placement and form boundaries during one call |
+| `WorkbookPlan` | Sheet plans with their definition, data, placed cells, axes, regions and coordinate mapping; used by formulas, markers and writing |
+| Public `WorkbookLayout` | An independent readonly view returned by `resolveWorkbook` |
 
-The library has three operations: rendering a report, issuing a form and reading a completed form. They share bindings and placement but differ in where values come from and which checks apply. `core` contains value rules; workbook region execution belongs to `grid`.
+The sheet definition owns its source package path. Cells retain authored addresses and expressions. Source XML may omit a cell synthesized during import, so writing handles an absent physical cell.
 
-| Representation | Contents | Consumers |
-| --- | --- | --- |
-| Source XLSX inside `WorkbookTemplate` | Formatting and native Excel features | The writer retains source package parts and changes affected fragments |
-| `WorkbookDefinition` | Template bindings, regions and geometry with source cell references | Data resolution, placement, form preparation and diagnostics |
-| `WorkbookData` | Values and repeat instances with concrete data paths | Axis planning, placement and form boundaries; exists only for the current call |
-| `WorkbookPlan` | Sheet plans containing the definition, shared repeat instances, placed cells, axes and coordinate mapping | Formulas, form control rows and the XLSX writer |
+Each `WorkbookSheetPlan` carries a sheet and its geometry together. Definitions and axes use logical coordinates; placed cells receive final positions and formulas. XLSX mapping accounts for removed tag rows and inserted form control rows. Native ranges, formulas and form boundaries reuse these mappings.
 
-`WorkbookLayout`, returned by `resolveWorkbook`, is an independent public projection of placed cells. It is a consumer result rather than another editable template. The public entry into the current model is tagged XLSX import.
+Dictionary input is copied and validated at the operation boundary. Choice projections borrow validated records. Public layouts copy option values; form reading copies selected objects into independent fields. Missing named dictionaries warn once per name per call and leave ordinary input. Supplied sources retain their checks.
 
-Within `WorkbookPlan`, each `WorkbookSheetPlan` retains one sheet and its geometry. Stages pass these plans together; matching a sheet with its axes and regions does not depend on indexes in parallel arrays. The original definition and axes retain logical coordinates, while placed cells receive final positions and formulas in sequence. The XLSX adapter also accounts for removed tag rows and inserted form control rows.
-
-The sheet plan also owns its regions in worksheet coordinates. Placement, native range mapping and form markers reuse those region objects. The form carrier definition contains participating sheet names, stable marker numbers and one control column per sheet, beyond all authored content. That column stays fixed for empty repeats too; reading does not search user text for marker prefixes.
-
-Cell traversal returns original definitions for rules, dictionary dependencies and diagnostics. Only placement derives worksheet positions and row settings from the shared regions. The plan retains a cell-to-position map for placement and formula references, rather than copies of complete cells in another coordinate system.
-
-Placement retains the existing `WorkbookData` instances instead of constructing another region tree. Form markers traverse those instances and obtain their boundaries through the same axis mapping used for placement. Reports do not build a separate form-region layout.
-
-The expanded body owns the iteration context shared by its cells. Placement creates public cell origins from that context directly. Source worksheet metadata remains in the definition; the placed sheet contains only output settings and cells.
-
-Value resolution prepares choice labels once per source projection across all sheets and reduces selected objects to cell text. `WorkbookData` carries scalar cell values and prepared choices; placement only determines their geometry and does not interpret choice sources or labels.
-
-Source validation and display labels are separate operations: a returned form validates saved shared sources even when no rows use them. Label preparation takes only options; it does not need a selected key. Value resolution matches a selection, while formula ranges and form reading consume the same prepared labels directly.
-
-The XLSX writer consumes these placed cells directly. Form input formatting is applied while writing source cell styles; it does not require another copy of the workbook or a second output-cell model. Explicit number formats from the template remain authoritative.
-
-When simplifying, first examine representations and the transitions between them. Shared geometry serves all three operations, retained XLSX parts preserve native Excel features, and the returned form structure supports reading changed records. Removing one of these contracts requires checking every consumer; moving functions between directories does not itself reduce the number of contracts.
-
-## Report and form issuance
+## Reports and form issuance
 
 ```text
 Tagged XLSX -> import -> WorkbookTemplate
                             |
-Data + dictionaries ---------+
+Data + dictionaries --------+
                             |
                   resolve values and repeats
                             |
@@ -65,23 +48,13 @@ Data + dictionaries ---------+
               write into the source XLSX -> file
 ```
 
-Import compiles tags into a `WorkbookDefinition`, validates region ownership and retains the source file in `WorkbookTemplate`. Formatting and native Excel features stay in the XLSX package instead of being reconstructed as a second style model.
+Import uses ExcelJS to decode the workbook, compiles tags and checks region ownership. Execution resolves values, expands repeats and prepares choice labels. Formatting runs during execution; validation handlers run when reading completed forms.
 
-Writing opens the source package once and applies `WorkbookPlan` directly to its XML: cells, row and column sizes, merges, names and form structure. All written cells share one string table; source style IDs stay valid, with only the required format variants appended. `workbook-lists.ts` writes the shared hidden sheet for dictionaries and saved form sources. The package is then compressed into the final file. There is no intermediate ExcelJS workbook, its serialization or a merge of two packages; ExcelJS is used for template import and form reading.
+The writer opens the source ZIP and applies the plan to cells, dimensions, merges, names and form structure. The shared cell writer owns text limits, the string table and derived styles. Existing style IDs remain valid. Native validation conflicts and inherited prompts are handled at final worksheet coordinates.
 
-Execution resolves values and expands regions directly from the workbook definition, retaining their definitions and concrete data paths. There is no separate generic operation tree or identity translation. Field declarations and dictionary dependencies are checked before expanding repeats, including empty ones. Execution does not look up or execute validation handlers. The grid builds row and column plans; values, formulas, sheet settings and native content use those plans to find their output positions. The XLSX writer combines placed values with the retained source content.
+The hidden list sheet stores dropdowns, dictionary columns referenced by formulas and form sources. Formula references determine the dictionary columns to write, including when repeats are empty. Identical dropdown lists share a range.
 
-Field tags are parsed directly into typed rules in `core/field-rules.ts`; there is no intermediate JSON rules object to validate and copy again. Application dictionaries are validated and copied once at the operation boundary. Choice projections borrow validated source records without additional snapshots. The public `resolveWorkbook` entry point copies option values into independent cells; form reading copies selected objects into independent result fields. Saved dictionaries already belong to the reader and only need validation. Dictionary dependencies are checked even for empty repeats.
-
-The dropdown writer receives ready-to-write strings regardless of source kind, deduplicates identical lists and writes Excel ranges. The shared cell writer in `xlsx/workbook-cells.ts` owns text limits, the string table and derived styles; it saves both package parts together after all worksheets have been written. Native validation conflicts and inherited prompts are handled when writing the source worksheet, at final coordinates.
-
-Dictionary ranges for formulas come directly from declared choices and the supplied dictionaries. Formula references determine their columns; repeated cell instances and the properties present in individual records do not determine whether a range exists. Dropdowns and formula ranges share the hidden sheet but are written independently.
-
-Form issuance uses the same placement and writing path. It prepares editable fields, permits blank required values and adds the structure needed to recognize records when reading. Its hidden rows participate in coordinate mapping before formulas and other references are written.
-
-Form preparation expands object scopes into explicit field and collection paths. This small normalization keeps markers, saved choice sources and validation contexts tied to repeat records. It changes neither placement rules nor the source template. Scope behavior is checked through rendered and returned XLSX files, rather than by requiring a particular intermediate tree shape.
-
-One traversal then checks form regions and binding ownership and collects input fields directly from their bodies. It does not flatten cells into sheet coordinates. Reading prepares validators only for fields with validation rules, including fields in empty repeats; issuance never resolves validation handlers.
+Form preparation expands object scopes into field and collection paths, checks binding ownership and collects input fields. Issuance permits blank required values. Hidden record boundaries and a control column beyond all authored content, including empty repeats, support later reading. These boundaries participate in coordinate mapping before formulas and native references are written.
 
 ## Reading a form
 
@@ -101,25 +74,19 @@ Original template + completed XLSX
           data and value issues
 ```
 
-Reading checks the submitted structure and extracts field values with data paths and cell addresses. The submitted cell's format determines numeric types and precision, and native dates become ISO strings. Extracted fields are private state within one read operation, not a contract between a form engine and a format adapter. The result is assembled in an object owned by that call without another copy. Current records come from the returned file; they are not matched to original application records.
+ExcelJS decodes the returned workbook. Markers describe record counts and boundaries; shared placement checks field positions and merges. The supplied template defines bindings and validation rules. Applications own document identity and business comparisons.
 
-Markers build expanded region instances directly, together with the empty result structure. Reading does not resolve those empty values as application input or run issuance rules, dictionaries or formula rewriting. Shared placement then checks the expected boundaries and field positions, so copying only part of a record block is still rejected by the same geometry used for issuance.
+The submitted cell format determines numeric types and precision; native dates become ISO strings. Choices use sources saved in the file. Shared dictionaries and root collections are stored once; local sources belong to the issued field paths. Their snapshot is serialized before asynchronous writing. Local sources support filling and clearing issued fields; changing those records or their order requires reissuing the form.
 
-All list and choice sources travel with the issued workbook. Shared dictionaries and root collections are stored once; local sources are saved for the issued field paths. Their payload is serialized before asynchronous package writing, so subsequent changes to application data cannot alter the issued sources. No additional columns carry context between rows. Local lists support filling the issued records; changing their membership or order requires issuing a new form. Reading does not reload application dictionaries, and the return mode only selects an object or its key.
-
-Form preparation contains the definition and fields; dictionaries belong to a particular issuance or returned file. Choice resolution receives the source array directly. Issuance selects it from data or a dictionary; reading selects it from the field's saved source. Reading checks the source even for blank or invalid input, then decodes the field value immediately.
-
-Template import and form reading use one XLSX decoder. Writers account for authored resources before allocating generated names. Choice objects are stored independently of formula ranges: those ranges are created only for references found in the template's formulas. A damaged saved source is a file failure, not an invalid user value.
-
-Choice decoding, empty-row handling and field validation share the final data paths. An invalid nonempty input keeps its row. Issues retain their field location while their array indexes follow the same remapping as the result.
+Source checks and label decoding precede validation. A missing named dictionary leaves the entered value and emits a warning. A malformed saved payload is a file failure. Empty single-row records are omitted; invalid nonempty input keeps its row. Values, validation contexts and issues use the resulting data paths.
 
 ## Invariants when changing the code
 
-- **Inputs belong to the caller.** Reusing a template must not change its definition, source bytes, supplied data or dictionaries. Public layouts contain independent cell values, rules, choices and geometry.
-- **Placement has one source of coordinates.** Cells, native metadata, formulas and print references use the shared row and column plans plus tag/form row mapping. A writer must not calculate a competing set of repeat offsets.
-- **A bounding range and an exact set of cells are different results.** `SourceCoordinates.range` gives enclosing bounds; `references` can split into separate ranges. Validation and conditional formatting must not spread across unrelated gaps or hidden form boundaries. Removed targets must be handled by their consumer.
-- **Native content has an owner even without a cell value.** Notes, validation, conditional formatting and drawing anchors can occupy otherwise empty cells. Their region determines whether they move, repeat or disappear.
-- **Form structure and values are separate.** Uploaded values cannot redefine a region. Validation runs on the completed submission; comparison with stored business records belongs to the application.
-- **Locations are added at the format boundary.** Core issues contain data paths and node IDs. The XLSX adapter adds authored addresses to template errors and returned-file addresses to form issues.
+- **Inputs belong to the caller.** Reusing a template must not change its definition, source bytes, data or dictionaries. Public layouts own independent values, rules, choices and geometry.
+- **Placement has one source of coordinates.** Cells, native metadata, formulas and print references use shared axis plans plus tag and form row mapping.
+- **Bounds and exact references differ.** `SourceCoordinates.range` gives enclosing bounds; `references` can split ranges. Validation and conditional formatting must not spread across unrelated gaps or hidden form boundaries. Consumers handle removed targets.
+- **Preserve authored content.** Merge generated features with existing settings and retain unaffected package parts.
+- **Reading follows returned records.** Keep complete record boundaries; applications decide which changes are permitted.
+- **Locations belong to the XLSX boundary.** Core issues carry data paths and node IDs; the adapter adds template or submitted-cell addresses.
 
-The relevant entry points are `xlsx/workbook-template.ts`, `grid/workbook-data.ts`, `grid/workbook-layout.ts`, `xlsx/workbook-form.ts` and `xlsx/workbook-source.ts`. Keep concrete regression cases in tests; use the [development checks](./development.md) to verify the affected boundary.
+Keep regression cases in tests and verify the affected boundary using the [development instructions](./development.md).
