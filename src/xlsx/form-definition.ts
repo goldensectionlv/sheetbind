@@ -30,10 +30,6 @@ export class WorkbookFormInputError extends Error {
   }
 }
 
-export function referencePath(reference: DataReference, context: DataPath): DataPath {
-  return [...(reference.from === 'root' ? [] : context), ...reference.path.split('.')]
-}
-
 export interface PreparedWorkbookField extends Pick<WorkbookCell, 'id' | 'rules'> {
   readonly reference: DataReference
   readonly validate?: ValidateValue

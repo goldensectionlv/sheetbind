@@ -1,9 +1,13 @@
 import { isDataObject, assertInputData } from '../core/json'
 import { isBlank } from '../core/validation'
+import type { DataReference } from '../core/template'
 import type { WorkbookBody, WorkbookDefinition, WorkbookRegion } from '../grid/workbook'
-import { referencePath } from './form-definition'
 
 export type DataPath = readonly (string | number)[]
+
+export function referencePath(reference: DataReference, context: DataPath): DataPath {
+  return [...(reference.from === 'root' ? [] : context), ...reference.path.split('.')]
+}
 
 export function readData(data: unknown, path: DataPath): unknown {
   let value = data
