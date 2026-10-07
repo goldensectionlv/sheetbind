@@ -1,4 +1,3 @@
-import { hasValidation } from '../core/field-rules'
 import { readWorkbookFormFields } from '../form/workbook-read'
 import type { WorkbookFormField, WorkbookFormSubmission } from '../form/workbook-read'
 import ExcelJS from 'exceljs'
@@ -36,20 +35,16 @@ export async function renderWorkbookForm(value: WorkbookTemplate, data: unknown,
   const placed = withTemplateLocations(prepared.template, () => placeWorkbook(prepared.template, issued, { dictionaries, purpose: 'issue' }))
   const carrier = placeFormMarkers(placed, formCarrierDefinition(prepared.template))
   const plan = resolveWorkbookFormulas(carrier.plan, carrier.formulaRows)
-  const sheets = plan.sheets.map(({ sheet }) => ({ ...sheet, cells: sheet.cells.map(cell => {
-    const field = prepared.fields.get(cell.definitionId)
-    return field && (hasValidation(field.rules, 'string') || cell.choice) ? { ...cell, text: true } : cell
-  }) }))
   const resources = createWorkbookResources(WorkbookTemplate.content(value).resources)
   const workbook = createWorkbookOutput(plan, dictionaries, resources)
   for (const [name, markers] of carrier.markers) {
     writeFormMarkers(workbook.getWorksheet(name)!, markers)
   }
-  const choices = workbookChoiceSources(prepared.template, issued, dictionaries, sheets)
+  const choices = workbookChoiceSources(plan, issued, dictionaries)
   if (choices) {
     writeWorkbookChoiceSources(workbook, workbookListSheetName(prepared.template.sheets.map(sheet => sheet.name)), choices, resources)
   }
-  return writeWorkbookPackage(workbook, { source, plan, sheets, carriers: carrier.formulaRows })
+  return writeWorkbookPackage(workbook, { source, plan, form: true, carriers: carrier.formulaRows })
 }
 
 /** Definition + completed form -> data/issues, using only the sources issued with the form. */

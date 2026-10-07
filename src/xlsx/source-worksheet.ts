@@ -1,6 +1,7 @@
 import { FormulaEdge } from '../grid/workbook-formula'
 import type { GridRange } from '../grid/geometry'
-import type { WorkbookOutputCell, WorkbookOutputSheet } from './workbook-output'
+import type { WorkbookPlacedCell, WorkbookPlacedSheet } from '../grid/workbook-layout'
+import { hasValidation } from '../core/field-rules'
 import { cellXml, worksheetCells } from './workbook-cells'
 import type { WorkbookCells } from './workbook-cells'
 import type { SourceCoordinates } from './source-coordinates'
@@ -19,11 +20,12 @@ export function offsetWorkbookStrings(xml: string, offset: number): string {
 
 /** Keep worksheet features in place and replace only the rows/cells the layout owns. */
 export function sourceWorksheet(xml: string, fresh: string, options: {
-  readonly output: WorkbookOutputSheet
+  readonly output: WorkbookPlacedSheet
   readonly map: SourceCoordinates
   readonly maps: ReadonlyMap<string, SourceCoordinates>
   readonly styles: Awaited<ReturnType<typeof sourceStyles>>
   readonly writer: WorkbookCells
+  readonly form?: boolean
 }) {
   const { output, map, maps, styles, writer } = options
   const sourceRows = new Map<number, string>()
@@ -41,7 +43,7 @@ export function sourceWorksheet(xml: string, fresh: string, options: {
       sourceRows.set(target, setXmlAttributes(row.split('>')[0].replace(/\/$/, '') + '/>', { r: target, spans: undefined }))
     }
     for (const cell of xmlElements(row, 'c')) {
-      const original = sourceCell(cell, map, maps, styles)
+      const original = sourceCell(cell, map, maps, styles, options.form)
       const address = original.attributes.r
       originals.set(address, original)
       if (owned.has(address)) {
@@ -70,23 +72,24 @@ export function sourceWorksheet(xml: string, fresh: string, options: {
   return orderWorksheet(xml).replace('<sheetData/>', () => rows.data)
 }
 
-function sourceCell(xml: string, map: SourceCoordinates, maps: ReadonlyMap<string, SourceCoordinates>, styles: Awaited<ReturnType<typeof sourceStyles>>) {
+function sourceCell(xml: string, map: SourceCoordinates, maps: ReadonlyMap<string, SourceCoordinates>, styles: Awaited<ReturnType<typeof sourceStyles>>, form = false) {
   xml = mapCellFormula(xml, map, maps)
   const head = xml.slice(0, xml.indexOf('>') + 1)
   const attributes = xmlAttributes(head)
   const body = xmlBody(xml)
   const variants = new Map<string, string>()
-  function render(address: string, type: string | undefined, definition: WorkbookOutputCell, content: string): string {
+  function render(address: string, type: string | undefined, definition: WorkbookPlacedCell, content: string): string {
     const before = definition.xlsx!.value
     const unchanged = 'literal' in definition.value && 'literal' in before && before.literal === definition.value.literal
     if (unchanged) {
       type = attributes.t
       content = body
     }
-    const key = `${definition.text ?? false}:${type ?? ''}`
+    const text = form && 'path' in before && (hasValidation(definition.rules, 'string') || !!definition.choice)
+    const key = `${text}:${type ?? ''}`
     let prefix = variants.get(key)
     if (!prefix) {
-      const merged = styles.style(Number(attributes.s ?? 0), definition.text)
+      const merged = styles.style(Number(attributes.s ?? 0), text)
       prefix = setXmlAttributes(head, { r: undefined, s: merged, t: type }).replace(/\/?>$/, '')
       variants.set(key, prefix)
     }

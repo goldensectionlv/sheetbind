@@ -3,7 +3,6 @@ import type { Workbook } from 'exceljs'
 import { prepareWorkbookCells, writeWorkbookStrings } from './workbook-cells'
 import type { WorkbookPlan } from '../grid/workbook-layout'
 import type { FormulaRows } from '../grid/workbook-formula'
-import type { WorkbookOutputSheet } from './workbook-output'
 import { sourceCoordinates, sourceFormula } from './source-coordinates'
 import type { SourceCoordinates } from './source-coordinates'
 import { sourceStyles } from './source-styles'
@@ -17,7 +16,7 @@ import { workbookParts } from './workbook-resources'
 export interface WorkbookSource {
   readonly source: Uint8Array
   readonly plan: WorkbookPlan
-  readonly sheets: readonly WorkbookOutputSheet[]
+  readonly form?: boolean
   readonly carriers?: ReadonlyMap<string, FormulaRows>
 }
 interface GeneratedWorkbook {
@@ -29,9 +28,8 @@ interface GeneratedWorkbook {
 /** Bind source sheets and their coordinate maps once, before writing any package parts. */
 function sourceSheets(source: WorkbookSource, parts: GeneratedWorkbook['parts']) {
   const originals = new Map([...parts.values()].map(part => [part.part, part]))
-  const output = new Map(source.sheets.map(sheet => [sheet.id, sheet]))
   return new Map(source.plan.sheets.map(plan => {
-    const target = output.get(plan.sheet.id)!
+    const target = plan.sheet
     const original = originals.get(plan.definition.xlsx!.part)!
     const coordinates = sourceCoordinates(plan, source.carriers?.get(target.name.toLowerCase()))
     return [target.name, { original, output: target, coordinates }] as const
@@ -53,7 +51,7 @@ async function preserveWorkbookSource(zip: JSZip, generated: GeneratedWorkbook, 
     const binding = bindings.get(name)
     if (binding) {
       const original = await zip.file(binding.original.part)!.async('string')
-      const xml = sourceWorksheet(original, fresh, { output: binding.output, map: binding.coordinates, maps, styles, writer: generated.cells })
+      const xml = sourceWorksheet(original, fresh, { output: binding.output, map: binding.coordinates, maps, styles, writer: generated.cells, form: source.form })
       zip.file(binding.original.part, new TextEncoder().encode(xml))
       continue
     }

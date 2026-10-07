@@ -1,7 +1,7 @@
 import type JSZip from 'jszip'
 import { columnName } from '../grid/geometry'
 import { formatRange, parseAddress, parseRange } from './addresses'
-import type { WorkbookOutputCell, WorkbookOutputSheet } from './workbook-output'
+import type { WorkbookPlacedCell, WorkbookPlacedSheet } from '../grid/workbook-layout'
 import { protect } from './report-text'
 import { appendXmlChildren, encodeXml, setXmlAttributes, xmlAttributes, xmlElements } from './xml'
 
@@ -22,7 +22,7 @@ export async function prepareWorkbookCells(zip: JSZip, inheritedStrings: readonl
     strings.push(`<si><t xml:space="preserve">${encodeXml(protect(value))}</t></si>`)
     return index
   }
-  function content(cell: WorkbookOutputCell): { style: number, type?: string, body: string } {
+  function content(cell: WorkbookPlacedCell): { style: number, type?: string, body: string } {
     const style = 0
     if ('formula' in cell.value) {
       return { style, body: `<f>${encodeXml(cell.value.formula)}</f>` }
@@ -60,16 +60,16 @@ export function cellXml(address: string, content: ReturnType<WorkbookCells['cont
 }
 
 /** Emit each row once, retaining carrier cells, merged edges and unowned source cells. */
-export function worksheetCells(xml: string, sheet: WorkbookOutputSheet, render: (cell: WorkbookOutputCell, address: string) => string,
+export function worksheetCells(xml: string, sheet: WorkbookPlacedSheet, render: (cell: WorkbookPlacedCell, address: string) => string,
   source?: { rows: ReadonlyMap<number, string>, cells: ReadonlyMap<number, ReadonlyMap<number, string>> }) {
   const generated = new Map(xmlElements(xmlElements(xml, 'sheetData')[0] ?? '', 'row').map(row => [Number(xmlAttributes(row.slice(0, row.indexOf('>') + 1)).r), row]))
-  const definitions = new Map<number, WorkbookOutputCell[]>()
+  const definitions = new Map<number, WorkbookPlacedCell[]>()
   const columns = new Map<number, string>()
   const dimension = xmlElements(xml, 'dimension')[0]
   const initial = dimension ? parseRange(xmlAttributes(dimension).ref) : { start: { row: 1, column: 1 }, end: { row: 1, column: 1 } }
   const bounds = { start: { ...initial.start }, end: { ...initial.end } }
   let currentRow = 0
-  let currentCells: WorkbookOutputCell[] = []
+  let currentCells: WorkbookPlacedCell[] = []
   for (const cell of sheet.cells) {
     if (currentRow !== cell.at.row) {
       currentRow = cell.at.row

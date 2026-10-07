@@ -1,11 +1,7 @@
 import ExcelJS from 'exceljs'
 import type { Dictionaries } from '../core/dictionaries'
-import type { TemplateValue } from '../core/template'
-import type { WorkbookCell, WorkbookSheet } from '../grid/workbook'
 import { workbookCells } from '../grid/workbook'
 import type { WorkbookPlan } from '../grid/workbook-layout'
-import type { WorkbookFormula } from '../grid/workbook-formula'
-import type { WorkbookChoice } from '../grid/workbook-choice-display'
 import { formatAddress, formatRange } from './addresses'
 import { writeWorkbookPrint } from './workbook-print'
 import { writeWorkbookDropdowns } from './workbook-dropdowns'
@@ -14,16 +10,6 @@ import { writeWorkbookChoiceFields } from './workbook-choice-fields'
 import { assertXlsxText } from './report-text'
 import { createWorkbookResources } from './workbook-resources'
 import type { WorkbookResources } from './workbook-resources'
-
-/** Ready-to-write cells; bindings, repetition and carrier shifts are already resolved. */
-export interface WorkbookOutputCell extends Pick<WorkbookCell, 'at' | 'size' | 'rules' | 'xlsx'> {
-  readonly value: { readonly literal: TemplateValue } | WorkbookFormula
-  readonly choice?: WorkbookChoice
-  readonly text?: boolean
-}
-export interface WorkbookOutputSheet extends Omit<WorkbookSheet, 'cells' | 'regions'> {
-  readonly cells: readonly WorkbookOutputCell[]
-}
 
 export function createWorkbookOutput(plan: WorkbookPlan, dictionaries: Dictionaries, resources: WorkbookResources = createWorkbookResources()) {
   const book = new ExcelJS.Workbook()
