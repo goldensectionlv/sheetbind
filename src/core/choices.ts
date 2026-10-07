@@ -56,11 +56,6 @@ export function createChoiceResolver() {
   }
 }
 
-export function selectedChoice(rule: ChoiceRule, items: readonly ChoiceOption[], value: unknown): ChoiceOption | undefined {
-  const key = choiceKey(rule, value)
-  return items.find(item => item.key === key)
-}
-
 export function choiceKey(rule: ChoiceRule, value: unknown): unknown {
   return returnsObject(rule) ? readDataPath(value, rule.key) : value
 }
@@ -68,15 +63,15 @@ interface WorkbookChoiceOption extends ChoiceOption { readonly text: string }
 export interface WorkbookChoice { readonly text: string | null, readonly items: readonly WorkbookChoiceOption[] }
 
 /** Workbook layouts and files use the same unambiguous choice labels. */
-export function createWorkbookChoiceDisplay() {
+export function createChoiceLabels() {
   const sources = new WeakMap<readonly ChoiceOption[], readonly WorkbookChoiceOption[]>()
-  return (choice: ResolvedChoice): WorkbookChoice => {
-    let items = sources.get(choice.items)
+  return (options: readonly ChoiceOption[]): readonly WorkbookChoiceOption[] => {
+    let items = sources.get(options)
     if (!items) {
       const counts = new Map<string, number>()
       const texts = new Set<string>()
-      choice.items.forEach(option => counts.set(option.label.toLowerCase(), (counts.get(option.label.toLowerCase()) ?? 0) + 1))
-      items = choice.items.map(option => {
+      options.forEach(option => counts.set(option.label.toLowerCase(), (counts.get(option.label.toLowerCase()) ?? 0) + 1))
+      items = options.map(option => {
         const text = counts.get(option.label.toLowerCase())! > 1 ? `${option.label} [${option.key}]` : option.label
         if (texts.has(text.toLowerCase())) {
           throw new SyntaxError('Choice display labels are ambiguous after adding keys')
@@ -84,8 +79,8 @@ export function createWorkbookChoiceDisplay() {
         texts.add(text.toLowerCase())
         return { ...option, text }
       })
-      sources.set(choice.items, items)
+      sources.set(options, items)
     }
-    return { items, text: choice.key === null ? null : items.find(item => item.key === choice.key)?.text ?? String(choice.key) }
+    return items
   }
 }

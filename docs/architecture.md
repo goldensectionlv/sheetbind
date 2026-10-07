@@ -39,6 +39,8 @@ The expanded body owns the iteration context shared by its cells. Placement crea
 
 Value resolution prepares choice labels once per source projection across all sheets and reduces selected objects to cell text. `WorkbookData` carries scalar cell values and prepared choices; placement only determines their geometry and does not interpret choice sources or labels.
 
+Source validation and display labels are separate operations: a returned form validates saved shared sources even when no rows use them. Label preparation takes only options; it does not need a selected key. Value resolution matches a selection, while formula ranges and form reading consume the same prepared labels directly.
+
 The XLSX writer consumes these placed cells directly. Form input formatting is applied while writing source cell styles; it does not require another copy of the workbook or a second output-cell model. Explicit number formats from the template remain authoritative.
 
 When simplifying, first examine representations and the transitions between them. Shared geometry serves all three operations, retained XLSX parts preserve native Excel features, and the returned form structure supports reading changed records. Removing one of these contracts requires checking every consumer; moving functions between directories does not itself reduce the number of contracts.

@@ -116,9 +116,15 @@ it('resolves independent mappings of one source and rejects key or display ambig
   expect(find(sheet, 'Local supplier').dataValidation.formulae).not.toEqual(find(sheet, 'LOCAL').dataValidation.formulae)
   expect(await readWorkbookForm(config, await bytes(book))).toEqual({ success: true, data: declaredData })
   const duplicate = { ...dictionaries, suppliers: [{ id: 7, name: 'One' }, { id: 7, name: 'Two' }] }
-  await expect(renderWorkbookForm(definition, data, { dictionaries: duplicate })).rejects.toThrow('keys must be unique')
-  const collision = { ...dictionaries, suppliers: [{ id: 7, name: 'One' }, { id: 8, name: 'One' }, { id: 9, name: 'One [7]' }] }
-  await expect(renderWorkbookForm(definition, data, { dictionaries: collision })).rejects.toThrow('ambiguous')
+  await expect(renderWorkbookForm(definition, data, { dictionaries: duplicate })).rejects.toMatchObject({ issues: [expect.objectContaining({
+    phase: 'data', code: 'choice-source', path: '$data.items[0].supplier', address: 'C4', message: 'Choice keys must be unique',
+  })] })
+  const collision = { ...dictionaries, suppliers: [{ id: 7, name: 'One' }, { id: 8, name: 'oNe' }, { id: 9, name: 'One [7]' }] }
+  for (const render of [renderWorkbookReport, renderWorkbookForm]) {
+    await expect(render(definition, data, { dictionaries: collision })).rejects.toMatchObject({ issues: [expect.objectContaining({
+      phase: 'data', code: 'choice-display', path: '$data.items[0].supplier', address: 'C4', message: 'Choice display labels are ambiguous after adding keys',
+    })] })
+  }
 })
 
 it('supports empty optional choices', async () => {

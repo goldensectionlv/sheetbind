@@ -4,7 +4,6 @@ import { objectDefinition, objectData, objectResult, dictionaries } from '../exa
 import { resolveWorkbook, renderWorkbookReport } from '../src/xlsx/workbook-template'
 import { readWorkbookForm, renderWorkbookForm } from '../src/xlsx/workbook-form'
 import { workbookChoiceRange } from '../src/xlsx/workbook-lists'
-import { createChoiceResolver } from '../src/core/choices'
 import { saveWorkbook, editExample, importAuthoredWorkbook } from './xlsx'
 import { parseRange } from '../src/grid/geometry'
 
@@ -147,8 +146,7 @@ it('requires valid embedded source data and does not fall back to guessing by la
   expect(codes(await readWorkbookForm(objectDefinition, await bytes(book)))).toContain('choice-source')
 })
 
-it('keeps numeric transport precision out of core and rejects ambiguous or malformed object rules', async () => {
-  const rule = { source: { dictionary: 'options' }, key: 'id', label: 'name' }
+it('preserves long numeric choice keys through forms and rejects undeclared objects', async () => {
   const value = { id: 1234567890123456, name: 'Long key' }
   const config = await importAuthoredWorkbook(book => {
     book.addWorksheet('Choice').getCell('A1').value = '{category}{@validate:object}{@choice:options; key=id; label=name}'
@@ -159,7 +157,6 @@ it('keeps numeric transport precision out of core and rejects ambiguous or malfo
     book.addWorksheet('Choice').getCell('A1').value = '{category}{@validate:object}'
   })
   expect(() => resolveWorkbook(noChoice, { category: value })).toThrow('declared object choice')
-  expect(() => createChoiceResolver()(rule, [{ id: '1', name: 'Same' }, { id: '1', name: 'Other' }])).toThrow('unique')
 })
 
 it.each(['key', 'object'] as const)('keeps unused JSON properties out of formula ranges (%s)', async mode => {
@@ -228,13 +225,6 @@ it('reads a form whose only object choices are inside an empty repeat', async ()
   })
   const form = await renderWorkbookForm(config, { items: [] }, { dictionaries })
   expect(await readWorkbookForm(config, form)).toEqual({ success: true, data: { items: [] } })
-})
-
-it('leaves repeated labels unchanged in core without imposing workbook display constraints', () => {
-  const choice = { source: { dictionary: 'options' }, key: 'id', label: 'name' }
-  const options = [{ id: 'a', name: 'One' }, { id: 'b', name: 'One' }, { id: 'c', name: 'One [a]' }]
-  const result = createChoiceResolver()(choice, options)
-  expect(result).toMatchObject([{ label: 'One' }, { label: 'One' }, { label: 'One [a]' }])
 })
 
 it('shares sources when two sheets show different fields of the same records', async () => {

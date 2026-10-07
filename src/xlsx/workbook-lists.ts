@@ -1,7 +1,7 @@
 import type { Workbook } from 'exceljs'
 import { validateDictionaryShape } from '../core/dictionaries'
 import type { Dictionaries } from '../core/dictionaries'
-import { createChoiceResolver, createWorkbookChoiceDisplay } from '../core/choices'
+import { createChoiceResolver, createChoiceLabels } from '../core/choices'
 import type { ChoiceRule } from '../core/choices'
 import { hasValidation } from '../core/field-rules'
 import { assertInputData, assertJson, isDataObject } from '../core/json'
@@ -137,7 +137,7 @@ export function workbookLists(plan: WorkbookPlan, dictionaries: Dictionaries, re
   // Formula references declare dictionary columns independently of the issued rows.
   const named = new Set<string>()
   const resolve = createChoiceResolver()
-  const display = createWorkbookChoiceDisplay()
+  const labels = createChoiceLabels()
   for (const rule of rules) {
     if (!('dictionary' in rule.source)) {
       continue
@@ -154,7 +154,7 @@ export function workbookLists(plan: WorkbookPlan, dictionaries: Dictionaries, re
     if (!fields.length && !resources.references.has(rangeName(prefix).toLowerCase())) {
       continue
     }
-    const items = display({ key: null, items: resolve(rule, dictionaries[rule.source.dictionary]) }).items
+    const items = labels(resolve(rule, dictionaries[rule.source.dictionary]))
     writeColumn(resources.allocate(rangeName(prefix), true), items.map(item => item.text), 'Selection')
     for (const field of fields) {
       writeColumn(resources.allocate(rangeName(prefix, field), true), items.map(item => fieldValue(item.value[field])), field)

@@ -19,7 +19,7 @@ import { readFormValue } from './form-value'
 import { formCarrierDefinition, readFormStructure, placeFormMarkers, readFormMarkers } from './workbook-form-markers'
 import { writeWorkbookPackage } from './workbook-source'
 import { TaggedXlsxError, withTemplateLocations } from './tagged-template'
-import { allowsChoiceInput, createChoiceResolver, returnsObject, createWorkbookChoiceDisplay } from '../core/choices'
+import { allowsChoiceInput, createChoiceResolver, returnsObject, createChoiceLabels } from '../core/choices'
 import { equalJson, isDataObject } from '../core/json'
 import { validateList } from '../core/field-rules'
 import { isBlank } from '../core/validation'
@@ -217,7 +217,7 @@ function decodeFormFields(prepared: PreparedWorkbookForm, submission: WorkbookFo
   const issues = new Map<WorkbookFormField, WorkbookFormIssue>()
   const fields = new Map<string, FieldValue>()
   const choiceOptions = createChoiceResolver()
-  const displayChoice = createWorkbookChoiceDisplay()
+  const choiceLabels = createChoiceLabels()
   const locations = new Map<string, WorkbookFormField['location']>()
   for (const field of submission.fields) {
     if (!locations.has(field.id)) {
@@ -267,7 +267,7 @@ function decodeFormFields(prepared: PreparedWorkbookForm, submission: WorkbookFo
   }
   for (const field of submission.fields) {
     const { location, rules } = field
-    const items = rules?.choice ? savedSource(field, () => displayChoice({ key: null, items: resolve(field, location) }).items, location) : undefined
+    const items = rules?.choice ? savedSource(field, () => choiceLabels(resolve(field, location)), location) : undefined
     if (field.issue) {
       issues.set(field, { phase: 'value', ...field.issue, ...location })
       continue

@@ -5,7 +5,7 @@ import { TemplateError } from '../core/template'
 import type { DataReference, Origin, TemplateIssue, TemplateValue } from '../core/template'
 import { validateList } from '../core/field-rules'
 import type { Dictionaries } from '../core/dictionaries'
-import { allowsChoiceInput, choiceKey, createChoiceResolver, createWorkbookChoiceDisplay, selectedChoice, returnsObject } from '../core/choices'
+import { allowsChoiceInput, choiceKey, createChoiceResolver, createChoiceLabels, returnsObject } from '../core/choices'
 import type { WorkbookChoice } from '../core/choices'
 import { prepareFormatting } from '../core/formatters'
 import { workbookCells, workbookIssue } from './workbook'
@@ -44,7 +44,7 @@ export function resolveWorkbookData(template: WorkbookDefinition, data: unknown,
   const root: DataContext = { value: data, path: '$data', iterations: [] }
   const references = new Map<DataReference, ReturnType<typeof compileDataPath>>()
   const choiceOptions = createChoiceResolver()
-  const displayChoice = createWorkbookChoiceDisplay()
+  const choiceLabels = createChoiceLabels()
   const issues: TemplateIssue[] = []
   function reference(ref: DataReference, current: DataContext) {
     let read = references.get(ref)
@@ -86,18 +86,22 @@ export function resolveWorkbookData(template: WorkbookDefinition, data: unknown,
       catch (error) {
         workbookIssue('choice-source', cell.id, (error as Error).message, result.path, 'data')
       }
-      const blank = isBlank(result.value)
-      if (!blank && !selectedChoice(rules.choice, items, result.value) && !allowsChoiceInput(rules.choice, items) && purpose === 'report') {
-        issues.push({ phase: 'data', code: 'choice', path: result.path, nodeId: cell.id, message: 'select a key from the declared choice source' })
-      }
-      const key = choiceKey(rules.choice, result.value)
       if (!allowsChoiceInput(rules.choice, items)) {
+        let labeled
         try {
-          choice = displayChoice({ items, key: blank ? null : typeof key === 'string' || typeof key === 'number' ? key : String(result.value) })
+          labeled = choiceLabels(items)
         }
         catch (error) {
           workbookIssue('choice-display', cell.id, (error as Error).message, result.path, 'data')
         }
+        const blank = isBlank(result.value)
+        const key = choiceKey(rules.choice, result.value)
+        const displayKey = typeof key === 'string' || typeof key === 'number' ? key : String(result.value)
+        const selected = labeled.find(item => item.key === displayKey)
+        if (!blank && (key !== displayKey || !selected) && purpose === 'report') {
+          issues.push({ phase: 'data', code: 'choice', path: result.path, nodeId: cell.id, message: 'select a key from the declared choice source' })
+        }
+        choice = { items: labeled, text: blank ? null : selected?.text ?? String(displayKey) }
       }
     }
     let resolved = scalar(result.value) ? result.value : choice!.text
