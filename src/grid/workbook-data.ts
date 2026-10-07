@@ -2,11 +2,11 @@ import { isDataObject } from '../core/json'
 import { isBlank } from '../core/validation'
 import { compileDataPath } from '../core/template'
 import { TemplateError } from '../core/template'
-import type { DataReference, FieldValue, Origin, TemplateIssue, TemplateValue } from '../core/template'
+import type { DataReference, Origin, TemplateIssue, TemplateValue } from '../core/template'
 import { validateList } from '../core/field-rules'
 import type { Dictionaries } from '../core/dictionaries'
-import { allowsChoiceInput, choiceKey, createChoiceResolver, selectedChoice, returnsObject } from '../core/choices'
-import type { ResolvedChoice } from '../core/choices'
+import { allowsChoiceInput, choiceKey, createChoiceResolver, createWorkbookChoiceDisplay, selectedChoice, returnsObject } from '../core/choices'
+import type { WorkbookChoice } from '../core/choices'
 import { prepareFormatting } from '../core/formatters'
 import { workbookCells, workbookIssue } from './workbook'
 import type { WorkbookBody, WorkbookCell, WorkbookDefinition, WorkbookRegion } from './workbook'
@@ -14,8 +14,8 @@ import type { WorkbookBody, WorkbookCell, WorkbookDefinition, WorkbookRegion } f
 interface WorkbookCellData {
   readonly definition: WorkbookCell
   readonly dataPath: string
-  readonly value: FieldValue
-  readonly choice?: ResolvedChoice
+  readonly value: TemplateValue
+  readonly choice?: WorkbookChoice
 }
 /** Expanded workbook bodies retain their definitions, without translating node identities. */
 export interface WorkbookData {
@@ -44,6 +44,7 @@ export function resolveWorkbookData(template: WorkbookDefinition, data: unknown,
   const root: DataContext = { value: data, path: '$data', iterations: [] }
   const references = new Map<DataReference, ReturnType<typeof compileDataPath>>()
   const choiceOptions = createChoiceResolver()
+  const displayChoice = createWorkbookChoiceDisplay()
   const issues: TemplateIssue[] = []
   function reference(ref: DataReference, current: DataContext) {
     let read = references.get(ref)
@@ -75,7 +76,7 @@ export function resolveWorkbookData(template: WorkbookDefinition, data: unknown,
         issues.push({ ...issue, phase: 'data', path: result.path, nodeId: cell.id })
       }
     }
-    let choice: ResolvedChoice | undefined
+    let choice: WorkbookChoice | undefined
     if (rules?.choice) {
       let items
       try {
@@ -91,11 +92,16 @@ export function resolveWorkbookData(template: WorkbookDefinition, data: unknown,
       }
       const key = choiceKey(rules.choice, result.value)
       if (!allowsChoiceInput(rules.choice, items)) {
-        choice = { items, key: blank ? null : typeof key === 'string' || typeof key === 'number' ? key : String(result.value) }
+        try {
+          choice = displayChoice({ items, key: blank ? null : typeof key === 'string' || typeof key === 'number' ? key : String(result.value) })
+        }
+        catch (error) {
+          workbookIssue('choice-display', cell.id, (error as Error).message, result.path, 'data')
+        }
       }
     }
-    let resolved = result.value
-    if (format && scalar(resolved)) {
+    let resolved = scalar(result.value) ? result.value : choice!.text
+    if (format) {
       try {
         resolved = format(resolved)
       }

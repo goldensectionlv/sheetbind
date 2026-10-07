@@ -243,11 +243,17 @@ it('shares sources when two sheets show different fields of the same records', a
       ['{#items}'], ['{.id}', '{.product}{@choice:products; key=id; label=name}'], [null, '{/items}'],
     ])
     book.addWorksheet('Second').addRows([
-      ['{#items}'], ['{.other}{@choice:$root.otherOptions; key=id; label=name}'], ['{/items}'],
+      ['{#items}'], ['{.other}{@choice:$root.otherOptions; key=id; label=name}', '{.product}{@choice:products; key=id; label=name}'], [null, '{/items}'],
     ])
   })
   const other = { id: 'extra', name: 'Extra', count: 2 }
   const input = { ...objectData, otherOptions: [other], items: objectData.items.map(item => ({ ...item, other })) }
+  const layout = resolveWorkbook(config, input, { dictionaries })
+  for (const sheet of layout.sheets) {
+    const product = sheet.cells.find(cell => cell.origin.dataPath === '$data.items[0].product')!
+    expect(product.value).toEqual({ literal: 'Service [0007]' })
+    expect(product.choice?.text).toBe('Service [0007]')
+  }
   const form = await renderWorkbookForm(config, input, { dictionaries })
   expect(await readWorkbookForm(config, form)).toEqual({ success: true, data: { items: objectData.items.map(item => ({ id: item.id, product: item.product, other })) } })
 })

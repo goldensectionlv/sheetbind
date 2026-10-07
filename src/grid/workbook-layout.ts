@@ -3,7 +3,6 @@ import type { WorkbookData, WorkbookDataOptions } from './workbook-data'
 import type { Origin, TemplateValue } from '../core/template'
 import type { FieldRules } from '../core/field-rules'
 import type { GridAddress, GridOffset } from './geometry'
-import { createWorkbookChoiceDisplay } from '../core/choices'
 import type { WorkbookChoice } from '../core/choices'
 import { workbookCells, workbookRegions, workbookRows, workbookIssue, WORKBOOK_LIMITS } from './workbook'
 import type { WorkbookCell, WorkbookSheet, WorkbookDefinition, WorkbookRow, WorkbookColumn } from './workbook'
@@ -74,7 +73,6 @@ export function placeWorkbookSheet(sheet: WorkbookSheet, group: WorkbookData): W
   const extent = { rows: 0, columns: 0 }
   const authored = new Map(workbookCells(sheet).map(cell => [cell.id, cell]))
   const views = new Map(workbookRegions(sheet).map(region => [region.id, region]))
-  const displayChoice = createWorkbookChoiceDisplay()
   const instances = new Map<string, WorkbookIndexes[]>()
   function placeCells(body: WorkbookData, indexes: WorkbookIndexes): WorkbookPlacedCell[] {
     const suffix = JSON.stringify(body.iterations) + ']'
@@ -102,16 +100,8 @@ export function placeWorkbookSheet(sheet: WorkbookSheet, group: WorkbookData): W
       }
       extent.rows = Math.max(extent.rows, end.row)
       extent.columns = Math.max(extent.columns, end.column)
-      let choice: WorkbookChoice | undefined
-      try {
-        choice = value.choice ? displayChoice(value.choice) : undefined
-      }
-      catch (error) {
-        workbookIssue('choice-display', cell.id, (error as Error).message, value.dataPath, 'data')
-      }
-      const literal = value.value !== null && typeof value.value === 'object' ? choice!.text : value.value
       return { id: '[' + JSON.stringify(cell.id) + ',' + suffix, definitionId: cell.id, at, size,
-        value: 'path' in cell.value ? { literal } : cell.value, rules: cell.rules, xlsx: cell.xlsx, origin, contextPath: body.path, choice }
+        value: 'path' in cell.value ? { literal: value.value } : cell.value, rules: cell.rules, xlsx: cell.xlsx, origin, contextPath: body.path, choice: value.choice }
     })
   }
   function layout(body: WorkbookData, id?: string): void {
