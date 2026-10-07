@@ -103,7 +103,8 @@ assert.deepEqual(await api.readWorkbookForm(validationDefinition, customForm, va
 const invalidCustomData = { ...validationData, items: [{ ...validationData.items[0], quantity: 1.234 }] }
 await api.renderWorkbookReport(validationDefinition, invalidCustomData)
 const invalidCustom = await api.renderWorkbookForm(validationDefinition, invalidCustomData)
-assert.deepEqual(await api.readWorkbookForm(validationDefinition, invalidCustom), { success: true, data: invalidCustomData })
+await assert.rejects(api.readWorkbookForm(validationDefinition, invalidCustom), error => error instanceof api.TemplateError
+  && error.issues.some(issue => issue.code === 'invalid-rules' && issue.message === 'Unknown validation rule: decimalPlaces'))
 const customResult = await api.readWorkbookForm(validationDefinition, invalidCustom, validationOptions)
 assert.equal(customResult.success, false)
 if (!customResult.success) {
