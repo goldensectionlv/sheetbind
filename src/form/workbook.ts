@@ -5,8 +5,8 @@ import { parseDictionaries } from '../core/dictionaries'
 import type { Dictionaries } from '../core/dictionaries'
 import { TemplateError } from '../core/template'
 import type { DataReference } from '../core/template'
-import { expandWorkbookScopes, mapWorkbookCells, workbookCells, workbookRegions, WorkbookAxis } from '../grid/workbook'
-import type { WorkbookBody, WorkbookCell, WorkbookDefinition } from '../grid/workbook'
+import { workbookCells, workbookRegions, WorkbookAxis } from '../grid/workbook'
+import type { WorkbookBody, WorkbookCell, WorkbookDefinition, WorkbookRegion } from '../grid/workbook'
 import { dataPath, readData, writeData } from './records'
 import type { DataPath } from './records'
 
@@ -43,7 +43,6 @@ export interface PreparedWorkbookField extends Pick<WorkbookCell, 'id' | 'rules'
 }
 export interface PreparedWorkbookForm {
   readonly template: WorkbookDefinition
-  readonly layoutTemplate: WorkbookDefinition
   readonly fields: ReadonlyMap<string, PreparedWorkbookField>
   readonly dictionaries: Dictionaries
 }
@@ -69,8 +68,7 @@ export function prepareWorkbookForm(value: WorkbookDefinition, purpose: 'issue' 
     }
   }
   assertFormBindings(template)
-  const layoutTemplate = { ...template, sheets: template.sheets.map(sheet => mapWorkbookCells(sheet, cell => layoutFormCell(cell, purpose))) }
-  return { template, layoutTemplate, fields, dictionaries }
+  return { template, fields, dictionaries }
 }
 
 function assertFormBindings(template: WorkbookDefinition): void {
@@ -176,11 +174,36 @@ export function createWorkbookFormData() {
   }
 }
 
-// Issuance needs rules for dropdowns; reading places structure before checking submitted values.
-function layoutFormCell(cell: WorkbookCell, purpose: 'issue' | 'read'): WorkbookCell {
-  const { rules, ...plain } = cell
-  return { ...plain,
-    ...(purpose === 'issue' && rules ? { rules } : {}),
-    value: 'path' in cell.value ? { ...cell.value, optional: true } : cell.value,
+/** Remove object scopes using explicit paths; repeats establish a new current item. */
+export function expandWorkbookScopes(template: WorkbookDefinition): WorkbookDefinition {
+  const expand = <T extends WorkbookBody>(body: T, prefix?: WorkbookRegion['source'], local = false): T => {
+    const qualify = (reference: WorkbookRegion['source']) => reference.from === 'root' || !prefix
+      ? reference
+      : { ...reference, path: `${prefix.path}.${reference.path}`, from: prefix.from }
+    const cells = body.cells.map(cell => ({ ...cell, value: 'path' in cell.value ? qualify(cell.value) : cell.value,
+      ...(cell.rules?.choice && 'path' in cell.rules.choice.source ? { rules: { ...cell.rules, choice: { ...cell.rules.choice, source: qualify(cell.rules.choice.source) } } } : {}),
+    }))
+    const rows = [...body.rows ?? []]
+    const occupied = [...body.occupied ?? []]
+    const regions: WorkbookRegion[] = []
+    for (const region of body.regions ?? []) {
+      const source = qualify(region.source)
+      if (region.type === 'repeat') {
+        regions.push({ ...expand(region, undefined, true), source })
+        continue
+      }
+      const expanded = expand(region, { ...source, from: source.from === 'root' || !local ? 'root' : 'current' }, local)
+      cells.push(...expanded.cells.map(cell => ({ ...cell, at: { row: cell.at.row + region.row - 1, column: cell.at.column + (region.column ?? 1) - 1 } })))
+      rows.push(...(expanded.rows ?? []).map(row => ({ ...row, index: row.index + region.row - 1 })))
+      occupied.push(...(expanded.occupied ?? []).map(range => ({
+        start: { row: range.start.row + region.row - 1, column: range.start.column + (region.column ?? 1) - 1 },
+        end: { row: range.end.row + region.row - 1, column: range.end.column + (region.column ?? 1) - 1 },
+      })))
+      regions.push(...(expanded.regions ?? []).map(child => ({ ...child, row: child.row + region.row - 1,
+        ...(region.column !== undefined || child.column !== undefined ? { column: (child.column ?? 1) + (region.column ?? 1) - 1 } : {}),
+        ...(region.width !== undefined && child.width === undefined ? { width: region.width } : {}) })))
+    }
+    return { ...body, cells, ...(occupied.length ? { occupied } : {}), ...(body.rows || rows.length ? { rows: rows.sort((a, b) => a.index - b.index) } : {}), ...(body.regions ? { regions } : {}) }
   }
+  return { ...template, sheets: template.sheets.map(sheet => expand(sheet)) }
 }

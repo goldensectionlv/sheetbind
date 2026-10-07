@@ -57,6 +57,8 @@ Original template + completed XLSX
 
 The XLSX adapter checks the submitted structure and extracts field values with data paths and cell addresses. The submitted cell's format also determines numeric types and precision here, and native dates become ISO strings. Form processing works with this submission, without inspecting ExcelJS cells. It derives the current records from the returned file; it does not match them to original application records.
 
+Reading places only the structure and fields; issuance rules, dictionaries and formula rewriting are not executed. It does not create another definition with rules stripped out.
+
 All list and choice sources travel with the issued workbook. Shared dictionaries and root collections are stored once; local sources are saved for the issued field paths. No additional columns carry context between rows. Local lists support filling the issued records; changing their membership or order requires issuing a new form. Reading does not reload application dictionaries, and the return mode only selects an object or its key.
 
 Template import and form reading use one XLSX decoder. Writers account for authored resources before allocating generated names. Choice objects are stored independently of formula ranges: those ranges are created only for references found in the template's formulas. A damaged saved source is a file failure, not an invalid user value.

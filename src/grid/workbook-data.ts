@@ -25,7 +25,7 @@ export interface WorkbookData {
   readonly cells: readonly WorkbookCellData[]
   readonly regions: readonly { readonly definition: WorkbookRegion, readonly path: string, readonly instances: readonly WorkbookData[] }[]
 }
-export interface WorkbookDataOptions { readonly dictionaries?: Dictionaries, readonly checkValues?: boolean }
+export interface WorkbookDataOptions { readonly dictionaries?: Dictionaries, readonly purpose?: 'report' | 'issue' | 'read' }
 interface DataContext { readonly value: unknown, readonly path: string, readonly iterations: Origin['iterations'] }
 
 function scalar(value: unknown): value is TemplateValue {
@@ -36,7 +36,8 @@ function scalar(value: unknown): value is TemplateValue {
 /** Resolve bindings and region instances directly from the imported workbook definition. */
 export function resolveWorkbookData(template: WorkbookDefinition, data: unknown, options: WorkbookDataOptions = {}): WorkbookData[] {
   const dictionaries = options.dictionaries ?? {}
-  const formatters = prepareWorkbookValues(template, dictionaries)
+  const purpose = options.purpose ?? 'report'
+  const formatters = purpose === 'read' ? undefined : prepareWorkbookValues(template, dictionaries)
   if (!isDataObject(data)) {
     workbookIssue('invalid-data', '$template', 'root data must be an object', '$data', 'data')
   }
@@ -55,11 +56,16 @@ export function resolveWorkbookData(template: WorkbookDefinition, data: unknown,
   }
   function value(cell: WorkbookCell, context: DataContext): WorkbookCellData {
     const rules = cell.rules
-    const format = formatters.get(cell.id)
+    const format = formatters?.get(cell.id)
     const result = 'path' in cell.value
       ? reference(cell.value, context)
       : { value: 'literal' in cell.value ? cell.value.literal : null, path: context.path }
-    if (result.value === undefined && 'path' in cell.value && cell.value.optional) {
+    const origin = { nodeId: cell.id, dataPath: result.path, iterations: context.iterations }
+    // Reading needs field positions; submitted values come from the returned workbook.
+    if (purpose === 'read') {
+      return { definition: cell, origin, value: null }
+    }
+    if (result.value === undefined && 'path' in cell.value && (cell.value.optional || purpose === 'issue')) {
       result.value = null
     }
     if (result.value === undefined) {
@@ -68,7 +74,7 @@ export function resolveWorkbookData(template: WorkbookDefinition, data: unknown,
     if (!scalar(result.value) && !(returnsObject(rules?.choice) && isDataObject(result.value))) {
       workbookIssue('non-scalar', cell.id, 'expected a scalar or a declared object choice', result.path, 'data')
     }
-    if (rules?.list && options.checkValues !== false) {
+    if (rules?.list && purpose === 'report') {
       const issue = validateList(result.value, rules, dictionaries[rules.list] as readonly string[])
       if (issue) {
         issues.push({ ...issue, phase: 'data', path: result.path, nodeId: cell.id })
@@ -84,7 +90,7 @@ export function resolveWorkbookData(template: WorkbookDefinition, data: unknown,
         workbookIssue('choice-source', cell.id, (error as Error).message, result.path, 'data')
       }
       const blank = isBlank(result.value)
-      if (!blank && !selectedChoice(rules.choice, items, result.value) && !allowsChoiceInput(rules.choice, items) && options.checkValues !== false) {
+      if (!blank && !selectedChoice(rules.choice, items, result.value) && !allowsChoiceInput(rules.choice, items) && purpose === 'report') {
         issues.push({ phase: 'data', code: 'choice', path: result.path, nodeId: cell.id, message: 'select a key from the declared choice source' })
       }
       const key = choiceKey(rules.choice, result.value)
@@ -101,7 +107,7 @@ export function resolveWorkbookData(template: WorkbookDefinition, data: unknown,
         workbookIssue('format', cell.id, (error as Error).message, result.path, 'data')
       }
     }
-    return { definition: cell, origin: { nodeId: cell.id, dataPath: result.path, iterations: context.iterations }, value: resolved, ...(choice ? { choice } : {}) }
+    return { definition: cell, origin, value: resolved, ...(choice ? { choice } : {}) }
   }
   function expand(definition: WorkbookBody, context: DataContext): WorkbookData {
     const cells = definition.cells.map(cell => value(cell, context))

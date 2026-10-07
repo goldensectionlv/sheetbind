@@ -67,7 +67,7 @@ export interface WorkbookPlan {
 
 /** Expose independent resolved cells without changing the compiled definition. */
 export function resolveWorkbook(config: WorkbookDefinition, data: unknown, options: { dictionaries?: Dictionaries } = {}): WorkbookLayout {
-  const { layout } = planWorkbook(config, data, { ...options, checkValues: true })
+  const { layout } = planWorkbook(config, data, options)
   return { sheets: layout.sheets.map(sheet => ({
     ...structuredClone({ id: sheet.id, name: sheet.name, state: sheet.state, rows: sheet.rows, columns: sheet.columns, print: sheet.print }),
     cells: sheet.cells.map(cell => structuredClone({

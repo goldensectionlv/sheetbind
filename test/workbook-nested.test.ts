@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import * as project from '../examples/regions/nested'
-import { expandWorkbookScopes, workbookCells, workbookRegions, workbookRows } from '../src/grid/workbook'
+import { workbookCells, workbookRegions, workbookRows } from '../src/grid/workbook'
+import { expandWorkbookScopes } from '../src/form/workbook'
 import type { WorkbookDefinition } from '../src/grid/workbook'
 import { resolveWorkbook as resolveDefinition } from '../src/grid/workbook-layout'
 import { resolveWorkbook, renderWorkbookReport } from '../src/xlsx/workbook-template'

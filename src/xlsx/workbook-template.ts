@@ -190,7 +190,7 @@ export async function renderWorkbookReport(template: WorkbookTemplate, data: unk
   const { definition, source, resources } = WorkbookTemplate.content(template)
   const dictionaries = parseDictionaries(options.dictionaries ?? {})
   assertInputData(data)
-  const plan = withTemplateLocations(definition, () => planWorkbook(definition, data, { ...options, dictionaries, checkValues: true }))
+  const plan = withTemplateLocations(definition, () => planWorkbook(definition, data, { dictionaries }))
   const output = createWorkbookOutput(plan.layout.sheets, dictionaries, createWorkbookResources(resources))
   return writeWorkbookPackage(output, { source, template: definition, sheets: plan.layout.sheets, axes: plan.axes, coordinates: plan.coordinates })
 }
