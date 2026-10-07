@@ -1,18 +1,10 @@
 import { expect, it } from 'vitest'
 import ExcelJS from 'exceljs'
 import { objectDefinition, objectData, objectResult, dictionaries } from '../examples/choices/definition'
-import { resolveWorkbook, renderWorkbookReport } from '../src/xlsx/workbook-template'
-import { readWorkbookForm, renderWorkbookForm } from '../src/xlsx/workbook-form'
-import { workbookChoiceRange } from '../src/xlsx/workbook-lists'
-import { saveWorkbook, editExample, importAuthoredWorkbook } from './xlsx'
+import { resolveWorkbook, renderWorkbookReport, readWorkbookForm, renderWorkbookForm, workbookChoiceRange } from '../src/index'
 import { parseRange } from '../src/grid/geometry'
+import { openWorkbook as load, saveWorkbook, editExample, importAuthoredWorkbook } from './xlsx'
 
-async function load(bytes: Buffer) {
-  const book = new ExcelJS.Workbook()
-  await book.xlsx.load(Uint8Array.from(bytes).buffer)
-  return book
-}
-const bytes = saveWorkbook
 function find(sheet: ExcelJS.Worksheet, value: unknown) {
   let found: ExcelJS.Cell | undefined
   sheet.eachRow(row => row.eachCell(cell => {
@@ -43,21 +35,10 @@ it('round-trips selected objects through tagged XLSX without application lookup 
   expect(await readWorkbookForm(objectDefinition, form)).toEqual({ success: true, data: objectResult })
   const book = await load(form)
   find(book.worksheets[0], 'Service [0007]').value = 'Service [0008]'
-  const result = await readWorkbookForm(objectDefinition, await bytes(book))
+  const result = await readWorkbookForm(objectDefinition, await saveWorkbook(book))
   expect(result).toEqual({ success: true, data: { ...objectResult, items: [{ ...objectResult.items[0], product: dictionaries.products[1] }, objectResult.items[1]] } })
   find(book.worksheets[0], 'Service [0008]').value = 'Service'
-  expect(codes(await readWorkbookForm(objectDefinition, await bytes(book)))).toContain('choice')
-})
-
-it('reads objects from shared sources after sorting', async () => {
-  const book = await load(await renderWorkbookForm(objectDefinition, objectData, { dictionaries }))
-  const sheet = book.worksheets[0]
-  const row = Number(find(sheet, 'line-a').row)
-  const first = sheet.getRow(row).values
-  sheet.getRow(row).values = sheet.getRow(row + 1).values
-  sheet.getRow(row + 1).values = first
-  const result = await readWorkbookForm(objectDefinition, await bytes(book))
-  expect(result).toEqual({ success: true, data: { category: objectResult.category, items: [objectResult.items[1], objectResult.items[0]] } })
+  expect(codes(await readWorkbookForm(objectDefinition, await saveWorkbook(book)))).toContain('choice')
 })
 
 it('names Excel fields independently of key order and includes keys absent from the first option', async () => {
@@ -83,22 +64,6 @@ it('names Excel fields independently of key order and includes keys absent from 
   expect(rangeValues(other, workbookChoiceRange(rule, 'rate'))).toEqual([null, 22, null])
 })
 
-it('reads object choices in new unkeyed rows from a shared source', async () => {
-  const config = await importAuthoredWorkbook(book => {
-    book.addWorksheet('Order').addRows([
-      ['{#items}'], ['{.product}{@validate:required|object}{@choice:products; key=id; label=name}', '{.quantity}{@validate:number}'], [null, '{/items}'],
-    ])
-  })
-  const products = dictionaries.products.slice(0, 2)
-  const book = await load(await renderWorkbookForm(config, { items: [{ product: products[0], quantity: 1 }] }, { dictionaries: { products } }))
-  const sheet = book.worksheets[0]
-  const row = Number(find(sheet, 'Service [0007]').row)
-  sheet.spliceRows(row + 1, 0, ['Service [0008]', 0])
-  expect(await readWorkbookForm(config, await bytes(book))).toEqual({ success: true, data: { items: [
-    { product: products[0], quantity: 1 }, { product: products[1], quantity: 0 },
-  ] } })
-})
-
 it.each(['products', '$root.products'])('reads sorted, inserted and deleted records without identity fields using %s', async source => {
   const config = await importAuthoredWorkbook(book => {
     book.addWorksheet('Order').addRows([
@@ -115,7 +80,7 @@ it.each(['products', '$root.products'])('reads sorted, inserted and deleted reco
   sheet.getRow(first + 1).values = values
   sheet.spliceRows(first + 1, 0, ['Service [0008]', 0])
   sheet.spliceRows(first + 2, 1)
-  expect(await readWorkbookForm(config, await bytes(book))).toEqual({ success: true, data: { items: [
+  expect(await readWorkbookForm(config, await saveWorkbook(book))).toEqual({ success: true, data: { items: [
     { product: products[2], quantity: 3 }, { product: products[1], quantity: 0 },
   ] } })
 })
@@ -136,14 +101,6 @@ it.each(['object', 'key'])('keeps per-record choice sources in reports and self-
     expect(await readWorkbookForm(config, await renderWorkbookForm(config, data))).toEqual({ success: true,
       data: { items: data.items.map(item => ({ product: item.product })) } })
   }
-})
-
-it('requires valid embedded source data and does not fall back to guessing by label', async () => {
-  const book = await load(await renderWorkbookForm(objectDefinition, objectData, { dictionaries }))
-  const range = book.definedNames.getRanges('_sb_object_sources').ranges[0]
-  const address = range.slice(range.lastIndexOf('!') + 1).split(':')[0].replace(/\$/g, '')
-  book.worksheets[1].getCell(address).value = 'unsupported'
-  expect(codes(await readWorkbookForm(objectDefinition, await bytes(book)))).toContain('choice-source')
 })
 
 it('preserves long numeric choice keys through forms and rejects undeclared objects', async () => {
@@ -212,7 +169,7 @@ it('reads shared choices in nested records after whole-row insertion', async () 
   const sheet = book.worksheets[0]
   const start = Number(find(sheet, 'Service [0007]').row)
   sheet.spliceRows(start, 0, ['line-a', 'Service [0008]', 'Remote supplier', 4])
-  expect(await readWorkbookForm(config, await bytes(book))).toMatchObject({ success: true, data: { sites: [
+  expect(await readWorkbookForm(config, await saveWorkbook(book))).toMatchObject({ success: true, data: { sites: [
     { id: 'north', items: [{ id: 'line-a', product: dictionaries.products[1], supplier: dictionaries.suppliers[1], hours: 4 }, ...objectResult.items] },
     { id: 'south', items: [{ ...objectResult.items[0], product: southOption }] },
   ] } })

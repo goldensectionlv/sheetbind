@@ -4,18 +4,10 @@ import JSZip from 'jszip'
 import * as project from '../examples/fields/template'
 import { parseDictionaries } from '../src/core/dictionaries'
 import { validateList } from '../src/core/field-rules'
-import { TemplateError } from '../src/core/template'
-import { resolveWorkbook, workbookDictionarySources, renderWorkbookReport, importWorkbookXlsx } from '../src/xlsx/workbook-template'
-import { exampleFile } from './xlsx'
-import { renderWorkbookForm } from '../src/xlsx/workbook-form'
-import { importAuthoredWorkbook } from './xlsx'
+import { TemplateError, resolveWorkbook, workbookDictionarySources, renderWorkbookReport, importWorkbookXlsx, renderWorkbookForm } from '../src/index'
+import { openWorkbook as load, exampleFile, importAuthoredWorkbook } from './xlsx'
 
 const options = { dictionaries: project.dictionaries }
-async function load(bytes: Buffer) {
-  const book = new ExcelJS.Workbook()
-  await book.xlsx.load(Uint8Array.from(bytes).buffer)
-  return book
-}
 
 describe('named string dictionaries', () => {
   it('keeps dependencies on fields and dictionary values outside the template', async () => {

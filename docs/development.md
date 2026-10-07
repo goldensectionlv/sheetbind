@@ -104,6 +104,8 @@ Keep Russian and English pages at matching paths with matching section structure
 
 Start with the affected tests and a complete example through the public API. Internal imports belong in focused tests of an algorithm. Before a release, run `pnpm check:release`.
 
+For workbook scenarios, author XLSX with `test/xlsx.ts` and import from `src/index.ts`. Assert public results and saved file contents instead of constructing internal workbook definitions. Keep one primary scenario for each regression risk; extend it when a new case reaches the same contract. Separate checks remain useful when the consumer, geometry or failure behavior differs. Reuse the workbook loading and saving helpers rather than copying them into each suite.
+
 | Changed behavior | Required evidence |
 | --- | --- |
 | Data resolution or validation | Correct values and errors, missing data, empty repeats and repeated template use |

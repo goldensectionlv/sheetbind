@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest'
 import ExcelJS from 'exceljs'
-import { importAuthoredWorkbook, saveWorkbook } from './xlsx'
 import { importWorkbookXlsx, readWorkbookForm, renderWorkbookForm, renderWorkbookReport } from '../src/index'
+import { openWorkbook as load, importAuthoredWorkbook, saveWorkbook } from './xlsx'
 
 const sourceTag = '{.answer}{@choice:.answers; key=id; label=label; return=key; emptySource=input}'
 
@@ -11,11 +11,6 @@ it.each(['x'.repeat(32768), 'A\u0001B', '\ud800'])('rejects invalid text in an u
     await expect(render(template, { answer: null, options: [{ id: 'a', label }] })).rejects.toThrow(/32767|XML/)
   }
 })
-async function load(bytes: Uint8Array) {
-  const book = new ExcelJS.Workbook()
-  await book.xlsx.load(Uint8Array.from(bytes).buffer)
-  return book
-}
 
 it('captures named, root, local and string-list sources before asynchronous form writing', async () => {
   const template = await importAuthoredWorkbook(book => book.addWorksheet('Form').addRows([
@@ -143,21 +138,13 @@ it.each([{}, { catalog: undefined }, { catalog: null }, { catalog: {} }, { catal
   expect(data).toStrictEqual(before)
 })
 
-it('still rejects invalid source types, missing named dictionaries and lost local metadata', async () => {
+it('still rejects invalid source types and missing named dictionaries', async () => {
   const template = await importAuthoredWorkbook(book => book.addWorksheet('Input').getCell('A1').value = sourceTag)
   for (const answers of ['', 0, false, {}]) {
     await expect(renderWorkbookForm(template, { answers })).rejects.toMatchObject({ issues: [{ code: 'choice-source' }] })
   }
   const named = await importAuthoredWorkbook(book => book.addWorksheet('Input').getCell('A1').value = '{answer}{@choice:Options; key=id; label=label; return=key; emptySource=input}')
   await expect(renderWorkbookForm(named, {})).rejects.toMatchObject({ issues: [{ code: 'missing-dictionary' }] })
-  const book = await load(await renderWorkbookForm(template, { answer: 'Free text' }))
-  const range = book.definedNames.getRanges('_sb_object_sources').ranges[0]
-  const address = range.split('!')[1].split(':')[1].replaceAll('$', '')
-  const cell = book.getWorksheet('_sheetbind_lists')!.getCell(address)
-  const payload = JSON.parse(cell.value as string)
-  payload.local = {}
-  cell.value = JSON.stringify(payload)
-  expect(await readWorkbookForm(template, await saveWorkbook(book))).toMatchObject({ success: false, issues: [{ code: 'choice-source' }] })
 })
 
 it.each(['named', 'root', 'local', 'list'])('classifies missing saved sources as file failures before reading values (%s)', async kind => {

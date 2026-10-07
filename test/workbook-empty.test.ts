@@ -14,7 +14,7 @@ const template = await importAuthoredWorkbook(book => {
   sheet.getCell('B3').numFmt = '0.00'
 })
 
-it.each([{}, { order: null }, { order: {} }, { order: { items: null } }, { order: { items: [] } }])('treats absent and null collections like empty arrays through report and form XLSX %#', async data => {
+it.each([{}, { order: undefined }, { order: null }, { order: {} }, { order: { items: undefined } }, { order: { items: null } }, { order: { items: [] } }])('treats absent, undefined and null collections like empty arrays through report and form XLSX %#', async data => {
   const before = structuredClone(data)
   expect(resolveWorkbook(template, data)).toEqual(resolveWorkbook(template, { order: { items: [] } }))
   const report = (await openWorkbook(await renderWorkbookReport(template, data))).worksheets[0]
@@ -33,7 +33,7 @@ it.each([{}, { order: null }, { order: {} }, { order: { items: null } }, { order
   sheet.getCell('A3').value = 'Added'
   sheet.getCell('B3').value = 0
   expect(await readWorkbookForm(template, await saveWorkbook(book))).toEqual({ success: true, data: { order: { items: [{ name: 'Added', quantity: 0 }] } } })
-  expect(data).toEqual(before)
+  expect(data).toStrictEqual(before)
 })
 
 it('handles missing and null nested repeats independently in each record', async () => {

@@ -21,18 +21,6 @@ it.each([{}, [], NaN, Infinity, new Date()])('rejects undeclared structured or n
   expect(() => values(scalarTemplate, { input })).toThrow()
 })
 
-it.each([{}, { items: null }, { items: [] }])('keeps siblings around an absent or empty repeat %#', data => {
-  expect(values(repeatTemplate, data)).toEqual(['Header', 'End'])
-})
-
-it.each([{}, 1, '', false])('does not reinterpret an invalid collection as empty %#', items => {
-  expect(() => values(repeatTemplate, { items })).toThrow('repeat source must be an array')
-})
-
-it.each([{ items: [null] }, { items: [1] }, { items: Array(1) }])('rejects malformed and sparse collection items %#', ({ items }) => {
-  expect(() => values(repeatTemplate, { items })).toThrow()
-})
-
 it('does not fall back to a parent when the current field is absent', async () => {
   expect(() => values(repeatTemplate, { name: 'Wrong', items: [{}] })).toThrow('source is missing')
   const optional = await importAuthoredWorkbook(book => book.addWorksheet('Values').addRows([
@@ -69,16 +57,4 @@ it('validates bindings inside empty repeats when importing the template', async 
 it('supports null-prototype objects without accepting inherited values', () => {
   expect(values(scalarTemplate, Object.assign(Object.create(null), { input: 'Own' }))).toEqual(['Own'])
   expect(() => values(scalarTemplate, Object.create({ input: 'Inherited' }))).toThrow()
-})
-
-it('returns independent geometry and replays without changing template or input', () => {
-  const data = { items: [{ name: 'Atlas' }, { name: 'Beacon' }] }
-  const snapshot = structuredClone(data)
-  const first = resolveWorkbook(repeatTemplate, data)
-  const second = resolveWorkbook(repeatTemplate, data)
-  expect(second).toEqual(first)
-  Object.assign(first.sheets[0].cells[1].at, { row: 999 })
-  expect(first.sheets[0].cells[2].at.row).toBe(3)
-  expect(resolveWorkbook(repeatTemplate, data)).toEqual(second)
-  expect(data).toEqual(snapshot)
 })

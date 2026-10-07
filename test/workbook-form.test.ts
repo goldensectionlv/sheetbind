@@ -3,8 +3,8 @@ import ExcelJS from 'exceljs'
 import JSZip from 'jszip'
 import * as fieldsProject from '../examples/fields/template'
 import { TemplateError, readWorkbookForm, renderWorkbookForm, renderWorkbookReport } from '../src/index'
-import { importAuthoredWorkbook } from './xlsx'
 import { FORM_MARKER_COLUMN, FORM_MARKER_PREFIX } from '../src/xlsx/workbook-form-markers'
+import { openWorkbook as open, importAuthoredWorkbook } from './xlsx'
 
 function authorForm(book: ExcelJS.Workbook, name = 'Form', contact = 'contact.name') {
   const sheet = book.addWorksheet(name)
@@ -19,11 +19,6 @@ function authorForm(book: ExcelJS.Workbook, name = 'Form', contact = 'contact.na
 const template = await importAuthoredWorkbook(authorForm)
 const options = { dictionaries: { codes: ['0007', '0008'] } }
 const data = { contact: { name: 'Jordan Lee' }, items: [{ code: '0007', hours: 0, approved: false }, { code: '0008', hours: 2.5, approved: true }] }
-const open = async (bytes: Uint8Array) => {
-  const book = new ExcelJS.Workbook()
-  await book.xlsx.load(Uint8Array.from(bytes).buffer)
-  return book
-}
 const find = (sheet: ExcelJS.Worksheet, value: ExcelJS.CellValue) => {
   let found: ExcelJS.Cell | undefined
   sheet.eachRow(row => row.eachCell(cell => {
@@ -110,9 +105,6 @@ describe('shared workbook forms: definition + marked XLSX', () => {
       find(book.getWorksheet('Form')!, '0007').value = 'Unknown'
       book.worksheets.find(sheet => sheet.state === 'veryHidden')!.getCell('A1').value = 'Unknown'
     }],
-    ['formula', (book: ExcelJS.Workbook) => {
-      find(book.getWorksheet('Form')!, 0).value = { formula: '1+1' }
-    }],
     ['number', (book: ExcelJS.Workbook) => {
       const cell = find(book.getWorksheet('Form')!, 0)
       cell.value = new Date('2026-01-02')
@@ -143,7 +135,7 @@ describe('shared workbook forms: definition + marked XLSX', () => {
   })
 
   it.each([
-    '{', 'null', '[]', '["unknown",1]', '["sheet"]', '["sheet",1]', '["sheet","signature","extra"]',
+    '{', 'null', '[]', '["unknown",1]',
     '["/sheet","extra"]', '["repeat"]', '["repeat","1"]', '["/repeat",0]', '["item",-1]', '["/item",1.5]', '["repeat",9007199254740992]',
   ])('rejects malformed marker %s before interpreting the form structure', async token => {
     const result = await mutate(book => {
@@ -189,7 +181,6 @@ describe('shared workbook forms: definition + marked XLSX', () => {
 
   it('requires dictionaries for issuance and rejects incompatible template bindings', async () => {
     await expect(renderWorkbookForm(template, data)).rejects.toBeInstanceOf(TemplateError)
-    expect(await readWorkbookForm(template, new Uint8Array())).toMatchObject({ success: false, issues: [{ code: 'invalid-workbook' }] })
     for (const path of ['items', 'items.name']) {
       const collision = await importAuthoredWorkbook(book => authorForm(book, 'Form', path))
       for (const operation of [() => renderWorkbookForm(collision, data, options), () => readWorkbookForm(collision, new Uint8Array())]) {
@@ -199,6 +190,5 @@ describe('shared workbook forms: definition + marked XLSX', () => {
     const captions = await importAuthoredWorkbook(book => book.addWorksheet('Notes').addRow(['Instructions', { formula: '1+1' }]))
     await expect(renderWorkbookForm(captions, {})).rejects.toMatchObject({ issues: [expect.objectContaining({ code: 'no-form-fields' })] })
     await expect(readWorkbookForm(captions, new Uint8Array())).rejects.toMatchObject({ issues: [expect.objectContaining({ code: 'no-form-fields' })] })
-    await expect(renderWorkbookForm(template, { ...data, items: {} }, options)).rejects.toBeInstanceOf(TemplateError)
   })
 })

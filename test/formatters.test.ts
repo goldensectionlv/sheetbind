@@ -1,5 +1,5 @@
 import { expect, it, vi } from 'vitest'
-import { readWorkbookForm, registerFormatter, registerValidationRule, renderWorkbookForm, renderWorkbookReport } from '../src/index'
+import { readWorkbookForm, registerFormatter, renderWorkbookForm, renderWorkbookReport } from '../src/index'
 import type { Formatter } from '../src/index'
 import { importAuthoredWorkbook, openWorkbook } from './xlsx'
 
@@ -48,6 +48,7 @@ it('formats date, boolean and numeric text in reports and forms without changing
 it('registers custom formatter pipelines once, retains quoted arguments and never runs them on read', async () => {
   const custom = vi.fn<Formatter>((value, args) => String(value) + String(args[0]))
   registerFormatter('testSuffix', custom)
+  expect(() => registerFormatter('testSuffix', () => 'Replaced')).toThrow('already registered')
   const template = await importAuthoredWorkbook(book => book.addWorksheet('Data').getCell('A1').value = '{v | float | testSuffix:" €,;:|{}"}')
   const bytes = await renderWorkbookForm(template, { v: '12.5' })
   expect(custom).toHaveBeenCalledWith(12.5, [' €,;:|{}'])
@@ -74,37 +75,4 @@ it('preserves null and invalid date text and accepts numeric timestamps', async 
   ]))
   const output = await openWorkbook(await renderWorkbookReport(template, { items: [{ value: null }, { value: 'invalid' }, { value: Date.UTC(2026, 9, 1, 12) }] }))
   expect([1, 2, 3].map(row => output.worksheets[0].getCell(row, 1).value)).toEqual([null, 'invalid', '2026-10-01'])
-})
-
-it('registers validation globally but runs it only on read, with per-call overrides', async () => {
-  const validate = vi.fn(value => value === 'accepted')
-  registerValidationRule('testRegistered', { validate, message: 'Expected accepted' })
-  const template = await importAuthoredWorkbook(book => book.addWorksheet('Data').getCell('A1').value = '{v}{@validate:testRegistered}')
-  const bytes = await renderWorkbookForm(template, { v: 'rejected' })
-  await renderWorkbookReport(template, { v: 'rejected' })
-  expect(validate).not.toHaveBeenCalled()
-  expect(await readWorkbookForm(template, bytes)).toMatchObject({ success: false, issues: [{ phase: 'value', rule: 'testRegistered', message: 'Expected accepted' }] })
-  expect(await readWorkbookForm(template, bytes, { validationRules: { testRegistered: { validate: () => true } } })).toEqual({ success: true, data: { v: 'rejected' } })
-  expect(() => registerValidationRule('required', { validate: () => true })).toThrow('reserved')
-})
-
-it('reads an issued form with updated field paths and validation instead of requiring a matching hash', async () => {
-  const template = await importAuthoredWorkbook(book => book.addWorksheet('Data').getCell('A1').value = '{old}{@validate:min:1}')
-  const bytes = await renderWorkbookForm(template, { old: 2 })
-  const changed = await openWorkbook(bytes)
-  expect(changed.worksheets[0].getCell('A1').value).toBe(2)
-  const source = await importAuthoredWorkbook(book => book.addWorksheet('Data').getCell('A1').value = '{current}{@validate:min:3}')
-  expect(await readWorkbookForm(source, bytes)).toMatchObject({ success: false, issues: [{ phase: 'value', path: '$data.current', code: 'min' }] })
-})
-
-it('rejects duplicate registrations without replacing the original handlers', async () => {
-  registerFormatter('testDuplicateFormatter', value => `First: ${value}`)
-  expect(() => registerFormatter('testDuplicateFormatter', () => 'Replaced')).toThrow('already registered')
-  registerValidationRule('testDuplicateRule', { validate: () => false, message: 'Original rule' })
-  expect(() => registerValidationRule('testDuplicateRule', { validate: () => true })).toThrow('already registered')
-  const template = await importAuthoredWorkbook(book => book.addWorksheet('Input').getCell('A1').value = '{value | testDuplicateFormatter}{@validate:testDuplicateRule}')
-  const bytes = await renderWorkbookForm(template, { value: 'data' })
-  expect((await openWorkbook(bytes)).worksheets[0].getCell('A1').value).toBe('First: data')
-  expect(await readWorkbookForm(template, bytes)).toMatchObject({ success: false, issues: [{ message: 'Original rule' }] })
-  expect(await readWorkbookForm(template, bytes, { validationRules: { testDuplicateRule: { validate: () => true } } })).toEqual({ success: true, data: { value: 'First: data' } })
 })

@@ -36,16 +36,6 @@ it.each([undefined, { inn: undefined, extra: undefined }])('issues ordinary form
   expect(await readWorkbookForm(template, await saveWorkbook(book))).toEqual({ success: true, data: { supplier: { inn: '006' } } })
 })
 
-it.each([{ order: undefined }, { order: { items: undefined } }])('treats undefined repeat properties like missing collections %#', async data => {
-  const template = await importAuthoredWorkbook(book => book.addWorksheet('Input').addRows([
-    ['{#order.items}'], ['{.name}'], ['{/order.items}'], ['End'],
-  ]))
-  const before = structuredClone(data)
-  expect((await openWorkbook(await renderWorkbookReport(template, data))).worksheets[0].getCell('A1').value).toBe('End')
-  expect(await readWorkbookForm(template, await renderWorkbookForm(template, data))).toEqual({ success: true, data: { order: { items: [] } } })
-  expect(data).toStrictEqual(before)
-})
-
 it('still diagnoses undefined required report bindings as missing fields', async () => {
   const template = await importAuthoredWorkbook(book => book.addWorksheet('Input').getCell('A1').value = '{supplier.inn}')
   await expect(renderWorkbookReport(template, { supplier: { inn: undefined } })).rejects.toMatchObject({ issues: [{ code: 'missing-source', path: '$data.supplier.inn' }] })

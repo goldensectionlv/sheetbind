@@ -1,14 +1,8 @@
-import ExcelJS from 'exceljs'
 import JSZip from 'jszip'
 import { expect, it } from 'vitest'
 import { readWorkbookForm, renderWorkbookForm, renderWorkbookReport } from '../src/index'
 import { loadTemplate, invoiceData, serviceData, comparisonData } from '../examples/migration/templates'
-
-async function open(bytes: Uint8Array) {
-  const book = new ExcelJS.Workbook()
-  await book.xlsx.load(Uint8Array.from(bytes).buffer)
-  return book
-}
+import { openWorkbook as open } from './xlsx'
 
 it('renders migrated invoice rows while preserving fixed neighbours, merges and metadata', async () => {
   const config = await loadTemplate('invoice')

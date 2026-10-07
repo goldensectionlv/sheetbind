@@ -4,12 +4,7 @@ import JSZip from 'jszip'
 import { createTemplate, data } from '../examples/xlsx-source/template'
 import { importWorkbookXlsx, renderWorkbookReport, renderWorkbookForm, readWorkbookForm } from '../src/index'
 import { xmlAttributes } from '../src/xlsx/xml'
-
-async function open(bytes: Uint8Array) {
-  const book = new ExcelJS.Workbook()
-  await book.xlsx.load(Uint8Array.from(bytes).buffer)
-  return book
-}
+import { openWorkbook as open } from './xlsx'
 
 it.each(['rows', 'columns'] as const)('keeps blank styled cells inside their %s repeat or fixed outside it', async axis => {
   const book = new ExcelJS.Workbook()

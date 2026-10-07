@@ -3,8 +3,8 @@ import JSZip from 'jszip'
 import ExcelJS from 'exceljs'
 import { decodeXml, encodeXml, xmlAttributes, xmlBody, xmlElements } from '../src/xlsx/xml'
 import { data, dictionaries, declaredData } from '../examples/choices/definition'
-import { resolveWorkbook, importWorkbookXlsx, renderWorkbookReport } from '../src/xlsx/workbook-template'
-import { renderWorkbookForm, readWorkbookForm } from '../src/xlsx/workbook-form'
+import { resolveWorkbook, importWorkbookXlsx, renderWorkbookReport, renderWorkbookForm, readWorkbookForm } from '../src/index'
+
 import { exampleFile, openWorkbook as load, saveWorkbook, importAuthoredWorkbook } from './xlsx'
 
 const source = await load(await exampleFile('choices/template.xlsx'))

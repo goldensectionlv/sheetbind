@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest'
 import ExcelJS from 'exceljs'
-import { readWorkbookForm, renderWorkbookForm } from '../src/xlsx/workbook-form'
-import { importWorkbookXlsx } from '../src/xlsx/workbook-template'
+import { readWorkbookForm, renderWorkbookForm, importWorkbookXlsx } from '../src/index'
+
 import { FORM_MARKER_PREFIX } from '../src/xlsx/workbook-form-markers'
 import { exampleFile, importAuthoredWorkbook, openWorkbook, saveWorkbook } from './xlsx'
 import { data, dictionaries } from '../examples/records/definition'
@@ -187,13 +187,13 @@ it('retains a conflicting nonempty occurrence when the first occurrence is blank
   ] })
 })
 
-it.each([{ formula: '1+1' }])('keeps an invalid native input and locates it after blank rows', async value => {
+it('keeps an invalid native input and locates it after blank rows', async () => {
   const template = await importWorkbookXlsx(await templateBytes())
   const book = await openWorkbook(await renderWorkbookForm(template, { contact: 'Jordan', items: [{}, {}, {}] }))
   const sheet = book.worksheets[0]
   const start = Number(find(sheet, FORM_MARKER_PREFIX + '["repeat",1]').row) + 1
   const cell = sheet.getCell(start + 2, 1)
-  cell.value = value
+  cell.value = { formula: '1+1' }
   const result = await readWorkbookForm(template, await saveWorkbook(book))
   expect(result).toMatchObject({ success: false, issues: [
     { code: 'formula', address: cell.address, path: '$data.items[0].name' },
