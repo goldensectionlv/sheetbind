@@ -3,7 +3,7 @@ import type { ValidationOptions, ValidateValue } from '../core/validation'
 import type { JsonValue } from '../core/json'
 import { TemplateError } from '../core/template'
 import type { DataReference } from '../core/template'
-import { workbookCells, workbookRegions, WorkbookAxis } from '../grid/workbook'
+import { WorkbookAxis } from '../grid/workbook'
 import type { WorkbookBody, WorkbookCell, WorkbookDefinition, WorkbookRegion } from '../grid/workbook'
 import { dataPath, readData, writeData } from './form-records'
 import type { DataPath } from './form-records'
@@ -41,40 +41,20 @@ export interface PreparedWorkbookForm {
 /** Data bindings define input fields; other worksheet content is not submitted. */
 export function prepareWorkbookForm(value: WorkbookDefinition, purpose: 'issue' | 'read', options: ValidationOptions = {}): PreparedWorkbookForm {
   const template = expandWorkbookScopes(value)
-  if (template.sheets.some(sheet => workbookRegions(sheet).some(region => region.axis === WorkbookAxis.Columns))) {
-    throw new TemplateError([{ phase: 'template', code: 'report-only-region', nodeId: '', path: '$template', message: 'Form records repeat down rows; column repeats support reports' }])
-  }
-  const definitions = template.sheets.flatMap(sheet => workbookCells(sheet))
   const prepareValidation = purpose === 'read' ? createValidation(options) : undefined
   const fields = new Map<string, PreparedWorkbookField>()
-  for (const cell of definitions) {
-    try {
-      const validate = prepareValidation?.(cell.rules?.validation, cell.rules?.validationMessages)
-      if ('path' in cell.value) {
-        fields.set(cell.id, { id: cell.id, reference: cell.value, rules: cell.rules, validate })
-      }
-    }
-    catch (error) {
-      throw new TemplateError([{ phase: 'template', code: 'invalid-rules', nodeId: cell.id, path: cell.id, message: (error as Error).message }])
-    }
-  }
-  assertFormBindings(template)
-  return { template, fields }
-}
-
-function assertFormBindings(template: WorkbookDefinition): void {
   const shapes = new Map<string, 'object' | 'array' | 'field'>()
   const lookups: string[] = []
-  let fields = 0
   for (const sheet of template.sheets) {
     collect(sheet, '')
   }
   if (lookups.some(path => shapes.has(path) || [...shapes].some(([parent, kind]) => kind === 'field' && path.startsWith(parent + '.')))) {
     throw new TemplateError([{ phase: 'template', code: 'conflicting-source', nodeId: '', path: '$template', message: 'Form choice sources must be separate from submitted fields and collections' }])
   }
-  if (!fields) {
+  if (!fields.size) {
     throw new TemplateError([{ phase: 'template', code: 'no-form-fields', nodeId: '', path: '$template', message: 'a form needs at least one data binding' }])
   }
+  return { template, fields }
 
   function claim(path: string, kind: 'object' | 'array' | 'field'): void {
     const previous = shapes.get(path)
@@ -93,14 +73,24 @@ function assertFormBindings(template: WorkbookDefinition): void {
   }
   function collect(body: WorkbookBody, context: string): void {
     const regions = [...body.regions ?? []].sort((a, b) => a.row - b.row)
+    if (regions.some(region => region.axis === WorkbookAxis.Columns)) {
+      throw new TemplateError([{ phase: 'template', code: 'report-only-region', nodeId: '', path: '$template', message: 'Form records repeat down rows; column repeats support reports' }])
+    }
     if (regions.some((region, index) => index && region.row < regions[index - 1].row + regions[index - 1].height)) {
       throw new TemplateError([{ phase: 'template', code: 'overlapping-form-regions', nodeId: '', path: '$template', message: 'Independent form regions need separate row bands' }])
     }
     const path = (ref: DataReference) => `${ref.from === 'root' ? '' : context}${ref.path}`
     for (const cell of body.cells) {
-      if ('path' in cell.value) {
-        fields++
-        declare(path(cell.value), 'field')
+      if (!('path' in cell.value)) {
+        continue
+      }
+      declare(path(cell.value), 'field')
+      try {
+        const validate = cell.rules?.validation ? prepareValidation?.(cell.rules.validation, cell.rules.validationMessages) : undefined
+        fields.set(cell.id, { id: cell.id, reference: cell.value, rules: cell.rules, validate })
+      }
+      catch (error) {
+        throw new TemplateError([{ phase: 'template', code: 'invalid-rules', nodeId: cell.id, path: cell.id, message: (error as Error).message }])
       }
       if (cell.rules?.choice && 'path' in cell.rules.choice.source) {
         lookups.push(path(cell.rules.choice.source))

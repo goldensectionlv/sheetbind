@@ -192,8 +192,13 @@ describe('shared workbook forms: definition + marked XLSX', () => {
     expect(await readWorkbookForm(template, new Uint8Array())).toMatchObject({ success: false, issues: [{ code: 'invalid-workbook' }] })
     for (const path of ['items', 'items.name']) {
       const collision = await importAuthoredWorkbook(book => authorForm(book, 'Form', path))
-      await expect(renderWorkbookForm(collision, data, options)).rejects.toThrow('cannot also own')
+      for (const operation of [() => renderWorkbookForm(collision, data, options), () => readWorkbookForm(collision, new Uint8Array())]) {
+        await expect(operation()).rejects.toMatchObject({ issues: [expect.objectContaining({ phase: 'template', code: 'conflicting-binding' })] })
+      }
     }
+    const captions = await importAuthoredWorkbook(book => book.addWorksheet('Notes').addRow(['Instructions', { formula: '1+1' }]))
+    await expect(renderWorkbookForm(captions, {})).rejects.toMatchObject({ issues: [expect.objectContaining({ code: 'no-form-fields' })] })
+    await expect(readWorkbookForm(captions, new Uint8Array())).rejects.toMatchObject({ issues: [expect.objectContaining({ code: 'no-form-fields' })] })
     await expect(renderWorkbookForm(template, { ...data, items: {} }, options)).rejects.toBeInstanceOf(TemplateError)
   })
 })

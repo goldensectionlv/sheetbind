@@ -77,6 +77,8 @@ Form issuance uses the same placement and writing path. It prepares editable fie
 
 Form preparation expands object scopes into explicit field and collection paths. This small normalization keeps markers, saved choice sources and validation contexts tied to repeat records. It changes neither placement rules nor the source template. Scope behavior is checked through rendered and returned XLSX files, rather than by requiring a particular intermediate tree shape.
 
+One traversal then checks form regions and binding ownership and collects input fields directly from their bodies. It does not flatten cells into sheet coordinates. Reading prepares validators only for fields with validation rules, including fields in empty repeats; issuance never resolves validation handlers.
+
 ## Reading a form
 
 ```text

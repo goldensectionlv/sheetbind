@@ -77,12 +77,13 @@ it('renders values and empty repeats without looking up or executing validation 
 
 it('rejects unknown rules before reading, including empty repeats, and preserves occurrence indexes', async () => {
   const config = await importAuthoredWorkbook(book => book.addWorksheet('Data').addRows([
-    ['{#items}'], ['{.value}{@validate:external:{"key":1}|number|external|required|min:1}'], ['{/items}'],
+    ['Heading', { formula: '1+1' }], ['{#items}'], ['{.label}'],
+    ['{.value}{@validate:external:{"key":1}|number|external|required|min:1}'], ['{/items}'],
   ]))
   for (const items of [[], [{ value: 0 }, { value: 2 }]]) {
     const bytes = await renderWorkbookForm(config, { items })
     await expect(readWorkbookForm(config, bytes)).rejects.toMatchObject({ issues: [{
-      phase: 'template', code: 'invalid-rules', sheetName: 'Data', address: 'A2', message: 'Unknown validation rule: external',
+      phase: 'template', code: 'invalid-rules', sheetName: 'Data', address: 'A4', message: 'Unknown validation rule: external',
     }] })
   }
   const bytes = await renderWorkbookForm(config, { items: [{ value: 0 }, { value: 2 }] })
