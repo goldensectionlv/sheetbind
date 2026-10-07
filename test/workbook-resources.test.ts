@@ -57,3 +57,34 @@ it.each(['005F', '005f'])('uses one decoded sheet identity for template import, 
     }
   }
 })
+
+it.each([
+  { encoded: ['Input_x005F_x0041_', 'Input_x0041_'], names: ['Input_x0041_', 'InputA'] },
+  { encoded: ['Input_x0041_', 'Input_x005F_x0041_'], names: ['InputA', 'Input_x0041_'] },
+  { encoded: ['A'.repeat(24) + '_x005F_x0041_', 'A'.repeat(24) + '_x005F_x0042_'], names: ['A'.repeat(24) + '_x0041_', 'A'.repeat(24) + '_x0042_'] },
+  { encoded: ['Input_x0009_A', 'Input_x0020_B'], names: ['Input\tA', 'Input B'] },
+])('decodes all sheet names before checking their uniqueness and length ($names)', async ({ encoded, names }) => {
+  const book = new ExcelJS.Workbook()
+  book.addWorksheet('First').getCell('A1').value = '{first}'
+  book.addWorksheet('Second').getCell('A1').value = '{second}'
+  const zip = await JSZip.loadAsync(await saveWorkbook(book))
+  const xml = await zip.file('xl/workbook.xml')!.async('string')
+  zip.file('xl/workbook.xml', xml.replace('name="First"', `name="${encoded[0]}"`).replace('name="Second"', `name="${encoded[1]}"`))
+  const bytes = await zip.generateAsync({ type: 'nodebuffer' })
+  const original = Buffer.from(bytes)
+  const data = { first: 'First value', second: 'Second value' }
+  const template = await importWorkbookXlsx(bytes)
+  expect(resolveWorkbook(template, data).sheets.map(sheet => sheet.name)).toEqual(names)
+  for (const render of [renderWorkbookReport, renderWorkbookForm, renderWorkbookForm]) {
+    const output = await render(template, data)
+    const content = await JSZip.loadAsync(output)
+    expect((await content.file('xl/workbook.xml')!.async('string')).match(/<sheet\b/g)).toHaveLength(2)
+    if (render === renderWorkbookForm) {
+      expect(await readWorkbookForm(await importWorkbookXlsx(bytes), output)).toEqual({ success: true, data })
+      const sheet = await content.file('xl/worksheets/sheet1.xml')!.async('string')
+      content.file('xl/worksheets/sheet1.xml', sheet.replace(/<c\b[^>]*\br="A1"[^>]*>[\s\S]*?<\/c>/, '<c r="A1" t="str"><f>""</f><v/></c>'))
+      expect(await readWorkbookForm(template, await content.generateAsync({ type: 'nodebuffer' }))).toEqual({ success: true, data: { ...data, first: null } })
+    }
+  }
+  expect(bytes).toEqual(original)
+})

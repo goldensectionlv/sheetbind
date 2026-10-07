@@ -3,15 +3,17 @@ import JSZip from 'jszip'
 import { parseAddress, parseRange, XLSX_MAX_ROW } from './addresses'
 import { decodeXstring } from './report-text'
 import { workbookParts } from './workbook-resources'
-import { xmlAttributes, xmlElements } from './xml'
+import { decodeXml, encodeXml, xmlAttributes, xmlElements } from './xml'
 
 /** One XLSX decoder for authored templates and returned forms. Source bytes stay untouched. */
 export async function loadWorkbook(bytes: Uint8Array, source?: JSZip): Promise<ExcelJS.Workbook> {
   const zip = source ?? await JSZip.loadAsync(bytes)
+  const input = new JSZip()
+  input.files = { ...zip.files }
   let changed = false
   const emptyFormulaResults = new Map<string, string[]>()
   for (const [path, part] of Object.entries(zip.files)) {
-    if (part.dir || path !== 'xl/sharedStrings.xml' && !/^xl\/worksheets\/sheet\d+\.xml$/.test(path)) {
+    if (part.dir || path !== 'xl/workbook.xml' && path !== 'xl/sharedStrings.xml' && !/^xl\/worksheets\/sheet\d+\.xml$/.test(path)) {
       continue
     }
     const xml = await part.async('string')
@@ -36,14 +38,23 @@ export async function loadWorkbook(bytes: Uint8Array, source?: JSZip): Promise<E
         emptyFormulaResults.set(path, empty)
       }
     }
-    const normalized = normalizeFormText(xml)
+    // Decode names before ExcelJS checks uniqueness or truncates them to 31 characters.
+    // Keep source parts unchanged so other package readers decode them exactly once.
+    const normalized = path === 'xl/workbook.xml'
+      ? xml.replace(/(<sheet\b[^>]*\bname\s*=\s*)(["'])(.*?)\2/g, (node, prefix: string, _quote: string, value: string) => {
+        const name = decodeXml(value)
+        const decoded = decodeXstring(name)
+        const encoded = encodeXml(decoded).replace(/[\t\n\r]/g, character => `&#${character.charCodeAt(0)};`)
+        return decoded === name ? node : `${prefix}"${encoded}"`
+      })
+      : normalizeFormText(xml)
     if (normalized !== xml) {
       changed = true
-      zip.file(path, normalized)
+      input.file(path, normalized)
     }
   }
   const workbook = new ExcelJS.Workbook()
-  await workbook.xlsx.load(Uint8Array.from(changed ? await zip.generateAsync({ type: 'uint8array' }) : bytes).buffer)
+  await workbook.xlsx.load(Uint8Array.from(changed ? await input.generateAsync({ type: 'uint8array' }) : bytes).buffer)
   // These ST_Xstring attributes are not decoded by ExcelJS at all.
   workbook.definedNames.model = workbook.definedNames.model.map(name => ({ name: decodeXstring(name.name), ranges: name.ranges.map(decodeXstring) }))
   const styles = new WeakSet<object>()
@@ -56,7 +67,6 @@ export async function loadWorkbook(bytes: Uint8Array, source?: JSZip): Promise<E
     }
   }
   for (const sheet of workbook.worksheets) {
-    sheet.name = decodeXstring(sheet.name)
     sheet.columns?.forEach(column => decodeStyle(column.style))
     sheet.eachRow({ includeEmpty: true }, row => {
       decodeStyle(row.model?.style)
