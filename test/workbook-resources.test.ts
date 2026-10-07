@@ -38,6 +38,63 @@ it('does not overwrite an authored range with a formula projection using its res
   }
 })
 
+it.each(['rows', 'columns'])('writes declared formula sources independently of %s repeat instances', async axis => {
+  const rule = { source: { dictionary: 'Options' }, key: 'id', label: 'name' }
+  const rate = workbookChoiceRange(rule, 'Unit_Rate')
+  const missing = workbookChoiceRange(rule, 'missing')
+  const text = workbookChoiceRange(rule)
+  const options = { dictionaries: { Options: [{ id: 'a', name: 'Option' }, { id: 'b', name: 'Option', Unit_Rate: 4 }] } }
+  const template = await importAuthoredWorkbook(book => {
+    book.addWorksheet('Input').addRows([
+      [`{#items | axis=${axis}}`], ['{.selected}{@choice:Options; key=id; label=name; return=key}'], ['{/items}'],
+    ])
+    book.addWorksheet('Summary').addRow([{ formula: `SUM(${rate})` }, { formula: `COUNTA(${text})` }, { formula: `SUM(${missing})` }])
+  })
+  for (const count of [0, 1, 3]) {
+    const data = { items: Array.from({ length: count }, () => ({ selected: 'a' })) }
+    for (const render of axis === 'rows' ? [renderWorkbookReport, renderWorkbookForm] : [renderWorkbookReport]) {
+      const bytes = await render(template, data, options)
+      const output = await openWorkbook(bytes)
+      const helper = output.getWorksheet('_sheetbind_lists')!
+      const column = (header: string) => (helper.getRow(1).values as unknown[]).findIndex(value => value === header)
+      expect(output.definedNames.getRanges(rate).ranges).toHaveLength(1)
+      expect(output.definedNames.getRanges(missing).ranges).toHaveLength(1)
+      expect(helper.getCell(2, column('Unit_Rate')).value).toBeNull()
+      expect(helper.getCell(3, column('Unit_Rate')).value).toBe(4)
+      expect(helper.getCell(2, column('missing')).value).toBeNull()
+      expect(helper.getCell(2, column('Selection')).value).toBe('Option [a]')
+      expect(helper.getCell(3, column('Selection')).value).toBe('Option [b]')
+      const names = output.definedNames.model.map(entry => entry.name.toLowerCase())
+      expect(new Set(names).size).toBe(names.length)
+      if (render === renderWorkbookForm) {
+        expect(await readWorkbookForm(template, bytes)).toEqual({ success: true, data })
+      }
+    }
+  }
+})
+
+it('keeps requested dictionary columns when an empty source allows free input', async () => {
+  const rule = { source: { dictionary: 'Options' }, key: 'id', label: 'name' }
+  const rate = workbookChoiceRange(rule, 'rate')
+  const text = workbookChoiceRange(rule)
+  const template = await importAuthoredWorkbook(book => {
+    book.addWorksheet('Input').addRow([
+      '{selected}{@choice:Options; key=id; label=name; return=key; emptySource=input}',
+      { formula: `SUM(${rate})+COUNTA(${text})` },
+    ])
+  })
+  for (const render of [renderWorkbookReport, renderWorkbookForm]) {
+    const bytes = await render(template, { selected: 'Custom' }, { dictionaries: { Options: [] } })
+    const output = await openWorkbook(bytes)
+    expect(output.definedNames.getRanges(rate).ranges).toEqual(["'_sheetbind_lists'!$B$2"])
+    expect(output.definedNames.getRanges(text).ranges).toEqual(["'_sheetbind_lists'!$A$2"])
+    expect(output.worksheets[0].getCell('A1').dataValidation).toBeUndefined()
+    if (render === renderWorkbookForm) {
+      expect(await readWorkbookForm(template, bytes)).toEqual({ success: true, data: { selected: 'Custom' } })
+    }
+  }
+})
+
 it.each(['005F', '005f'])('uses one decoded sheet identity for template import, output and form reading (%s)', async hex => {
   const book = new ExcelJS.Workbook()
   book.addWorksheet('Input').getCell('A1').value = '{name}'

@@ -41,7 +41,7 @@ export async function renderWorkbookForm(value: WorkbookTemplate, data: unknown,
     return field && (hasValidation(field.rules, 'string') || cell.choice) ? { ...cell, text: true } : cell
   }) }))
   const resources = createWorkbookResources(WorkbookTemplate.content(value).resources)
-  const workbook = createWorkbookOutput(sheets, dictionaries, resources)
+  const workbook = createWorkbookOutput(plan, dictionaries, resources)
   for (const [name, markers] of carrier.markers) {
     writeFormMarkers(workbook.getWorksheet(name)!, markers)
   }

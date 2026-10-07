@@ -55,6 +55,8 @@ Field rules are normalized at import, and dictionaries are validated and copied 
 
 The dropdown writer receives ready-to-write strings regardless of source kind. It checks text limits and native validation conflicts, deduplicates identical lists and writes Excel ranges.
 
+Dictionary ranges for formulas come directly from declared choices and the supplied dictionaries. Formula references determine their columns; repeated cell instances and the properties present in individual records do not determine whether a range exists. Dropdowns and formula ranges share the hidden sheet but are written independently.
+
 Form issuance uses the same placement and writing path. It prepares editable fields, permits blank required values and adds the structure needed to recognize records when reading. Its hidden rows participate in coordinate mapping before formulas and other references are written.
 
 ## Reading a form

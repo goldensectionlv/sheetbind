@@ -1,15 +1,12 @@
 import type { Workbook, Worksheet } from 'exceljs'
 import type { ChoiceRule } from '../core/choices'
-import type { WorkbookChoiceOption } from '../grid/workbook-choice-display'
-import { equalJson } from '../core/json'
+import { createChoiceResolver } from '../core/choices'
+import type { Dictionaries } from '../core/dictionaries'
+import { createWorkbookChoiceDisplay } from '../grid/workbook-choice-display'
 import { formatAddress, XLSX_MAX_COLUMN } from './addresses'
 import { assertXlsxText } from './report-text'
 import type { WorkbookResources } from './workbook-resources'
-
-export interface WorkbookChoiceTarget {
-  readonly rule: ChoiceRule
-  readonly items: readonly WorkbookChoiceOption[]
-}
+import { workbookListSheetName } from './workbook-dropdowns'
 
 // Escaping underscores and uppercase too prevents name collisions in case-insensitive Excel.
 function namePart(value: string): string {
@@ -48,32 +45,26 @@ function fieldValue(value: unknown): string | number | boolean | null {
   return result
 }
 
-/** Full objects remain in the source payload; this flat projection is for Excel formulas. */
-export function writeWorkbookChoiceFields(book: Workbook, sheet: Worksheet, targets: readonly WorkbookChoiceTarget[], resources: WorkbookResources): void {
-  const named = new Map<string, readonly WorkbookChoiceOption[]>()
+/** Formula references declare dictionary columns, even when no input rows or source items exist. */
+export function writeWorkbookChoiceFields(book: Workbook, rules: readonly ChoiceRule[], dictionaries: Dictionaries, resources: WorkbookResources, sheet?: Worksheet): void {
+  const named = new Set<string>()
+  const resolve = createChoiceResolver()
+  const display = createWorkbookChoiceDisplay()
   const sources: { headers: readonly string[], rows: readonly ReturnType<typeof fieldValue>[][], names: readonly string[] }[] = []
-  let columns = sheet.columnCount
-  for (const { rule, items } of targets) {
-    let prefix: string
-    if ('dictionary' in rule.source) {
-      prefix = choicePrefix(rule)
-      if (![...resources.references].some(name => name.startsWith(prefix.toLowerCase() + '__'))) {
-        continue
-      }
-      const name = rangeName(prefix)
-      const previous = named.get(name)
-      if (previous) {
-        if (!equalJson(previous, items)) {
-          throw new RangeError('A named choice source has conflicting objects')
-        }
-        continue
-      }
-      named.set(name, items)
-    }
-    else {
+  let columns = sheet?.columnCount ?? 0
+  for (const rule of rules) {
+    if (!('dictionary' in rule.source)) {
       continue
     }
-    const fields = [...new Set(items.flatMap(item => Object.keys(item.value)))].filter(field => resources.references.has(rangeName(prefix, field).toLowerCase())).sort()
+    const prefix = choicePrefix(rule)
+    if (named.has(prefix)) {
+      continue
+    }
+    named.add(prefix)
+    const fieldPrefix = prefix.toLowerCase() + '__field_'
+    const fields = [...resources.references].filter(name => name.startsWith(fieldPrefix))
+      .map(name => name.slice(fieldPrefix.length).replace(/_u([0-9a-f]{4})_/g, (_, hex: string) => String.fromCharCode(parseInt(hex, 16))))
+      .filter(field => resources.references.has(rangeName(prefix, field).toLowerCase())).sort()
     if (!fields.length && !resources.references.has(rangeName(prefix).toLowerCase())) {
       continue
     }
@@ -86,9 +77,14 @@ export function writeWorkbookChoiceFields(book: Workbook, sheet: Worksheet, targ
     for (const name of references) {
       resources.allocate(name, true)
     }
+    const items = display({ key: null, items: resolve(rule, dictionaries[rule.source.dictionary]) }).items
     const rows = items.map(item => [fieldValue(item.text), ...fields.map(field => fieldValue(item.value[field]))])
     sources.push({ headers: ['Selection', ...fields], rows, names: references })
   }
+  if (!sources.length) {
+    return
+  }
+  sheet ??= book.addWorksheet(workbookListSheetName(book.worksheets.map(sheet => sheet.name)), { state: 'veryHidden' })
   let column = sheet.columnCount + 1
   for (const source of sources) {
     const { headers, rows } = source
