@@ -4,6 +4,38 @@ import JSZip from 'jszip'
 import { importWorkbookXlsx, readWorkbookForm, renderWorkbookForm, renderWorkbookReport, resolveWorkbook, workbookChoiceRange } from '../src/index'
 import { importAuthoredWorkbook, openWorkbook, saveWorkbook } from './xlsx'
 
+it('preserves existing relationships when adding strings and the hidden list sheet', async () => {
+  const book = new ExcelJS.Workbook()
+  book.addWorksheet('Input').getCell('A1').value = 7
+  const zip = await JSZip.loadAsync(await saveWorkbook(book))
+  const worksheet = await zip.file('xl/worksheets/sheet1.xml')!.async('string')
+  zip.file('xl/worksheets/sheet1.xml', worksheet.replace(/<c\b[^>]*>[\s\S]*?<\/c>/, '<c r="A1" t="inlineStr"><is><t>{text}{@list:Texts}</t></is></c>'))
+  let workbook = await zip.file('xl/workbook.xml')!.async('string')
+  const relations = (await zip.file('xl/_rels/workbook.xml.rels')!.async('string')).replace(/<Relationship\b[^>]*\/>/g, node => {
+    const id = /\bId="([^"]+)"/.exec(node)![1]
+    const replacement = node.includes('/worksheet"') ? 'sheetbindStrings' : node.includes('/styles"') ? 'sheetbind2' : 'sheetbindStrings_'
+    workbook = workbook.replace(`r:id="${id}"`, `r:id="${replacement}"`)
+    return node.replace(`Id="${id}"`, `Id = '${replacement}'`)
+  })
+  zip.file('xl/workbook.xml', workbook)
+  zip.file('xl/_rels/workbook.xml.rels', relations)
+  const source = await zip.generateAsync({ type: 'nodebuffer' })
+  const template = await importWorkbookXlsx(source)
+  for (const render of [renderWorkbookReport, renderWorkbookForm]) {
+    const bytes = await render(template, { text: '0007' }, { dictionaries: { Texts: ['0007'] } })
+    const saved = await JSZip.loadAsync(bytes)
+    const ids = [...(await saved.file('xl/_rels/workbook.xml.rels')!.async('string')).matchAll(/\bId\s*=\s*(["'])(.*?)\1/g)].map(match => match[2])
+    expect(new Set(ids).size).toBe(ids.length)
+    const output = await openWorkbook(bytes)
+    expect(output.worksheets.map(sheet => sheet.name)).toEqual(['Input', '_sheetbind_lists'])
+    expect(output.getWorksheet('Input')!.getCell('A1').value).toBe('0007')
+    expect(output.getWorksheet('Input')!.getCell('A1').dataValidation.type).toBe('list')
+    if (render === renderWorkbookForm) {
+      expect(await readWorkbookForm(await importWorkbookXlsx(source), bytes)).toEqual({ success: true, data: { text: '0007' } })
+    }
+  }
+})
+
 it.each(['_sb_list_1', '_SB_LIST_1', '_sb_object_sources', '_SB_OBJECT_SOURCES'])('preserves authored names through the public report and form writers (%s)', async name => {
   const template = await importAuthoredWorkbook(book => {
     book.addWorksheet('Input').addRow(['{status}{@list:Statuses}', 42, { formula: `SUM(${name})` }])

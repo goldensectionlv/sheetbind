@@ -2,6 +2,15 @@ import type JSZip from 'jszip'
 import { decodeXml, resolvePart, xmlAttributes, xmlElements } from './xml'
 import { decodeXstring } from './report-text'
 
+/** Relationship IDs share a namespace within one .rels part. */
+export function workbookRelationshipId(relations: string, preferred: string): string {
+  const ids = new Set(xmlElements(relations, 'Relationship').map(node => xmlAttributes(node).Id))
+  while (ids.has(preferred)) {
+    preferred += '_'
+  }
+  return preferred
+}
+
 /** Package paths and logical sheet names share the same decoded identity at every boundary. */
 export async function workbookParts(zip: JSZip) {
   const workbook = await zip.file('xl/workbook.xml')!.async('string')

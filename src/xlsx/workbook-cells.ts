@@ -5,6 +5,7 @@ import type { WorkbookFormula } from '../grid/workbook-formula'
 import { formatRange } from '../grid/geometry'
 import type { WorkbookPlacedCell, WorkbookPlacedSheet } from '../grid/workbook-layout'
 import { assertXlsxText, protect } from './report-text'
+import { workbookRelationshipId } from './workbook-resources'
 import { appendXmlChildren, encodeXml, setXmlAttributes, setXmlElement, xmlAttributes, xmlElements } from './xml'
 
 export type WorkbookCells = Awaited<ReturnType<typeof prepareWorkbookCells>>
@@ -85,7 +86,8 @@ async function writeWorkbookStrings(zip: JSZip, strings: readonly string[]): Pro
   }
   const relations = await zip.file('xl/_rels/workbook.xml.rels')!.async('string')
   const types = await zip.file('[Content_Types].xml')!.async('string')
-  zip.file('xl/_rels/workbook.xml.rels', appendXmlChildren(relations, 'Relationships', ['<Relationship Id="sheetbindStrings" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings" Target="sharedStrings.xml"/>']))
+  const id = workbookRelationshipId(relations, 'sheetbindStrings')
+  zip.file('xl/_rels/workbook.xml.rels', appendXmlChildren(relations, 'Relationships', [`<Relationship Id="${id}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings" Target="sharedStrings.xml"/>`]))
   zip.file('[Content_Types].xml', appendXmlChildren(types, 'Types', ['<Override PartName="/xl/sharedStrings.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"/>']))
 }
 

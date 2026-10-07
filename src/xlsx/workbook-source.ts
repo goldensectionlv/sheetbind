@@ -9,7 +9,7 @@ import { sourceWorksheet } from './source-worksheet'
 import { relocateSourceMetadata } from './source-metadata'
 import { appendXmlChildren, decodeXml, encodeXml, setXmlElement, xmlAttributes, xmlElements } from './xml'
 import { decodeXstring, protect } from './report-text'
-import { createWorkbookResources, workbookParts } from './workbook-resources'
+import { createWorkbookResources, workbookParts, workbookRelationshipId } from './workbook-resources'
 import type { WorkbookResourceSource } from './workbook-resources'
 import { workbookLists } from './workbook-lists'
 import type { FormMarkers } from './workbook-form-markers'
@@ -54,10 +54,7 @@ export async function writeWorkbookPackage(source: WorkbookSource): Promise<Buff
     const sheetId = Math.max(0, ...xmlElements(workbook, 'sheet').map(node => Number(xmlAttributes(node).sheetId))) + 1
     const partId = Math.max(0, ...Object.keys(zip.files).flatMap(name => /^xl\/worksheets\/sheet(\d+)\.xml$/.exec(name)?.slice(1).map(Number) ?? [])) + 1
     const target = `xl/worksheets/sheet${partId}.xml`
-    let relationId = `sheetbind${partId}`
-    while (relations.includes(`Id="${relationId}"`)) {
-      relationId += '_'
-    }
+    const relationId = workbookRelationshipId(relations, `sheetbind${partId}`)
     workbook = appendXmlChildren(workbook, 'sheets', [`<sheet name="${lists.name}" sheetId="${sheetId}" state="veryHidden" r:id="${relationId}"/>`])
     relations = appendXmlChildren(relations, 'Relationships', [`<Relationship Id="${relationId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${partId}.xml"/>`])
     types = appendXmlChildren(types, 'Types', [`<Override PartName="/${target}" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`])
