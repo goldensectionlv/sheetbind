@@ -142,6 +142,8 @@ This is the top of the [issued form](/examples/tutorials/issued.xlsx). Input row
 
 The form stores the issuance dictionaries in its hidden sheet. Reading needs the original template and the completed file; `return=key` returns the selected ID. See [validation and lists](./fields.md) for other sources.
 
+Named and root choice sources are checked before the file is written, including fields in empty multirow repeats. Missing labels, duplicate keys and incompatible source types are issuance data errors.
+
 ### 3. Fill and read
 
 Open `saved-form/issued.xlsx`. Input rows occupy rows 3–22:

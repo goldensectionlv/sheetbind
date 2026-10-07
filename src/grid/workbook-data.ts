@@ -55,6 +55,23 @@ export function resolveWorkbookData(template: WorkbookDefinition, data: unknown,
     const source = ref.from === 'root' ? root : current
     return { value: read(source.value), path: `${source.path}.${ref.path}` }
   }
+  function choices(cell: WorkbookCell, context: DataContext, path: string) {
+    const rule = cell.rules!.choice!
+    let items
+    try {
+      const source = rule.source
+      items = choiceOptions(rule, 'dictionary' in source ? dictionaries[source.dictionary] : reference(source, context).value ?? [])
+    }
+    catch (error) {
+      workbookIssue('choice-source', cell.id, (error as Error).message, path, 'data')
+    }
+    try {
+      return choiceLabels(items)
+    }
+    catch (error) {
+      workbookIssue('choice-display', cell.id, (error as Error).message, path, 'data')
+    }
+  }
   function value(cell: WorkbookCell, context: DataContext): WorkbookCellData {
     const rules = cell.rules
     const format = formatters.get(cell.id)
@@ -78,22 +95,8 @@ export function resolveWorkbookData(template: WorkbookDefinition, data: unknown,
     }
     let choice: WorkbookChoice | undefined
     if (rules?.choice) {
-      let items
-      try {
-        const source = rules.choice.source
-        items = choiceOptions(rules.choice, 'dictionary' in source ? dictionaries[source.dictionary] : reference(source, context).value ?? [])
-      }
-      catch (error) {
-        workbookIssue('choice-source', cell.id, (error as Error).message, result.path, 'data')
-      }
-      if (!allowsChoiceInput(rules.choice, items)) {
-        let labeled
-        try {
-          labeled = choiceLabels(items)
-        }
-        catch (error) {
-          workbookIssue('choice-display', cell.id, (error as Error).message, result.path, 'data')
-        }
+      const labeled = choices(cell, context, result.path)
+      if (!allowsChoiceInput(rules.choice, labeled)) {
         const blank = isBlank(result.value)
         const key = choiceKey(rules.choice, result.value)
         const displayKey = typeof key === 'string' || typeof key === 'number' ? key : String(result.value)
@@ -144,6 +147,16 @@ export function resolveWorkbookData(template: WorkbookDefinition, data: unknown,
     return { definition, path: context.path, iterations: context.iterations, cells, regions }
   }
   const sheets = template.sheets.map(sheet => expand(sheet, root))
+  // Shared sources must be usable even when no field instances were expanded.
+  // Existing instances retain their concrete diagnostic paths and reuse these caches.
+  for (const sheet of template.sheets) {
+    for (const cell of workbookCells(sheet)) {
+      const source = cell.rules?.choice?.source
+      if (source && ('dictionary' in source || source.from === 'root')) {
+        choices(cell, root, 'dictionary' in source ? `$dictionaries.${source.dictionary}` : `$data.${source.path}`)
+      }
+    }
+  }
   if (issues.length) {
     throw new TemplateError(issues)
   }

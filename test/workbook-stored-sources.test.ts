@@ -1,9 +1,29 @@
 import { expect, it } from 'vitest'
 import ExcelJS from 'exceljs'
-import { importWorkbookXlsx, readWorkbookForm, renderWorkbookForm, renderWorkbookReport } from '../src/index'
+import { importWorkbookXlsx, readWorkbookForm, renderWorkbookForm, renderWorkbookReport, resolveWorkbook } from '../src/index'
 import { openWorkbook as load, importAuthoredWorkbook, saveWorkbook } from './xlsx'
 
 const sourceTag = '{.answer}{@choice:.answers; key=id; label=label; return=key; emptySource=input}'
+
+it.each(['Options', '$root.options'])('validates shared choice source %s before issuing an empty multirow repeat', async source => {
+  const book = new ExcelJS.Workbook()
+  book.addWorksheet('Form').addRows([
+    ['{#items}'], ['Name', '{.name}'], ['Selected', `{.selected}{@choice:${source}; key=id; label=name; return=key}`], [null, '{/items}'],
+  ])
+  const authored = await saveWorkbook(book)
+  const template = await importWorkbookXlsx(authored)
+  for (const values of [[{ id: 'a' }], ['Allowed'], [{ id: 'a', name: 'A' }, { id: 'a', name: 'B' }]]) {
+    for (const render of [resolveWorkbook, renderWorkbookReport, renderWorkbookForm]) {
+      await expect(Promise.resolve().then<unknown>(() => render(template, { items: [], options: values }, { dictionaries: { Options: values } }))).rejects.toMatchObject({
+        issues: [{ phase: 'data', code: 'choice-source', path: source === 'Options' ? '$dictionaries.Options' : '$data.options', sheetName: 'Form', address: 'B3' }],
+      })
+    }
+  }
+  for (const values of [[], [{ id: 'a', name: 'Allowed' }]]) {
+    const bytes = await renderWorkbookForm(template, { items: [], options: values }, { dictionaries: { Options: values } })
+    expect(await readWorkbookForm(await importWorkbookXlsx(authored), bytes)).toEqual({ success: true, data: { items: [] } })
+  }
+})
 
 it.each(['x'.repeat(32768), 'A\u0001B', '\ud800'])('rejects invalid text in an unselected local choice %#', async label => {
   const template = await importAuthoredWorkbook(book => book.addWorksheet('Input').getCell('A1').value = '{answer}{@choice:.options; key=id; label=label; return=key}')
