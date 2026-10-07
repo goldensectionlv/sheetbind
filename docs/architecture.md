@@ -14,7 +14,7 @@ Sheetbind targets XLSX. DOCX and other formats are outside its architectural req
 
 `src/index.ts` defines the public package API. An internal export does not become public automatically. ESLint separates value rules and geometry from file reading and writing. Forms belong to XLSX and have no separate format-independent layer.
 
-Template import, storage and inspection live in `xlsx/workbook-template.ts`; form issuance and reading live in `xlsx/workbook-form.ts`. Field preparation is in `xlsx/form-definition.ts`, and record operations are in `xlsx/form-records.ts`. Collecting, saving and reading choice sources share `xlsx/workbook-choice-sources.ts`. Separate files for axes, formulas, markers and native XLSX parts correspond to distinct algorithms.
+Template import, storage and inspection live in `xlsx/workbook-template.ts`; form issuance and reading live in `xlsx/workbook-form.ts`. Field preparation is in `xlsx/form-definition.ts`, and record operations are in `xlsx/form-records.ts`. `xlsx/workbook-lists.ts` owns the hidden worksheet: dropdowns, dictionary ranges referenced by formulas, and saved form sources with their reader. Separate files for axes, formulas, markers and native XLSX parts correspond to distinct algorithms.
 
 ## Models and ownership
 

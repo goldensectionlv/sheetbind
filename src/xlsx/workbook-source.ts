@@ -1,6 +1,6 @@
 import JSZip from 'jszip'
 import type { Dictionaries } from '../core/dictionaries'
-import type { WorkbookChoiceSources } from './workbook-choice-sources'
+import type { WorkbookChoiceSources } from './workbook-lists'
 import type { WorkbookPlan } from '../grid/workbook-layout'
 import type { FormulaRows } from '../grid/workbook-formula'
 import { prepareWorkbookCells, writeWorkbookStrings } from './workbook-cells'

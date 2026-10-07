@@ -18,5 +18,5 @@ export { importWorkbookXlsx, renderWorkbookReport, resolveWorkbook, workbookDict
 export { renderWorkbookForm, readWorkbookForm } from './xlsx/workbook-form'
 export { inspectWorkbookTemplate } from './xlsx/workbook-template'
 export type { WorkbookTemplateFinding } from './xlsx/workbook-template'
-export { workbookChoiceRange } from './xlsx/workbook-choice-fields'
+export { workbookChoiceRange } from './xlsx/workbook-lists'
 export type { WorkbookFormIssue, WorkbookFormResult } from './xlsx/form-definition'
