@@ -92,7 +92,7 @@ export function placeWorkbook(config: WorkbookDefinition, data: unknown, options
   return { sheets: config.sheets.map((sheet, index) => placeWorkbookSheet(sheet, execution[index])) }
 }
 
-function placeWorkbookSheet(sheet: WorkbookSheet, group: WorkbookData): WorkbookSheetPlan {
+export function placeWorkbookSheet(sheet: WorkbookSheet, group: WorkbookData): WorkbookSheetPlan {
   const settings = { id: sheet.id, name: sheet.name, state: sheet.state, xlsx: sheet.xlsx, occupied: sheet.occupied }
   const cells: WorkbookPlacedCell[] = []
   const axes = planWorkbookAxes(group)

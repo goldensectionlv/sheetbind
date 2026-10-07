@@ -1,12 +1,16 @@
 import type { Worksheet } from 'exceljs'
 import { createWorkbookFormData, referencePath, WorkbookFormInputError } from '../form/workbook'
 import type { DataPath } from '../form/records'
+import { dataPath } from '../form/records'
+import type { Origin } from '../core/template'
 import { isWorkbookFormRow, workbookFormRowFields } from '../form/workbook-rows'
 import type { WorkbookFormRows } from '../form/workbook-rows'
 import type { WorkbookBody, WorkbookRegion, WorkbookDefinition } from '../grid/workbook'
 import { workbookCells, WORKBOOK_LIMITS } from '../grid/workbook'
 import { mapWorkbookPrint } from '../grid/workbook-print'
 import type { WorkbookPlan, WorkbookRegionLayout } from '../grid/workbook-layout'
+import { placeWorkbookSheet } from '../grid/workbook-layout'
+import type { WorkbookData } from '../grid/workbook-data'
 import { formatAddress } from './addresses'
 import { FormulaEdge } from '../grid/workbook-formula'
 import type { FormulaRows } from '../grid/workbook-formula'
@@ -185,9 +189,10 @@ export function readFormMarkers(sheet: Worksheet): FormMarkers {
 }
 
 /** Interpret only the declared template tree; marker text never supplies a data path or rule. */
-export function formDataFromMarkers(template: WorkbookDefinition, definition: FormCarrierDefinition, markers: ReadonlyMap<string, FormMarkers>) {
+export function readFormStructure(template: WorkbookDefinition, definition: FormCarrierDefinition, markers: ReadonlyMap<string, FormMarkers>) {
   const shape = createWorkbookFormData()
   const rows: WorkbookFormRows[] = []
+  const sheets: WorkbookPlan['sheets'][number][] = []
   for (const sheet of template.sheets) {
     if (!definition.sheets.has(sheet.name)) {
       continue
@@ -205,14 +210,16 @@ export function formDataFromMarkers(template: WorkbookDefinition, definition: Fo
       }
       cursor++
     }
-    const visit = (body: WorkbookBody, context: DataPath): void => {
+    const visit = (body: WorkbookBody, context: DataPath, iterations: Origin['iterations']): WorkbookData => {
       shape.context(context)
-      for (const cell of body.cells) {
+      const cells = body.cells.map(cell => {
+        const path = 'path' in cell.value ? referencePath(cell.value, context) : context
         if ('path' in cell.value) {
-          shape.field(referencePath(cell.value, context))
+          shape.field(path)
         }
-      }
-      for (const region of [...body.regions ?? []].sort((a, b) => a.row - b.row)) {
+        return { definition: cell, value: null, origin: { nodeId: cell.id, dataPath: dataPath(path), iterations } }
+      })
+      const regions = [...body.regions ?? []].sort((a, b) => a.row - b.row).map(region => {
         const id = definition.numbers.get(region.id)!
         const start = found[cursor]?.row
         expect(FormMarkerKind.Repeat, id)
@@ -234,23 +241,27 @@ export function formDataFromMarkers(template: WorkbookDefinition, definition: Fo
           rows.push({ path, fields: workbookFormRowFields(region) })
         }
         shape.collection(path, count)
-        for (let index = 0; index < count; index++) {
+        const instances = Array.from({ length: count }, (_, index) => {
           if (!row) {
             expect(FormMarkerKind.Item, id)
           }
-          visit(region, [...path, index])
+          const instance = visit(region, [...path, index], [...iterations, { nodeId: region.id, index }])
           if (!row) {
             expect(FormMarkerKind.ItemEnd, id)
           }
-        }
+          return instance
+        })
         expect(FormMarkerKind.RepeatEnd, id)
-      }
+        return { definition: region, path: dataPath(path), instances }
+      })
+      return { definition: body, path: dataPath(context), iterations, cells, regions }
     }
-    visit(sheet, [])
+    const structure = visit(sheet, [], [])
     expect(FormMarkerKind.SheetEnd)
     if (cursor !== found.length) {
       fail('unexpected form control marker')
     }
+    sheets.push(placeWorkbookSheet(sheet, structure))
   }
-  return { data: shape.data, contexts: shape.contexts, rows }
+  return { data: shape.data, contexts: shape.contexts, rows, plan: { sheets } }
 }

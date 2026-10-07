@@ -20,7 +20,7 @@ import { workbookListSheetName } from './workbook-lists'
 import { readWorkbookChoiceSources } from './workbook-choice-sources'
 import { xlsxTextIssues } from './report-text'
 import { readFormValue } from './form-value'
-import { formCarrierDefinition, formDataFromMarkers, placeFormMarkers, readFormMarkers } from './workbook-form-markers'
+import { formCarrierDefinition, readFormStructure, placeFormMarkers, readFormMarkers } from './workbook-form-markers'
 import { writeWorkbookPackage } from './workbook-source'
 import { TaggedXlsxError, withTemplateLocations } from './tagged-template'
 
@@ -87,9 +87,8 @@ function readFormSubmission(workbook: ExcelJS.Workbook, prepared: PreparedWorkbo
     return { success: false, issues }
   }
   const markers = new Map([...definition.sheets].map(name => [name, readFormMarkers(workbook.getWorksheet(name)!)]))
-  const shape = formDataFromMarkers(prepared.template, definition, markers)
-  const plan = withTemplateLocations(prepared.template, () => placeWorkbook(prepared.template, shape.data, { purpose: 'read' }))
-  const expected = placeFormMarkers(plan, definition)
+  const shape = withTemplateLocations(prepared.template, () => readFormStructure(prepared.template, definition, markers))
+  const expected = placeFormMarkers(shape.plan, definition)
   const fields: WorkbookFormField[][] = []
   for (const { sheet: plan } of expected.plan.sheets) {
     if (!definition.sheets.has(plan.name)) {

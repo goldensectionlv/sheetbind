@@ -25,7 +25,7 @@ export interface WorkbookData {
   readonly cells: readonly WorkbookCellData[]
   readonly regions: readonly { readonly definition: WorkbookRegion, readonly path: string, readonly instances: readonly WorkbookData[] }[]
 }
-export interface WorkbookDataOptions { readonly dictionaries?: Dictionaries, readonly purpose?: 'report' | 'issue' | 'read' }
+export interface WorkbookDataOptions { readonly dictionaries?: Dictionaries, readonly purpose?: 'report' | 'issue' }
 interface DataContext { readonly value: unknown, readonly path: string, readonly iterations: Origin['iterations'] }
 
 function scalar(value: unknown): value is TemplateValue {
@@ -37,7 +37,7 @@ function scalar(value: unknown): value is TemplateValue {
 export function resolveWorkbookData(template: WorkbookDefinition, data: unknown, options: WorkbookDataOptions = {}): WorkbookData[] {
   const dictionaries = options.dictionaries ?? {}
   const purpose = options.purpose ?? 'report'
-  const formatters = purpose === 'read' ? undefined : prepareWorkbookValues(template, dictionaries)
+  const formatters = prepareWorkbookValues(template, dictionaries)
   if (!isDataObject(data)) {
     workbookIssue('invalid-data', '$template', 'root data must be an object', '$data', 'data')
   }
@@ -56,15 +56,11 @@ export function resolveWorkbookData(template: WorkbookDefinition, data: unknown,
   }
   function value(cell: WorkbookCell, context: DataContext): WorkbookCellData {
     const rules = cell.rules
-    const format = formatters?.get(cell.id)
+    const format = formatters.get(cell.id)
     const result = 'path' in cell.value
       ? reference(cell.value, context)
       : { value: 'literal' in cell.value ? cell.value.literal : null, path: context.path }
     const origin = { nodeId: cell.id, dataPath: result.path, iterations: context.iterations }
-    // Reading needs field positions; submitted values come from the returned workbook.
-    if (purpose === 'read') {
-      return { definition: cell, origin, value: null }
-    }
     if (result.value === undefined && 'path' in cell.value && (cell.value.optional || purpose === 'issue')) {
       result.value = null
     }
