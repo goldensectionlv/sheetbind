@@ -1,11 +1,8 @@
 import { expect, it } from 'vitest'
 import ExcelJS from 'exceljs'
 import { definition, data, declaredData, dictionaries } from '../examples/choices/definition'
-import { WorkbookTemplate } from '../src/xlsx/workbook-template'
 import { editExample, importAuthoredWorkbook } from './xlsx'
-import { workbookCells } from '../src/grid/workbook'
-import { workbookDictionarySources, resolveWorkbook, importWorkbookXlsx, renderWorkbookReport } from '../src/xlsx/workbook-template'
-import { renderWorkbookForm, readWorkbookForm } from '../src/xlsx/workbook-form'
+import { workbookDictionarySources, resolveWorkbook, importWorkbookXlsx, renderWorkbookReport, renderWorkbookForm, readWorkbookForm } from '../src/index'
 import { saveWorkbook } from './xlsx'
 
 async function load(bytes: Buffer) {
@@ -14,7 +11,7 @@ async function load(bytes: Buffer) {
   return book
 }
 const bytes = saveWorkbook
-const options = { dictionaries, context: data }
+const options = { dictionaries }
 function find(sheet: ExcelJS.Worksheet, value: unknown) {
   let result: ExcelJS.Cell | undefined
   sheet.eachRow(row => row.eachCell(cell => {
@@ -45,13 +42,16 @@ it('imports readable choice tags and keeps source scope and value types through 
   })
   sheet.getCell('B1').value = '{productCode}{@choice:.products; label=name; return=key; key=code}{@validate:string}'
   const config = await importWorkbookXlsx(await bytes(book))
-  const rules = workbookCells(WorkbookTemplate.content(config).definition.sheets[0]).map(cell => cell.rules)
+  const product = { identity: { id: '006' }, display: { name: 'Paper' } }
+  const input = { product, productCode: '007', supplierId: 0, products: [{ code: '007', name: 'Local' }], suppliers: [{ id: 0, name: 'Root' }] }
+  const options = { dictionaries: { Products: [product] } }
+  const rules = resolveWorkbook(config, input, options).sheets[0].cells.map(cell => cell.rules)
   expect(rules).toEqual([
     { validation: [{ rule: 'required' }, { rule: 'object' }], choice: { source: { dictionary: 'Products' }, key: 'identity.id', label: 'display.name' } },
     { validation: [{ rule: 'string' }], choice: { ...{ source: { path: 'products' }, key: 'code', label: 'name' }, return: 'key' as const } },
     { validation: [{ rule: 'number' }], choice: { ...{ source: { path: 'suppliers', from: 'root' }, key: 'id', label: 'name' }, return: 'key' as const } },
   ])
-
+  expect(await readWorkbookForm(config, await renderWorkbookForm(config, input, options))).toEqual({ success: true, data: { product, productCode: '007', supplierId: 0 } })
 })
 
 it('preserves choice rules through tagged XLSX and submitted values', async () => {

@@ -1,13 +1,10 @@
 import { expect, it, vi } from 'vitest'
 import ExcelJS from 'exceljs'
 import { definition, data, options } from '../examples/validation/definition'
-import { createValidation, parseValidation, ValidationExecutionError } from '../src/core/validation'
-import type { ValidationRule } from '../src/core/validation'
-import { parseFieldTag } from '../src/core/field-rules'
+import { createValidation } from '../src/core/validation'
+import type { ValidationRule } from '../src/index'
 import { importAuthoredWorkbook, saveWorkbook } from './xlsx'
-import { WorkbookTemplate } from '../src/xlsx/workbook-template'
-import { resolveWorkbook, importWorkbookXlsx, renderWorkbookReport } from '../src/xlsx/workbook-template'
-import { readWorkbookForm, renderWorkbookForm } from '../src/xlsx/workbook-form'
+import { parseValidation, ValidationExecutionError, resolveWorkbook, importWorkbookXlsx, renderWorkbookReport, readWorkbookForm, renderWorkbookForm } from '../src/index'
 
 async function load(bytes: Buffer) {
   const book = new ExcelJS.Workbook()
@@ -22,13 +19,12 @@ it('carries ordered repeated rules and escaped JSON arguments/messages through f
   expect(validation[1].args).toEqual(['001', [1, true], { text: 'a|b:c,=;{d}' }])
   const rules = { validation: validation.map((use, index) => ({ ...use, ...(index === 1 ? { message: 'Ошибка "x" | : = ; {a}\nnext' } : {}) })), validationMessages: { probe: 'Fallback: "x"' } }
   const tag = '{amount}{@validate:required}{@validate:probe:"001",[1,true],{"text":"a|b:c,=;{d}"}; message=' + JSON.stringify(rules.validation[1].message) + '}{@validate:probe:false}{@validationMessage:probe:' + JSON.stringify(rules.validationMessages.probe) + '}'
-  expect(parseFieldTag(tag).rules).toEqual(rules)
   const book = new ExcelJS.Workbook()
   book.addWorksheet('Data').getCell('A1').value = tag
   const restored = await importWorkbookXlsx(await saveWorkbook(book))
-  expect(WorkbookTemplate.content(restored).definition.sheets[0].cells[0].rules).toEqual(rules)
+  expect(resolveWorkbook(restored, { amount: 10 }).sheets[0].cells[0].rules).toEqual(rules)
   for (const invalid of ['{x}{y}', '{x}{@unknown:a}', '{x}{@validate:a|b; message="ambiguous"}', '{x}{@validationMessage:a:"unclosed}', '{x}{@choice:Items; key=id; key=other; label=name}']) {
-    expect(() => parseFieldTag(invalid)).toThrow()
+    await expect(importAuthoredWorkbook(book => book.addWorksheet('Invalid').getCell('A1').value = invalid)).rejects.toThrow()
   }
 })
 

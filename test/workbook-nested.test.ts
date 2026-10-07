@@ -1,24 +1,21 @@
 import { describe, expect, it } from 'vitest'
 import * as project from '../examples/regions/nested'
-import { resolveWorkbook, renderWorkbookReport } from '../src/xlsx/workbook-template'
-import { WorkbookTemplate } from '../src/xlsx/workbook-template'
-import { renderWorkbookForm, readWorkbookForm } from '../src/index'
+import { resolveWorkbook, renderWorkbookReport, renderWorkbookForm, readWorkbookForm } from '../src/index'
 import { importAuthoredWorkbook, openWorkbook } from './xlsx'
-
-const definition = WorkbookTemplate.content(project.definition).definition
 
 describe('nested row placement', () => {
   it('keeps nested field positions, row settings and every iteration of the data origin', () => {
-    const sites = definition.sheets[0].regions![0]
-    const work = sites.regions![0]
-    const code = work.cells.find(cell => 'path' in cell.value && cell.value.path === 'code')!
     const result = resolveWorkbook(project.definition, project.data).sheets[0]
+    const site = result.cells.find(cell => cell.origin.dataPath === '$data.sites[1].name')!
+    const code = result.cells.find(cell => cell.origin.dataPath === '$data.sites[1].work[0].code')!
     expect(result.cells.filter(cell => /^\$data.sites\[\d+\].name$/.test(cell.origin.dataPath)).map(cell => cell.at.row)).toEqual([4, 9, 16])
     expect(result.cells.filter(cell => /^\$data.sites\[\d+\].note$/.test(cell.origin.dataPath)).map(cell => cell.at.row)).toEqual([6, 13, 24])
     expect(result.cells.find(cell => 'literal' in cell.value && cell.value.literal === 'Prepared by')!.at.row).toBe(28)
-    expect(result.cells.find(cell => cell.definitionId === code.id)).toMatchObject({ at: { row: 11, column: 1 },
-      origin: { nodeId: code.id, dataPath: '$data.sites[1].work[0].code', iterations: [{ nodeId: sites.id, index: 1 }, { nodeId: work.id, index: 0 }] },
+    expect(code).toMatchObject({ at: { row: 11, column: 1 },
+      origin: { nodeId: code.definitionId, iterations: [site.origin.iterations[0], { nodeId: expect.any(String), index: 0 }] },
     })
+    expect(site.origin.iterations).toEqual([{ nodeId: expect.any(String), index: 1 }])
+    expect(new Set(code.origin.iterations.map(item => item.nodeId)).size).toBe(2)
     expect(result.rows).toContainEqual({ index: 11, height: 26 })
     expect(new Set(result.cells.map(cell => cell.id)).size).toBe(result.cells.length)
   })
