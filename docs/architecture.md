@@ -18,6 +18,8 @@ Template import, storage and inspection live in `xlsx/workbook-template.ts`; for
 
 ## Models and ownership
 
+The workbook model and its ownership and geometry checks live together in `grid/workbook.ts`.
+
 The library has three operations: rendering a report, issuing a form and reading a completed form. They share bindings and placement but differ in where values come from and which checks apply. `core` contains value rules; workbook region execution belongs to `grid`.
 
 | Representation | Contents | Consumers |
