@@ -135,8 +135,7 @@ function assertHandler(name: string, rule: ValidationRule): void {
     throw new SyntaxError(`Validation rule name is reserved or invalid: ${name}`)
   }
   if (!rule || typeof rule.validate !== 'function' || rule.validateArgs !== undefined && typeof rule.validateArgs !== 'function'
-      || rule.skipEmpty !== undefined && typeof rule.skipEmpty !== 'boolean'
-      || rule.message !== undefined && typeof rule.message !== 'string' && typeof rule.message !== 'function') {
+      || rule.skipEmpty !== undefined && typeof rule.skipEmpty !== 'boolean') {
     throw new SyntaxError(`Invalid validation handler: ${name}`)
   }
 }
@@ -153,18 +152,15 @@ export function registerValidationRule(name: string, rule: ValidationRule): void
 /** Form reading owns its handlers; rendering only carries rule definitions. */
 export function createValidation(options: ValidationOptions = {}) {
   const rules = new Map([...Object.entries(builtins), ...registered])
-  for (const [name, rule] of Object.entries(options.validationRules ?? {})) {
-    assertHandler(name, rule)
-    rules.set(name, { ...rule })
-  }
-  for (const message of Object.values(options.validationMessages ?? {})) {
-    if (typeof message !== 'string' && typeof message !== 'function') {
-      throw new SyntaxError('Runtime validation messages must be strings or functions')
-    }
-  }
+  const warnedMessages = new Set<string>()
   return function prepare(validation: Validation = [], messages: Readonly<Record<string, string>> = {}): ValidateValue {
     const chain = parseValidation(validation).map((use, index) => {
-      const handler = rules.get(use.rule)
+      const custom = Object.hasOwn(options.validationRules ?? {}, use.rule)
+      const rule = custom ? options.validationRules![use.rule] : rules.get(use.rule)
+      if (custom) {
+        assertHandler(use.rule, rule!)
+      }
+      const handler = rule && { ...rule }
       if (!handler) {
         throw new SyntaxError(`Unknown validation rule: ${use.rule}`)
       }
@@ -191,9 +187,19 @@ export function createValidation(options: ValidationOptions = {}) {
           const runtime = Object.hasOwn(options.validationMessages ?? {}, use.rule) ? options.validationMessages![use.rule] : undefined
           const message = use.message ?? fallback ?? runtime ?? handler.message ?? `failed validation: ${use.rule}`
           const details = { ...context, value, rule: use.rule, args, index }
-          const text = typeof message === 'function' ? message(details) : message
-          if (typeof text !== 'string') {
-            throw new TypeError('expected a string message')
+          let text = `failed validation: ${use.rule}`
+          try {
+            const formatted = typeof message === 'function' ? message(details) : message
+            if (typeof formatted !== 'string') {
+              throw new TypeError('expected a string message')
+            }
+            text = formatted
+          }
+          catch (error) {
+            if (!warnedMessages.has(use.rule)) {
+              console.warn(`sheetbind: validation message for ${use.rule} failed: ${error instanceof Error ? error.message : String(error)}; using the default message`)
+              warnedMessages.add(use.rule)
+            }
           }
           return { code: use.rule, rule: use.rule, args: structuredClone(args), index, message: text }
         }

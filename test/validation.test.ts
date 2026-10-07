@@ -96,7 +96,7 @@ it('rejects a misspelled required rule instead of accepting a blank field', asyn
 })
 
 it('keeps malformed handlers, known arguments and execution failures separate from value issues', async () => {
-  expect(() => createValidation({ validationRules: { required: { validate: () => true } } })).toThrow('reserved')
+  expect(() => createValidation({ validationRules: { required: { validate: () => true } } })('required')).toThrow('reserved')
   expect(() => createValidation(options)('decimalPlaces:bad')).toThrow('Invalid arguments')
   const config = await importAuthoredWorkbook(book => {
     book.addWorksheet('Data').getCell('A1').value = '{v}{@validate:broken}'
@@ -107,6 +107,32 @@ it('keeps malformed handlers, known arguments and execution failures separate fr
     const runtime = { validationRules: { broken: { validate: validate as unknown as ValidationRule['validate'] } } }
     const form = await renderWorkbookForm(config, { v: 1 })
     await expect(readWorkbookForm(config, form, runtime)).rejects.toBeInstanceOf(ValidationExecutionError)
+  }
+})
+
+it('ignores unused runtime options and keeps validation failures when message formatting fails', async () => {
+  const config = await importAuthoredWorkbook(book => book.addWorksheet('Input').getCell('A1').value = '{amount}{@validate:required}')
+  const custom = await importAuthoredWorkbook(book => book.addWorksheet('Input').getCell('A1').value = '{amount}{@validate:custom}')
+  const bytes = await renderWorkbookForm(config, { amount: null })
+  const warning = vi.spyOn(console, 'warn').mockImplementation(() => {})
+  try {
+    const unused = { validationRules: { unused: {} as ValidationRule }, validationMessages: { unused: 42 as unknown as string } }
+    expect(await readWorkbookForm(config, bytes, unused)).toMatchObject({ success: false, data: { amount: null }, issues: [{ rule: 'required', message: 'a value is required' }] })
+    expect(warning).not.toHaveBeenCalled()
+    for (const message of [42 as unknown as string, () => {
+      throw new Error('message failed')
+    }]) {
+      expect(await readWorkbookForm(config, bytes, { validationMessages: { required: message } })).toMatchObject({ success: false,
+        data: { amount: null }, issues: [{ rule: 'required', message: 'failed validation: required' }],
+      })
+      expect(await readWorkbookForm(custom, bytes, { validationRules: { custom: { validate: () => false, skipEmpty: false, message } } })).toMatchObject({ success: false,
+        data: { amount: null }, issues: [{ rule: 'custom', message: 'failed validation: custom' }],
+      })
+    }
+    expect(warning).toHaveBeenCalledTimes(4)
+  }
+  finally {
+    warning.mockRestore()
   }
 })
 
