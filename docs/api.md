@@ -78,7 +78,7 @@ type WorkbookFormResult =
   | { readonly success: false, readonly issues: readonly WorkbookFormIssue[], readonly data?: Readonly<Record<string, unknown>> }
 ```
 
-Value failures contain both `data` and `issues`, so the application can show the parsed fields for correction. An invalid choice remains the entered string; formulas without a usable saved result and unsupported values produce `null` and an issue. These data have not passed validation. Unreadable XLSX, missing embedded sources or invalid structure produces no `data`. Check `result.success` and also handle template or application configuration exceptions. Types and precision follow the [submitted cells' formats](./xlsx.md#input-formats-and-value-types).
+Value failures contain both `data` and `issues`, so the application can show the parsed fields for correction. An invalid choice remains the entered string; formulas without a usable saved result and unsupported values produce `null` and an issue. These data have not passed validation. Unreadable XLSX, a damaged source payload or invalid structure produces no `data`. An absent named dictionary produces a warning and leaves the cell value unchanged; it does not stop reading. Check `result.success` and also handle template or application configuration exceptions. Types and precision follow the [submitted cells' formats](./xlsx.md#input-formats-and-value-types).
 
 All list and choice sources are embedded in the issued file, including row-local arrays. Reading only uses `validationRules` and `validationMessages` from the options; dictionaries and context are not read inputs. Keep the original template.
 
@@ -173,7 +173,7 @@ const formula = `INDEX(${prices},MATCH(B3,${labels},0))`
 
 Use the resulting formula in the source workbook and declare a choice using that dictionary in the template. Rendering creates the referenced ranges from the supplied dictionary, regardless of the choice's `return` mode or the number of repeated records. Missing properties produce blank cells; an empty dictionary produces a blank range. The helper only computes a name. Unreferenced properties stay in the saved JSON and are not written into cells. Excel precision applies to formula cells; reading the chosen object preserves the saved JSON values. A contextual source or a conflict with an existing range of the same name throws `RangeError`.
 
-`ChoiceRule` contains `source`, `key`, `label` and optional `return: 'object' | 'key'`. `emptySource: 'input'` permits free input for an empty source and requires `return: 'key'`. Its source is `{ dictionary: string }` or a `DataReference`; `.answers` can select an array from each record in both reports and forms. Omitted, `undefined` and `null` data references behave like empty arrays; named dictionaries must still be supplied. See [validation and lists](./fields.md).
+`ChoiceRule` contains `source`, `key`, `label` and optional `return: 'object' | 'key'`. `emptySource: 'input'` permits free input for an empty source and requires `return: 'key'`. Its source is `{ dictionary: string }` or a `DataReference`; `.answers` can select an array from each record in both reports and forms. Omitted, `undefined` and `null` data references behave like empty arrays. An absent named dictionary emits one `console.warn` per name per call and disables its dropdown, lookup and list validation; ordinary field validation still applies. See [validation and lists](./fields.md).
 
 ## Errors
 
@@ -182,7 +182,8 @@ Use the resulting formula in the source workbook and declare a choice using that
 | Invalid values or structure in a returned form | `WorkbookFormResult` with `success: false` |
 | Returned file cannot be read as XLSX | The same result with `code: 'invalid-workbook'` |
 | Unreadable template or invalid XLSX tag | `TaggedXlsxError` |
-| Missing data or dictionaries, invalid field rules | `TemplateError`, often its `TaggedXlsxError` subclass |
+| Missing named dictionary | `console.warn`; ordinary input without dictionary lookup or validation |
+| Missing bound data, malformed dictionaries or invalid field rules | `TemplateError`, often its `TaggedXlsxError` subclass |
 | Custom predicate or message throws or returns the wrong type | `ValidationExecutionError` |
 | Malformed arguments, unsupported geometry or conflicting native validation | `SyntaxError`, `TypeError` or `RangeError`, depending on the check |
 

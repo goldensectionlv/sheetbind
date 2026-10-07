@@ -11,7 +11,8 @@
 
 ### Changed
 
-- Omitted, `undefined` and `null` choice sources in data behave like empty arrays, including nested root and row-local paths. `emptySource=input` allows free input for these sources; named dictionary dependencies remain required.
+- Omitted, `undefined` and `null` choice sources in data behave like empty arrays, including nested root and row-local paths. `emptySource=input` allows free input for these sources.
+- Missing named dictionaries emit one warning per name per call and leave fields as ordinary input without dictionary lookup or list validation. Field validation still applies; supplied dictionaries retain their shape and value checks.
 - Runtime data and dictionaries accept undefined object properties at any depth as absent values. Saved choice-source snapshots omit those properties without changing caller data. Stored JSON definitions remain strict; undefined array items remain invalid.
 - Omitted and `null` repeat sources behave like empty arrays, including nested and column repeats. Forms retain the same blank input row as for an explicit empty array. Other non-array values and non-object items remain errors.
 - Forms no longer insert a first row or store a template hash. Reading checks actual record boundaries and merged fields against the supplied template; application code owns template identity/version checks. Reissue forms produced by earlier versions: the form carrier is now version 4.

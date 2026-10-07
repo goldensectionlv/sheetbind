@@ -1,6 +1,6 @@
 import ExcelJS from 'exceljs'
 import type { ValidationOptions } from '../core/validation'
-import { parseDictionaries } from '../core/dictionaries'
+import { parseDictionaries, warnMissingDictionaries } from '../core/dictionaries'
 import type { Dictionaries } from '../core/dictionaries'
 import { TemplateError, readDataPath } from '../core/template'
 import { prepareWorkbookForm, WorkbookFormInputError } from './form-definition'
@@ -24,6 +24,7 @@ import { equalJson, isDataObject } from '../core/json'
 import { validateList } from '../core/field-rules'
 import { isBlank } from '../core/validation'
 import type { FieldValue, TemplateValue } from '../core/template'
+import { collectWorkbookDictionarySources } from '../grid/workbook'
 
 /** Issue input fields and structural boundaries. Blank required fields can be completed later. */
 export async function renderWorkbookForm(value: WorkbookTemplate, data: unknown, options: { readonly dictionaries?: Dictionaries } = {}): Promise<Buffer> {
@@ -213,6 +214,7 @@ function readWorkbookFormFields(prepared: PreparedWorkbookForm, submission: Work
 }
 
 function decodeFormFields(prepared: PreparedWorkbookForm, submission: WorkbookFormSubmission, options: ReadOptions) {
+  warnMissingDictionaries(collectWorkbookDictionarySources(prepared.template), options.dictionaries)
   const { data } = submission
   const issues = new Map<WorkbookFormField, WorkbookFormIssue>()
   const fields = new Map<string, FieldValue>()
@@ -241,7 +243,7 @@ function decodeFormFields(prepared: PreparedWorkbookForm, submission: WorkbookFo
     const rule = field.rules!.choice!
     const source = rule.source
     if ('dictionary' in source) {
-      return choiceOptions(rule, options.dictionaries[source.dictionary])
+      return Object.hasOwn(options.dictionaries, source.dictionary) ? choiceOptions(rule, options.dictionaries[source.dictionary]) : undefined
     }
     if (source.from === 'root') {
       return choiceOptions(rule, readDataPath(options.context, source.path))
@@ -256,7 +258,7 @@ function decodeFormFields(prepared: PreparedWorkbookForm, submission: WorkbookFo
   for (const field of prepared.fields.values()) {
     savedSource(field, () => {
       const list = field.rules?.list
-      if (list && (!options.dictionaries[list]?.length || !options.dictionaries[list].every(item => typeof item === 'string'))) {
+      if (list && Object.hasOwn(options.dictionaries, list) && (!options.dictionaries[list].length || !options.dictionaries[list].every(item => typeof item === 'string'))) {
         throw new SyntaxError(`dictionary ${list} must contain strings`)
       }
       const source = field.rules?.choice?.source
@@ -267,7 +269,8 @@ function decodeFormFields(prepared: PreparedWorkbookForm, submission: WorkbookFo
   }
   for (const field of submission.fields) {
     const { location, rules } = field
-    const items = rules?.choice ? savedSource(field, () => choiceLabels(resolve(field, location)), location) : undefined
+    const source = rules?.choice ? savedSource(field, () => resolve(field, location), location) : undefined
+    const items = source && savedSource(field, () => choiceLabels(source), location)
     if (field.issue) {
       issues.set(field, { phase: 'value', ...field.issue, ...location })
       continue

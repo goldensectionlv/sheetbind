@@ -186,11 +186,8 @@ export function hasValidation(rules: FieldRules | undefined, name: string): bool
 }
 
 export function validateList(value: unknown, rules: FieldRules, choices?: readonly string[]): { code: string, message: string } | undefined {
-  if (!rules.list || isBlank(value)) {
+  if (!rules.list || !choices || isBlank(value)) {
     return undefined
-  }
-  if (!choices) {
-    return { code: 'missing-dictionary', message: `dictionary ${rules.list} was not supplied` }
   }
   if (!choices.includes(value as string)) {
     return { code: 'list', message: `must be a value from ${rules.list}` }

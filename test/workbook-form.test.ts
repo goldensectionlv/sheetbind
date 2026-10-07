@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import ExcelJS from 'exceljs'
 import JSZip from 'jszip'
 import * as fieldsProject from '../examples/fields/template'
-import { TemplateError, readWorkbookForm, renderWorkbookForm, renderWorkbookReport } from '../src/index'
+import { readWorkbookForm, renderWorkbookForm, renderWorkbookReport } from '../src/index'
 import { FORM_MARKER_COLUMN, FORM_MARKER_PREFIX } from '../src/xlsx/workbook-form-markers'
 import { openWorkbook as open, importAuthoredWorkbook, saveWorkbook } from './xlsx'
 
@@ -199,8 +199,7 @@ describe('shared workbook forms: definition + marked XLSX', () => {
     expect(codes(await readWorkbookForm(repeated, Buffer.from(await book.xlsx.writeBuffer())))).toContain('conflicting-shape')
   })
 
-  it('requires dictionaries for issuance and rejects incompatible template bindings', async () => {
-    await expect(renderWorkbookForm(template, data)).rejects.toBeInstanceOf(TemplateError)
+  it('rejects incompatible template bindings', async () => {
     for (const path of ['items', 'items.name']) {
       const collision = await importAuthoredWorkbook(book => authorForm(book, 'Form', path))
       for (const operation of [() => renderWorkbookForm(collision, data, options), () => readWorkbookForm(collision, new Uint8Array())]) {

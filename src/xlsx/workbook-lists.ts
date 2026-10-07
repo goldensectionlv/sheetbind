@@ -103,7 +103,7 @@ export function workbookLists(plan: WorkbookPlan, dictionaries: Dictionaries, re
         items = texts.get(cell.choice.items) ?? cell.choice.items.map(item => item.text)
         texts.set(cell.choice.items, items)
       }
-      else if (cell.rules?.list) {
+      else if (cell.rules?.list && Object.hasOwn(dictionaries, cell.rules.list)) {
         items = dictionaries[cell.rules.list] as readonly string[]
       }
       else {
@@ -154,7 +154,7 @@ export function workbookLists(plan: WorkbookPlan, dictionaries: Dictionaries, re
     if (!fields.length && !resources.references.has(rangeName(prefix).toLowerCase())) {
       continue
     }
-    const items = labels(resolve(rule, dictionaries[rule.source.dictionary]))
+    const items = labels(resolve(rule, dictionaries[rule.source.dictionary] ?? []))
     writeColumn(resources.allocate(rangeName(prefix), true), items.map(item => item.text), 'Selection')
     for (const field of fields) {
       writeColumn(resources.allocate(rangeName(prefix, field), true), items.map(item => fieldValue(item.value[field])), field)
@@ -220,7 +220,7 @@ export function serializeWorkbookChoiceSources(plan: WorkbookPlan, data: unknown
     return undefined
   }
   for (const cell of fields) {
-    if (cell.rules?.list) {
+    if (cell.rules?.list && Object.hasOwn(dictionaries, cell.rules.list)) {
       selected[cell.rules.list] = dictionaries[cell.rules.list]
     }
     const source = cell.rules?.choice?.source
@@ -228,7 +228,9 @@ export function serializeWorkbookChoiceSources(plan: WorkbookPlan, data: unknown
       continue
     }
     if ('dictionary' in source) {
-      selected[source.dictionary] = dictionaries[source.dictionary]
+      if (Object.hasOwn(dictionaries, source.dictionary)) {
+        selected[source.dictionary] = dictionaries[source.dictionary]
+      }
     }
     else if (source.from === 'root') {
       const path = source.path.split('.')

@@ -1,10 +1,11 @@
 import { isDataObject } from '../core/json'
 import { isBlank } from '../core/validation'
-import { compileDataPath } from '../core/template'
+import { compileDataPath, readDataPath } from '../core/template'
 import { TemplateError } from '../core/template'
 import type { DataReference, Origin, TemplateIssue, TemplateValue } from '../core/template'
 import { validateList } from '../core/field-rules'
 import type { Dictionaries } from '../core/dictionaries'
+import { warnMissingDictionaries } from '../core/dictionaries'
 import { allowsChoiceInput, choiceKey, createChoiceResolver, createChoiceLabels, returnsObject } from '../core/choices'
 import type { WorkbookChoice } from '../core/choices'
 import { prepareFormatting } from '../core/formatters'
@@ -60,6 +61,9 @@ export function resolveWorkbookData(template: WorkbookDefinition, data: unknown,
     let items
     try {
       const source = rule.source
+      if ('dictionary' in source && !Object.hasOwn(dictionaries, source.dictionary)) {
+        return undefined
+      }
       items = choiceOptions(rule, 'dictionary' in source ? dictionaries[source.dictionary] : reference(source, context).value ?? [])
     }
     catch (error) {
@@ -96,7 +100,7 @@ export function resolveWorkbookData(template: WorkbookDefinition, data: unknown,
     let choice: WorkbookChoice | undefined
     if (rules?.choice) {
       const labeled = choices(cell, context, result.path)
-      if (!allowsChoiceInput(rules.choice, labeled)) {
+      if (labeled && !allowsChoiceInput(rules.choice, labeled)) {
         const blank = isBlank(result.value)
         const key = choiceKey(rules.choice, result.value)
         const displayKey = typeof key === 'string' || typeof key === 'number' ? key : String(result.value)
@@ -107,7 +111,11 @@ export function resolveWorkbookData(template: WorkbookDefinition, data: unknown,
         choice = { items: labeled, text: blank ? null : selected?.text ?? String(displayKey) }
       }
     }
-    let resolved = scalar(result.value) ? result.value : choice!.text
+    const selectedValue = scalar(result.value) ? result.value : choice?.text ?? readDataPath(result.value, rules!.choice!.label)
+    if (!scalar(selectedValue)) {
+      workbookIssue('non-scalar', cell.id, 'expected a scalar choice label', result.path, 'data')
+    }
+    let resolved = selectedValue
     if (format) {
       try {
         resolved = format(resolved)
@@ -188,19 +196,18 @@ function prepareWorkbookValues(template: WorkbookDefinition, dictionaries: Dicti
     }
   }
   const missing: TemplateIssue[] = []
+  warnMissingDictionaries([...lists.keys(), ...choiceSources], dictionaries)
   for (const [name, consumers] of lists) {
     const values = Object.hasOwn(dictionaries, name) ? dictionaries[name] : undefined
-    if (!values?.length) {
+    if (!values) {
+      continue
+    }
+    if (!values.length) {
       missing.push(...consumers.map(nodeId => ({ phase: 'data' as const, nodeId, path: `$dictionaries.${name}`,
-        code: values ? 'empty-dictionary' : 'missing-dictionary', message: values ? `dictionary ${name} is empty` : `dictionary ${name} was not supplied` })))
+        code: 'empty-dictionary', message: `dictionary ${name} is empty` })))
     }
     else if (!values.every(value => typeof value === 'string')) {
       workbookIssue('invalid-dictionary', consumers[0], 'a string list requires string values', `$dictionaries.${name}`, 'data')
-    }
-  }
-  for (const name of choiceSources) {
-    if (!Object.hasOwn(dictionaries, name)) {
-      workbookIssue('missing-dictionary', '$template', 'choice dictionary was not supplied', `$dictionaries.${name}`, 'data')
     }
   }
   if (missing.length) {

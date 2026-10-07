@@ -1,4 +1,4 @@
-import { expect, it } from 'vitest'
+import { expect, it, vi } from 'vitest'
 import ExcelJS from 'exceljs'
 import { importWorkbookXlsx, readWorkbookForm, renderWorkbookForm, renderWorkbookReport, resolveWorkbook } from '../src/index'
 import { openWorkbook as load, importAuthoredWorkbook, saveWorkbook } from './xlsx'
@@ -158,16 +158,14 @@ it.each([{}, { catalog: undefined }, { catalog: null }, { catalog: {} }, { catal
   expect(data).toStrictEqual(before)
 })
 
-it('still rejects invalid source types and missing named dictionaries', async () => {
+it('still rejects invalid source types', async () => {
   const template = await importAuthoredWorkbook(book => book.addWorksheet('Input').getCell('A1').value = sourceTag)
   for (const answers of ['', 0, false, {}]) {
     await expect(renderWorkbookForm(template, { answers })).rejects.toMatchObject({ issues: [{ code: 'choice-source' }] })
   }
-  const named = await importAuthoredWorkbook(book => book.addWorksheet('Input').getCell('A1').value = '{answer}{@choice:Options; key=id; label=label; return=key; emptySource=input}')
-  await expect(renderWorkbookForm(named, {})).rejects.toMatchObject({ issues: [{ code: 'missing-dictionary' }] })
 })
 
-it.each(['named', 'root', 'local', 'list'])('classifies missing saved sources as file failures before reading values (%s)', async kind => {
+it.each(['named', 'root', 'local', 'list'])('distinguishes absent dictionaries from damaged contextual sources (%s)', async kind => {
   const rule = kind === 'list' ? '{@list:Options}' : `{@choice:${kind === 'named' ? 'Options' : kind === 'root' ? '$root.options' : '.options'}; key=id; label=name; return=key}`
   const template = await importAuthoredWorkbook(book => book.addWorksheet('Input').getCell('A1').value = '{selected}' + rule)
   const options = [{ id: 'a', name: 'Allowed' }]
@@ -187,8 +185,22 @@ it.each(['named', 'root', 'local', 'list'])('classifies missing saved sources as
       payload.local = {}
     }
     cell.value = JSON.stringify(payload)
-    const result = await readWorkbookForm(template, await saveWorkbook(book))
-    expect(result).toMatchObject({ success: false, issues: [{ phase: 'xlsx', code: 'choice-source', sheetName: 'Input', address: 'A1' }] })
-    expect(result).not.toHaveProperty('data')
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      const result = await readWorkbookForm(template, await saveWorkbook(book))
+      if (kind === 'named' || kind === 'list') {
+        expect(warning).toHaveBeenCalledExactlyOnceWith(expect.stringContaining('dictionary Options was not supplied'))
+        expect(result).toEqual(typeof input === 'object' && input !== null
+          ? { success: false, data: { selected: null }, issues: [expect.objectContaining({ code: 'non-scalar' })] }
+          : { success: true, data: { selected: input } })
+      }
+      else {
+        expect(result).toMatchObject({ success: false, issues: [{ phase: 'xlsx', code: 'choice-source', sheetName: 'Input', address: 'A1' }] })
+        expect(result).not.toHaveProperty('data')
+      }
+    }
+    finally {
+      warning.mockRestore()
+    }
   }
 })

@@ -187,9 +187,11 @@ The first row offers `Red / Blue`, and the second offers `Small / Large`. No ext
 
 Local options are saved for the issued fields. Fill or clear values while keeping the same records and row order. To add, remove or reorder records, or change their options, issue a new form. Local sources are not automatically transferred between rows.
 
-Omitted, `undefined` and `null` data sources such as `.answers` or `$root.catalog.options` behave like an empty array. You do not need to add `answers: []` to every record. Named dictionaries must still be supplied through `options.dictionaries`.
+Omitted, `undefined` and `null` data sources such as `.answers` or `$root.catalog.options` behave like an empty array. You do not need to add `answers: []` to every record.
 
 For questions that accept text when `answers` is empty or absent, add `emptySource=input` together with `return=key`. Populated sources still require a listed value, and `@validate` rules still apply. An empty source allows ordinary input without a dropdown.
+
+If a named dictionary is absent, each resolve, render or read call emits one `console.warn` per missing name. The field keeps ordinary input without a dropdown, dictionary lookup or list validation; `@validate` still applies. Rendering keeps scalar input as supplied and uses the declared `label` property for an object value. Reading returns the cell value without reconstructing a key or object. Supplied dictionaries remain validated; an explicitly empty string list is invalid. Supply named dictionaries through `options.dictionaries` when issuing the file; available sources are saved in the form.
 
 ## Custom messages
 

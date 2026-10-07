@@ -2,6 +2,15 @@ import { jsonSnapshot, isDataObject } from './json'
 
 /** Application-supplied values; templates retain only named dependencies. */
 export type Dictionaries = Readonly<Record<string, readonly string[] | readonly Readonly<Record<string, unknown>>[]>>
+
+export function warnMissingDictionaries(names: Iterable<string>, dictionaries: Dictionaries): void {
+  for (const name of new Set(names)) {
+    if (!Object.hasOwn(dictionaries, name)) {
+      console.warn(`sheetbind: dictionary ${name} was not supplied; its dropdown, lookup and list validation are skipped`)
+    }
+  }
+}
+
 export function isDictionaryName(value: unknown): value is string {
   return typeof value === 'string' && /^[A-Za-z_][A-Za-z0-9_.-]*$/.test(value)
     && !['__proto__', 'constructor', 'prototype'].includes(value)

@@ -1,11 +1,11 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import ExcelJS from 'exceljs'
 import JSZip from 'jszip'
 import * as project from '../examples/fields/template'
 import { parseDictionaries } from '../src/core/dictionaries'
 import { validateList } from '../src/core/field-rules'
-import { TemplateError, resolveWorkbook, workbookDictionarySources, renderWorkbookReport, importWorkbookXlsx, renderWorkbookForm } from '../src/index'
-import { openWorkbook as load, exampleFile, importAuthoredWorkbook } from './xlsx'
+import { resolveWorkbook, workbookDictionarySources, renderWorkbookReport, importWorkbookXlsx, renderWorkbookForm, readWorkbookForm, workbookChoiceRange } from '../src/index'
+import { openWorkbook as load, exampleFile, importAuthoredWorkbook, saveWorkbook } from './xlsx'
 
 const options = { dictionaries: project.dictionaries }
 
@@ -26,22 +26,69 @@ describe('named string dictionaries', () => {
   })
 
   it('validates dependencies before execution even when a repeat is empty', () => {
-    for (const [dictionaries, code] of [[{}, 'missing-dictionary'], [{ workCodes: [] }, 'empty-dictionary']] as const) {
-      try {
-        resolveWorkbook(project.definition, { ...project.data, sites: [] }, { dictionaries })
-        expect.fail('Expected a dependency error')
-      }
-      catch (error) {
-        expect(error).toBeInstanceOf(TemplateError)
-        expect((error as TemplateError).issues).toMatchObject([{ phase: 'data', code, path: '$dictionaries.workCodes' }])
-      }
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      expect(() => resolveWorkbook(project.definition, { ...project.data, sites: [] })).not.toThrow()
+      expect(warning).toHaveBeenCalledExactlyOnceWith(expect.stringContaining('dictionary workCodes was not supplied'))
     }
+    finally {
+      warning.mockRestore()
+    }
+    expect(() => resolveWorkbook(project.definition, { ...project.data, sites: [] }, { dictionaries: { workCodes: [] } })).toThrow('dictionary workCodes is empty')
     expect(() => resolveWorkbook(project.definition, { ...project.data, sites: [] }, options)).not.toThrow()
     const data = structuredClone(project.data) as { sites: { work: { code: string }[] }[] }
     data.sites[1].work[0].code = '7'
     expect(() => resolveWorkbook(project.definition, data, options)).toThrow('$data.sites[1].work[0].code: must be a value from workCodes')
     expect(validateList('00042', { validation: [{ rule: 'string' }], list: 'codes' }, ['00042'])).toBeUndefined()
     expect(validateList(42, { validation: [{ rule: 'string' }], list: 'codes' }, ['00042'])?.code).toBe('list')
+  })
+
+  it('warns once per missing dictionary and preserves ordinary input through saved reports and forms', async () => {
+    const book = new ExcelJS.Workbook()
+    const sheet = book.addWorksheet('Input')
+    sheet.addRows([
+      ['{code}{@list:Codes}{@validate:required}', '{product}{@choice:Products; key=id; label=name; return=key}', '{details}{@choice:Products; key=id; label=name}', '{state}{@list:States}'],
+      ['{second}{@list:Codes}'],
+    ])
+    const range = workbookChoiceRange({ source: { dictionary: 'Products' }, key: 'id', label: 'name' })
+    sheet.getCell('E1').value = { formula: `COUNTA(${range})` }
+    const authored = await saveWorkbook(book)
+    const template = await importWorkbookXlsx(authored)
+    const data = { code: '006', second: 'Free text', product: '007', details: { id: '008', name: 'Label from input' }, state: 'Open' }
+    const dictionaries = { States: ['Open'] }
+    const before = structuredClone({ data, dictionaries })
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      for (const render of [renderWorkbookReport, renderWorkbookForm]) {
+        warning.mockClear()
+        const rendered = await load(await render(template, data, { dictionaries }))
+        expect(warning.mock.calls.map(([message]) => message)).toEqual([
+          expect.stringContaining('dictionary Codes was not supplied'), expect.stringContaining('dictionary Products was not supplied'),
+        ])
+        const input = rendered.getWorksheet('Input')!
+        expect(input.getRow(1).values).toEqual([undefined, '006', '007', 'Label from input', 'Open', { formula: `COUNTA(${range})` }])
+        for (const address of ['A1', 'B1', 'C1', 'A2']) {
+          expect(input.getCell(address).dataValidation).toBeUndefined()
+        }
+        expect(input.getCell('D1').dataValidation.type).toBe('list')
+        expect(rendered.definedNames.getRanges(range).ranges).toHaveLength(1)
+        if (render === renderWorkbookForm) {
+          warning.mockClear()
+          const fresh = await importWorkbookXlsx(authored)
+          expect(await readWorkbookForm(fresh, await saveWorkbook(rendered))).toEqual({ success: true, data: { ...data, details: 'Label from input' } })
+          expect(warning).toHaveBeenCalledTimes(2)
+          input.getCell('A1').value = null
+          input.getCell('D1').value = 'Unknown'
+          expect(await readWorkbookForm(fresh, await saveWorkbook(rendered))).toMatchObject({ success: false, issues: [
+            { rule: 'required', address: 'A1' }, { code: 'list', address: 'D1' },
+          ] })
+        }
+      }
+      expect({ data, dictionaries }).toStrictEqual(before)
+    }
+    finally {
+      warning.mockRestore()
+    }
   })
 
   it('writes one range per source after nested placement from tagged workbooks', async () => {
