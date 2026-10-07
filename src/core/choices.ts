@@ -1,8 +1,7 @@
 import { isDataObject, jsonSnapshot } from './json'
 import type { JsonValue } from './json'
-import { isDataPath, readDataPath } from './template'
+import { readDataPath } from './template'
 import type { DataReference } from './template'
-import { isDictionaryName } from './dictionaries'
 
 export interface ChoiceRule {
   readonly source: { readonly dictionary: string } | DataReference
@@ -19,28 +18,6 @@ export function allowsChoiceInput(rule: ChoiceRule, items: readonly ChoiceOption
 }
 export interface ChoiceOption { readonly key: string | number, readonly label: string, readonly value: Readonly<Record<string, unknown>> }
 export interface ResolvedChoice { readonly key: string | number | null, readonly items: readonly ChoiceOption[] }
-
-export function parseChoiceRule(value: unknown): ChoiceRule {
-  if (!isDataObject(value) || Object.keys(value).some(key => !['source', 'key', 'label', 'return', 'emptySource'].includes(key)) || !isDataPath(value.key) || !isDataPath(value.label) || !isDataObject(value.source)) {
-    throw new SyntaxError('Choice requires a source and safe key/label paths')
-  }
-  if (value.return !== undefined && value.return !== 'object' && value.return !== 'key') {
-    throw new SyntaxError('Choice return must be object or key')
-  }
-  if (value.emptySource !== undefined && (value.emptySource !== 'input' || value.return !== 'key')) {
-    throw new SyntaxError('Choice emptySource=input requires return=key')
-  }
-  const source = value.source
-  if ('dictionary' in source) {
-    if (Object.keys(source).length !== 1 || !isDictionaryName(source.dictionary)) {
-      throw new SyntaxError('Choice dictionary must be a named source')
-    }
-  }
-  else if (Object.keys(source).some(key => !['path', 'from'].includes(key)) || !isDataPath(source.path) || source.from !== undefined && source.from !== 'root' && source.from !== 'current') {
-    throw new SyntaxError('Choice source requires a safe path and current/root context')
-  }
-  return structuredClone(value) as unknown as ChoiceRule
-}
 
 /** Empty sources are valid; a nonblank selection must still match an available key. */
 function buildOptions(source: readonly unknown[], rule: ChoiceRule): ChoiceOption[] {

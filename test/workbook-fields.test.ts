@@ -1,10 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import ExcelJS from 'exceljs'
-import { parseFieldRules } from '../src/core/field-rules'
 import { createValidation } from '../src/core/validation'
 import { renderWorkbookForm, readWorkbookForm } from '../src/xlsx/workbook-form'
 import { resolveWorkbook, renderWorkbookReport, importWorkbookXlsx } from '../src/xlsx/workbook-template'
-import { parseFieldTag } from '../src/xlsx/field-tag'
+import { parseFieldTag } from '../src/core/field-rules'
 
 const book = new ExcelJS.Workbook()
 const sheet = book.addWorksheet('Report')
@@ -68,7 +67,6 @@ describe('shared field rules', () => {
     expect(prepare('number')('0', context)?.code).toBe('number')
     expect(prepare('number|max:24')(25, context)?.code).toBe('max')
     expect(prepare('string|maxLength:0')('a', context)?.code).toBe('maxLength')
-    expect(() => parseFieldRules({ type: 'date' })).toThrow()
     expect(() => prepare('max:bad')).toThrow('Invalid arguments')
   })
 })
