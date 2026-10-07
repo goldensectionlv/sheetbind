@@ -16,7 +16,6 @@ export function allowsChoiceInput(rule: ChoiceRule, items: readonly ChoiceOption
   return rule.emptySource === 'input' && !items.length
 }
 export interface ChoiceOption { readonly key: string | number, readonly label: string, readonly value: Readonly<Record<string, unknown>> }
-export interface ResolvedChoice { readonly key: string | number | null, readonly items: readonly ChoiceOption[] }
 
 /** Options borrow validated source records; consumers copy only values they retain. */
 function buildOptions(source: readonly unknown[], rule: ChoiceRule): ChoiceOption[] {

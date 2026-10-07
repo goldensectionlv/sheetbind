@@ -9,7 +9,7 @@ export type { Formatter, FormatterUse, Formatting } from './core/formatters'
 export type { JsonValue } from './core/json'
 export type { Validation, ValidationRuleUse, ValidationRule, ValidationContext, ValidationMessageContext, ValidationMessage, ValidationOptions, ValidationIssue } from './core/validation'
 export type { Dictionaries } from './core/dictionaries'
-export type { ChoiceRule, ChoiceOption, ResolvedChoice } from './core/choices'
+export type { ChoiceRule, ChoiceOption } from './core/choices'
 export type { GridAddress, GridOffset } from './grid/geometry'
 export type { WorkbookCellInstance, WorkbookLayout } from './grid/workbook-layout'
 // Keep an alias: declaration bundlers can turn a re-exported class into a value export.

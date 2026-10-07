@@ -80,7 +80,7 @@ type WorkbookFormResult =
 
 Value failures contain both `data` and `issues`, so the application can show the parsed fields for correction. An invalid choice remains the entered string; formulas without a usable saved result and unsupported values produce `null` and an issue. These data have not passed validation. Unreadable XLSX, a damaged source payload or invalid structure produces no `data`. An absent named dictionary produces a warning and leaves the cell value unchanged; it does not stop reading. Check `result.success` and also handle template or application configuration exceptions. Types and precision follow the [submitted cells' formats](./xlsx.md#input-formats-and-value-types).
 
-All list and choice sources are embedded in the issued file, including row-local arrays. Reading only uses `validationRules` and `validationMessages` from the options; dictionaries and context are not read inputs. Keep the original template.
+Available list and choice sources are embedded in the issued file, including row-local arrays. Reading only uses `validationRules` and `validationMessages` from the options; dictionaries and context are not read inputs. Keep the original template.
 
 An unknown validation rule stops reading with a template error, including fields in empty repeats. Register its handler or supply it through `validationRules` for the read call. Rules run in their original order. Invalid arguments for a known rule and errors inside a supplied handler remain errors.
 
@@ -119,7 +119,7 @@ Synchronously resolves and validates report data without creating a file. This i
 | `contextPath` | Data path of the binding context |
 | `choice` | Optional `{ text, items: [{ key, label, value, text }] }`: display text and options |
 
-`TemplateValue` is `string | number | boolean | null`. `FieldValue` also permits an object choice value. `ChoiceOption` describes an option without its Excel display text; `ResolvedChoice` describes a selected key and those options. `ValueExpression` describes a literal or data binding; the latter uses `DataReference` (`path`, optional `from: 'current' | 'root'`). These types do not provide a template construction API.
+`TemplateValue` is `string | number | boolean | null`. `FieldValue` also permits an object choice value. `ChoiceOption` describes an option without its Excel display text. `ValueExpression` describes a literal or data binding; the latter uses `DataReference` (`path`, optional `from: 'current' | 'root'`). These types do not provide a template construction API.
 
 The result is readonly in TypeScript. Cells and sheet settings are copied: JavaScript changes to the result do not affect sibling cells, the template, input data or later runs. IDs describe the imported template and execution; they are not record identifiers. Original XLSX parts and authored tag expressions are not exposed in the layout.
 
@@ -183,7 +183,7 @@ Use the resulting formula in the source workbook and declare a choice using that
 | Returned file cannot be read as XLSX | The same result with `code: 'invalid-workbook'` |
 | Unreadable template or invalid XLSX tag | `TaggedXlsxError` |
 | Missing named dictionary | `console.warn`; ordinary input without dictionary lookup or validation |
-| Missing bound data, malformed dictionaries or invalid field rules | `TemplateError`, often its `TaggedXlsxError` subclass |
+| Missing bound data or invalid field rules | `TemplateError`, often its `TaggedXlsxError` subclass |
 | Custom predicate or message throws or returns the wrong type | `ValidationExecutionError` |
 | Malformed arguments, unsupported geometry or conflicting native validation | `SyntaxError`, `TypeError` or `RangeError`, depending on the check |
 
@@ -196,6 +196,8 @@ Use the resulting formula in the source workbook and declare a choice using that
 `WorkbookFormIssue` contains `phase: 'structure' | 'value' | 'xlsx'`, `code`, `path`, `message` and optional `sheetName`, `address`, `nodeId`, `rule`, `args`, `index`. Its address belongs to the returned workbook; its data path uses indexes after empty rows are omitted. Some structural failures cannot identify a cell. The [form reader](./forms.md) shows both `try/catch` and `result.success` handling.
 
 ## Registering handlers
+
+ESM imports and CommonJS requires of the same installed package share templates, error classes and registered handlers. Both entry points use one runtime and one set of type declarations.
 
 ```ts
 declare function registerFormatter(name: string, formatter: Formatter): void
