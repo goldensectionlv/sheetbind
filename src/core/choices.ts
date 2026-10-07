@@ -66,7 +66,7 @@ export function selectedChoice(rule: ChoiceRule, items: readonly ChoiceOption[],
 export function choiceKey(rule: ChoiceRule, value: unknown): unknown {
   return returnsObject(rule) ? readDataPath(value, rule.key) : value
 }
-export interface WorkbookChoiceOption extends ChoiceOption { readonly text: string }
+interface WorkbookChoiceOption extends ChoiceOption { readonly text: string }
 export interface WorkbookChoice { readonly text: string | null, readonly items: readonly WorkbookChoiceOption[] }
 
 /** Workbook layouts and files use the same unambiguous choice labels. */

@@ -5,7 +5,7 @@ import type { GridAddress, GridOffset, GridRange } from './geometry'
 import type { FieldRules } from '../core/field-rules'
 import type { WorkbookFormula } from './workbook-formula'
 
-export type WorkbookValue = ValueExpression | WorkbookFormula
+type WorkbookValue = ValueExpression | WorkbookFormula
 export interface WorkbookCell {
   readonly id: string
   readonly at: GridAddress
@@ -53,9 +53,6 @@ export { WORKBOOK_LIMITS } from './geometry'
 export function workbookIssue(code: string, nodeId: string, message: string, path = nodeId, phase: 'template' | 'data' = 'template'): never {
   throw new TemplateError([{ phase, code, nodeId, path, message }])
 }
-export function regionBounds(region: WorkbookRegion) {
-  return { at: { row: region.row, column: region.column ?? 1 }, size: { rows: region.height, columns: region.width ?? WORKBOOK_LIMITS.columns } }
-}
 /** Flattened regions with sheet coordinates and nesting information. */
 export type WorkbookRegionView = WorkbookRegion & { readonly parentId?: string, readonly depth: number }
 export function workbookRegions(sheet: WorkbookBody): WorkbookRegionView[] {
@@ -68,7 +65,7 @@ export function workbookRegions(sheet: WorkbookBody): WorkbookRegionView[] {
   return visit(sheet, 0, 0, WORKBOOK_LIMITS.columns, 0)
 }
 /** A cell projected to sheet coordinates with its owning region. */
-export type WorkbookCellView = WorkbookCell & { readonly regionId?: string }
+type WorkbookCellView = WorkbookCell & { readonly regionId?: string }
 export function workbookCells(sheet: WorkbookSheet): WorkbookCellView[] {
   return [...sheet.cells, ...workbookRegions(sheet).flatMap(region => region.cells.map(cell => ({ ...cell, regionId: region.id, at: { row: region.row + cell.at.row - 1, column: (region.column ?? 1) + cell.at.column - 1 } })))]
 }
@@ -81,7 +78,7 @@ export function collectWorkbookDictionarySources(template: WorkbookDefinition): 
     ? [cell.rules.list]
     : cell.rules?.choice && 'dictionary' in cell.rules.choice.source ? [cell.rules.choice.source.dictionary] : [])))].sort()
 }
-export function intersects(a: Pick<WorkbookCell, 'at' | 'size'>, b: Pick<WorkbookCell, 'at' | 'size'>): boolean {
+function intersects(a: Pick<WorkbookCell, 'at' | 'size'>, b: Pick<WorkbookCell, 'at' | 'size'>): boolean {
   return a.at.row < b.at.row + b.size.rows && b.at.row < a.at.row + a.size.rows
     && a.at.column < b.at.column + b.size.columns && b.at.column < a.at.column + a.size.columns
 }
@@ -145,7 +142,7 @@ export function validateWorkbookDefinition(template: WorkbookDefinition): Workbo
 
 function validateBody(body: WorkbookBody, height: number, width: number, owner?: WorkbookRegion): void {
   const regions = body.regions ?? []
-  const bounds = (region: WorkbookRegion) => regionBounds({ ...region, width: region.width ?? width })
+  const bounds = (region: WorkbookRegion) => ({ at: { row: region.row, column: region.column ?? 1 }, size: { rows: region.height, columns: region.width ?? width } })
   for (const [index, region] of regions.entries()) {
     if (region.height < 1) {
       workbookIssue('empty-region', region.id, 'A region needs at least one body row')

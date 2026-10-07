@@ -39,7 +39,7 @@ function referenceText(ref: FormulaReference): string {
 }
 
 /** Reference tokenizer, not a formula evaluator. Strings/functions/names are opaque. */
-export function rewriteWorkbookFormula(source: string, map: (ref: FormulaReference) => FormulaReference | undefined): string {
+function rewriteWorkbookFormula(source: string, map: (ref: FormulaReference) => FormulaReference | undefined): string {
   return compileWorkbookFormula(source)(map)
 }
 

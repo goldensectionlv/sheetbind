@@ -11,7 +11,7 @@ import { prepareFormatting } from '../core/formatters'
 import { workbookCells, workbookIssue } from './workbook'
 import type { WorkbookBody, WorkbookCell, WorkbookDefinition, WorkbookRegion } from './workbook'
 
-export interface WorkbookCellData {
+interface WorkbookCellData {
   readonly definition: WorkbookCell
   readonly dataPath: string
   readonly value: FieldValue

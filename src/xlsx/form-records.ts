@@ -36,7 +36,7 @@ export function writeData(data: Record<string, unknown>, path: DataPath, value: 
 }
 
 /** An issuance owns changed containers; unchanged records remain read-only and shared. */
-export function createDataDraft(input: Record<string, unknown>) {
+function createDataDraft(input: Record<string, unknown>) {
   const data = { ...input }
   const owned = new WeakSet<object>([data])
   function replace(path: DataPath, value: unknown): void {

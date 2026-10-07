@@ -16,7 +16,7 @@ import { formatAddress } from '../grid/geometry'
 import { FormulaEdge } from '../grid/workbook-formula'
 import type { FormulaRows } from '../grid/workbook-formula'
 
-export enum FormMarkerKind {
+enum FormMarkerKind {
   SheetEnd = '/sheet', Repeat = 'repeat', RepeatEnd = '/repeat', Item = 'item', ItemEnd = '/item',
 }
 export const FORM_MARKER_COLUMN = 257
@@ -24,7 +24,7 @@ export const FORM_MARKER_PREFIX = 'sheetbind.form/4:'
 type FormMarkerToken =
   | readonly [FormMarkerKind.SheetEnd]
   | readonly [FormMarkerKind.Repeat | FormMarkerKind.RepeatEnd | FormMarkerKind.Item | FormMarkerKind.ItemEnd, number]
-export interface FormMarker { readonly row: number, readonly token: FormMarkerToken }
+interface FormMarker { readonly row: number, readonly token: FormMarkerToken }
 export interface FormMarkers { readonly column: number, readonly rows: readonly FormMarker[] }
 interface FormCarrierDefinition {
   readonly numbers: ReadonlyMap<string, number>
