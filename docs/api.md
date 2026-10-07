@@ -4,7 +4,7 @@ Import functions and types from `sheetbind`. Node.js `Buffer` values can be pass
 
 ## Data and options
 
-Execution data is a plain JavaScript object. Nested objects, arrays, strings, finite numbers, booleans and `null` are accepted. Object properties with `undefined` mean absence at any depth; there is no need to replace them with `null` or remove them before rendering. Forms leave missing fields blank, while required report bindings still report `missing-source`. `Date`, functions, accessors, cyclic objects, sparse arrays and `undefined` array items are rejected. The exported `JsonValue` type describes serializable JSON values, not every accepted input object.
+Execution data is a plain JavaScript object. Nested objects, arrays, strings, finite numbers, booleans and `null` are accepted. Object properties with `undefined` mean absence at any depth. Rendering leaves missing fields blank; report bindings without `?` emit a warning. Forms allow blank fields at issuance and validate them on read. `Date`, functions, accessors, cyclic objects, sparse arrays and `undefined` array items are rejected. `JsonValue` describes serializable JSON values.
 
 The signatures below use two abbreviations. **`RunOptions` and `ReadOptions` are not exported types**; they describe these parameter shapes:
 
@@ -22,7 +22,7 @@ type ReadOptions = ValidationOptions
 | `validationRules` | Read | Custom synchronous field rules |
 | `validationMessages` | Read | Message overrides by rule name |
 
-`Dictionaries` is a readonly object whose values are string arrays or arrays of data objects. Undefined object properties are omitted from the dictionary snapshots saved in forms; input objects are not changed. `ValidationOptions` contains `validationRules` and `validationMessages`. A custom handler uses `ValidationRule`; its predicate receives `ValidationContext` (`root`, `current`, `path`). `ValidationMessage` is a string or a function receiving `ValidationMessageContext`, which also includes `value`, `rule`, `args` and `index`. See the [complete handler example](./fields.md).
+`Dictionaries` is a readonly object of string arrays or arrays of data objects. Only names declared by the template are read and copied; unused dictionaries cannot block rendering. Duplicate strings are removed with a warning. Missing, empty or unusable sources leave ordinary input with a warning. Undefined object properties are omitted from sources stored in forms without changing caller data. `ValidationOptions` contains `validationRules` and `validationMessages`. A `ValidationRule` receives `ValidationContext` (`root`, `current`, `path`). `ValidationMessage` is a string or a function receiving `ValidationMessageContext`, which also includes `value`, `rule`, `args` and `index`. See the [handler example](./fields.md).
 
 ## Import a template
 
@@ -92,7 +92,7 @@ const findings = inspectWorkbookTemplate(template, {
 })
 ```
 
-Checks formatter availability, built-in formatter arguments and dictionary names. Each `WorkbookTemplateFinding` has `severity` (`error` or `warning`), `code`, `message`, `nodeId`, `path` and a `sheetName`/`address` location. An unknown formatter is an error; an unknown dictionary is a warning. Omitting `dictionaries` skips dictionary-name checks. Custom formatters and validation rules are not invoked. Syntax and layout are checked earlier by `importWorkbookXlsx`.
+Checks formatter availability, built-in formatter arguments and dictionary names. Each `WorkbookTemplateFinding` has `severity`, `code`, `message`, `nodeId`, `path` and a `sheetName`/`address` location. Unavailable formatting and unknown dictionaries produce warnings. Omitting `dictionaries` skips dictionary-name checks. Handlers are not invoked. Syntax and layout are checked earlier by `importWorkbookXlsx`.
 
 ## Inspect values and placement
 
@@ -173,25 +173,32 @@ const formula = `INDEX(${prices},MATCH(B3,${labels},0))`
 
 Use the resulting formula in the source workbook and declare a choice using that dictionary in the template. Rendering creates the referenced ranges from the supplied dictionary, regardless of the choice's `return` mode or the number of repeated records. Missing properties produce blank cells; an empty dictionary produces a blank range. The helper only computes a name. Unreferenced properties stay in the saved JSON and are not written into cells. Excel precision applies to formula cells; reading the chosen object preserves the saved JSON values. A contextual source or a conflict with an existing range of the same name throws `RangeError`.
 
-`ChoiceRule` contains `source`, `key`, `label` and optional `return: 'object' | 'key'`. `emptySource: 'input'` permits free input for an empty source and requires `return: 'key'`. Its source is `{ dictionary: string }` or a `DataReference`; `.answers` can select an array from each record in both reports and forms. Omitted, `undefined` and `null` data references behave like empty arrays. An absent named dictionary emits one `console.warn` per name per call and disables its dropdown, lookup and list validation; ordinary field validation still applies. See [validation and lists](./fields.md).
+`ChoiceRule` contains `source`, `key`, `label` and optional `return: 'object' | 'key'`. Its source is `{ dictionary: string }` or a `DataReference`; `.answers` selects an array from each record. Missing, `undefined`, `null` and empty sources allow ordinary input with a warning. This applies to named, root and local sources, including object choices; without a source, reading returns the cell value rather than reconstructing an object. `emptySource: 'input'` is also accepted for key choices but is not required. Populated lists are checked on form read, not on render. See [validation and lists](./fields.md).
 
 ## Errors
+
+Rendering resolves values, formatting and placement to produce a valid XLSX. It does not validate field values against lists or `@validate`. Reading reconstructs the returned records, resolves saved choices and validates completed fields. Recoverable rendering problems produce warnings; unreadable files, ambiguous mappings and invalid structure remain errors.
 
 | Situation | Outcome |
 | --- | --- |
 | Invalid values or structure in a returned form | `WorkbookFormResult` with `success: false` |
 | Returned file cannot be read as XLSX | The same result with `code: 'invalid-workbook'` |
 | Unreadable template or invalid XLSX tag | `TaggedXlsxError` |
-| Missing named dictionary | `console.warn`; ordinary input without dictionary lookup or validation |
-| Missing bound data or invalid field rules | `TemplateError`, often its `TaggedXlsxError` subclass |
-| Custom predicate or message throws or returns the wrong type | `ValidationExecutionError` |
-| Malformed arguments, unsupported geometry or conflicting native validation | `SyntaxError`, `TypeError` or `RangeError`, depending on the check |
+| Missing, empty or unusable render source | `console.warn`; preserve the scalar value or the declared object label and skip the list |
+| Missing bound value during rendering | `console.warn` and a blank cell; `?` suppresses the warning |
+| Unknown or failed formatter | `console.warn`; retain the value before the formatting pipeline |
+| Unknown validator or invalid validator arguments | Template/configuration error when preparing form reading |
+| Unmatched input equals a valid choice label | Form issuance stops with `ambiguous-choice`; report rendering remains available |
+| Custom predicate throws or returns the wrong type | `ValidationExecutionError` |
+| Validation message throws or returns the wrong type | `console.warn`; keep the validation issue with a default message |
+| Conflicting native validation | `console.warn`; preserve the authored validation and omit the overlapping generated dropdown |
+| Unsupported data, geometry or XLSX limits | `SyntaxError`, `TypeError`, `TemplateError` or `RangeError`, depending on the check |
 
 `TemplateError.issues` contains `TemplateIssue` objects with `phase: 'template' | 'data'`, `code`, `path`, `nodeId` and `message`. Rule failures may add `rule`, `args` and `index`.
 
 `TaggedXlsxError` extends `TemplateError`. Its `TaggedXlsxIssue` adds optional `sheetName` and `address` of the authored tag. Unreadable template errors retain the original failure in `cause`.
 
-`ValidationExecutionError` exposes `rule`, `path` and `cause`. Predicates must return a synchronous boolean; message functions must return a string. A Promise is invalid in either case.
+`ValidationExecutionError` exposes `rule`, `path` and `cause`. Predicates must return a synchronous boolean. Message functions must return a string; a failed message uses `failed validation: <rule>` and does not change the validation result. Unused per-read handlers and messages are ignored.
 
 `WorkbookFormIssue` contains `phase: 'structure' | 'value' | 'xlsx'`, `code`, `path`, `message` and optional `sheetName`, `address`, `nodeId`, `rule`, `args`, `index`. Its address belongs to the returned workbook; its data path uses indexes after empty rows are omitted. Some structural failures cannot identify a cell. The [form reader](./forms.md) shows both `try/catch` and `result.success` handling.
 

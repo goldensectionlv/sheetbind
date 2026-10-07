@@ -36,11 +36,11 @@ describe('imported XLSX ownership', () => {
     })
   })
 
-  it('locates invalid repeat sources and missing nested fields in the authored workbook', async () => {
+  it('locates invalid repeat sources in the authored workbook', async () => {
     const book = new ExcelJS.Workbook()
     book.addWorksheet('Items').addRows([['{#items}'], ['{.name}'], ['{/items}']])
     const template = await importWorkbookXlsx(await saveWorkbook(book))
-    for (const [data, code, path, address] of [[{ items: {} }, 'invalid-collection', '$data.items', 'A1'], [{ items: [{}] }, 'missing-source', '$data.items[0].name', 'A2']] as const) {
+    for (const [data, code, path, address] of [[{ items: {} }, 'invalid-collection', '$data.items', 'A1'], [{ items: [0] }, 'invalid-item', '$data.items[0]', 'A1']] as const) {
       for (const run of [() => resolveWorkbook(template, data), () => renderWorkbookReport(template, data)]) {
         try {
           await run()

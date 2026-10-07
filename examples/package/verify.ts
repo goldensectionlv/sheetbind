@@ -89,12 +89,15 @@ await withoutDictionaries.xlsx.load(Uint8Array.from(await api.renderWorkbookRepo
 assert.equal(withoutDictionaries.getWorksheet('Report')!.getCell('B4').value, data.items[0].status)
 assert.equal(withoutDictionaries.getWorksheet('Report')!.getCell('B4').dataValidation, undefined)
 assert.deepEqual(await api.readWorkbookForm(template, await api.renderWorkbookForm(template, data)), { success: true, data })
-await assert.rejects(api.renderWorkbookReport(template, data, { dictionaries: { statuses: [5] } } as unknown as typeof options), SyntaxError)
+for (const dictionaries of [{ statuses: [5] }, { statuses: null }, { statuses: [] }, { unused: new Date() }]) {
+  const fallback = await api.renderWorkbookForm(template, data, { dictionaries } as unknown as typeof options)
+  assert.deepEqual(await api.readWorkbookForm(template, fallback), { success: true, data })
+}
 console.log('Installed package: tagged XLSX, reports, edited forms and diagnostics: ok')
 
 const choiceBook = new ExcelJS.Workbook()
 choiceBook.addWorksheet('Input').addRows([
-  ['{#questions}'], ['{.answer}{@choice:.answers; key=id; label=label; return=key; emptySource=input}'], ['{/questions}'],
+  ['{#questions}'], ['{.answer}{@choice:.answers; key=id; label=label; return=key}'], ['{/questions}'],
 ])
 const choiceTemplate = await api.importWorkbookXlsx(Buffer.from(await choiceBook.xlsx.writeBuffer()))
 const choiceData = { questions: [{ answer: 'Omitted' }, { answer: 'Undefined', answers: undefined }, { answer: 'Null', answers: null }] }

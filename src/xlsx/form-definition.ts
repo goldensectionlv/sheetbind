@@ -44,12 +44,8 @@ export function prepareWorkbookForm(value: WorkbookDefinition, purpose: 'issue' 
   const prepareValidation = purpose === 'read' ? createValidation(options) : undefined
   const fields = new Map<string, PreparedWorkbookField>()
   const shapes = new Map<string, 'object' | 'array' | 'field'>()
-  const lookups: string[] = []
   for (const sheet of template.sheets) {
     collect(sheet, '')
-  }
-  if (lookups.some(path => shapes.has(path) || [...shapes].some(([parent, kind]) => kind === 'field' && path.startsWith(parent + '.')))) {
-    throw new TemplateError([{ phase: 'template', code: 'conflicting-source', nodeId: '', path: '$template', message: 'Form choice sources must be separate from submitted fields and collections' }])
   }
   if (!fields.size) {
     throw new TemplateError([{ phase: 'template', code: 'no-form-fields', nodeId: '', path: '$template', message: 'a form needs at least one data binding' }])
@@ -91,9 +87,6 @@ export function prepareWorkbookForm(value: WorkbookDefinition, purpose: 'issue' 
       }
       catch (error) {
         throw new TemplateError([{ phase: 'template', code: 'invalid-rules', nodeId: cell.id, path: cell.id, message: (error as Error).message }])
-      }
-      if (cell.rules?.choice && 'path' in cell.rules.choice.source) {
-        lookups.push(path(cell.rules.choice.source))
       }
     }
     for (const region of body.regions ?? []) {

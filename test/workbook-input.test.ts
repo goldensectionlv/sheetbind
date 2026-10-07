@@ -36,9 +36,17 @@ it.each([undefined, { inn: undefined, extra: undefined }])('issues ordinary form
   expect(await readWorkbookForm(template, await saveWorkbook(book))).toEqual({ success: true, data: { supplier: { inn: '006' } } })
 })
 
-it('still diagnoses undefined required report bindings as missing fields', async () => {
+it('warns about missing report values and writes blank cells', async () => {
   const template = await importAuthoredWorkbook(book => book.addWorksheet('Input').getCell('A1').value = '{supplier.inn}')
-  await expect(renderWorkbookReport(template, { supplier: { inn: undefined } })).rejects.toMatchObject({ issues: [{ code: 'missing-source', path: '$data.supplier.inn' }] })
+  const warning = vi.spyOn(console, 'warn').mockImplementation(() => {})
+  try {
+    const result = await openWorkbook(await renderWorkbookReport(template, { supplier: { inn: undefined } }))
+    expect(result.worksheets[0].getCell('A1').value).toBeNull()
+    expect(warning).toHaveBeenCalledExactlyOnceWith(expect.stringContaining('$data.supplier.inn'))
+  }
+  finally {
+    warning.mockRestore()
+  }
 })
 
 it('omits undefined dictionary properties from saved named, root and local choice sources', async () => {
@@ -88,9 +96,19 @@ it('keeps persisted JSON strict and rejects accessors without executing them', a
     const named = source === 'Options'
     const data = named ? { value: null } : { value: null, options: [item] }
     const options = named ? { dictionaries: { Options: [item] } } : {}
-    expect(() => resolveWorkbook(template, data, options)).toThrow(SyntaxError)
+    if (named) {
+      expect(() => resolveWorkbook(template, data, options)).not.toThrow()
+    }
+    else {
+      expect(() => resolveWorkbook(template, data, options)).toThrow(SyntaxError)
+    }
     for (const render of [renderWorkbookForm, renderWorkbookReport]) {
-      await expect(render(template, data, options)).rejects.toThrow(SyntaxError)
+      if (named) {
+        expect((await openWorkbook(await render(template, data, options))).worksheets[0].getCell('A1').value).toBeNull()
+      }
+      else {
+        await expect(render(template, data, options)).rejects.toThrow(SyntaxError)
+      }
     }
   }
   expect(getter).not.toHaveBeenCalled()

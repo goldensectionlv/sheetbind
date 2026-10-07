@@ -1,6 +1,6 @@
 import { isDataObject } from './json'
 import { readDataPath } from './template'
-import type { DataReference } from './template'
+import type { DataReference, TemplateValue } from './template'
 
 export interface ChoiceRule {
   readonly source: { readonly dictionary: string } | DataReference
@@ -11,9 +11,6 @@ export interface ChoiceRule {
 }
 export function returnsObject(rule: ChoiceRule | undefined): boolean {
   return !!rule && rule.return !== 'key'
-}
-export function allowsChoiceInput(rule: ChoiceRule, items: readonly ChoiceOption[]): boolean {
-  return rule.emptySource === 'input' && !items.length
 }
 export interface ChoiceOption { readonly key: string | number, readonly label: string, readonly value: Readonly<Record<string, unknown>> }
 
@@ -38,17 +35,30 @@ function buildOptions(source: readonly unknown[], rule: ChoiceRule): ChoiceOptio
   })
 }
 
-/** A cache belongs to one execution; the same source can have independent projections. */
+interface ChoiceResolution { readonly items: readonly WorkbookChoiceOption[], readonly problem?: string }
+
+/** Resolve one projection. Rendering can omit an unusable list; reading must reject a damaged mapping. */
 export function createChoiceResolver() {
-  const sources = new WeakMap<object, Map<string, readonly ChoiceOption[]>>()
-  return function resolveChoice(rule: ChoiceRule, source: unknown): readonly ChoiceOption[] {
-    if (!Array.isArray(source)) {
-      throw new SyntaxError('Choice source must be an array of objects')
+  const sources = new WeakMap<object, Map<string, ChoiceResolution>>()
+  return function resolveChoice(rule: ChoiceRule, source: unknown): ChoiceResolution {
+    if (source == null) {
+      return { items: [] }
     }
-    const projections = sources.get(source) ?? new Map<string, readonly ChoiceOption[]>()
+    if (!Array.isArray(source)) {
+      return { items: [], problem: 'Choice source must be an array of objects' }
+    }
+    const projections = sources.get(source) ?? new Map<string, ChoiceResolution>()
     const projection = JSON.stringify([rule.key, rule.label])
     if (!projections.has(projection)) {
-      projections.set(projection, buildOptions(source, rule))
+      try {
+        projections.set(projection, { items: choiceLabels(buildOptions(source, rule)) })
+      }
+      catch (error) {
+        if (!(error instanceof SyntaxError)) {
+          throw error
+        }
+        projections.set(projection, { items: [], problem: error.message })
+      }
     }
     sources.set(source, projections)
     return projections.get(projection)!
@@ -59,27 +69,19 @@ export function choiceKey(rule: ChoiceRule, value: unknown): unknown {
   return returnsObject(rule) ? readDataPath(value, rule.key) : value
 }
 interface WorkbookChoiceOption extends ChoiceOption { readonly text: string }
-export interface WorkbookChoice { readonly text: string | null, readonly items: readonly WorkbookChoiceOption[] }
+export interface WorkbookChoice { readonly text: TemplateValue, readonly items: readonly WorkbookChoiceOption[] }
 
 /** Workbook layouts and files use the same unambiguous choice labels. */
-export function createChoiceLabels() {
-  const sources = new WeakMap<readonly ChoiceOption[], readonly WorkbookChoiceOption[]>()
-  return (options: readonly ChoiceOption[]): readonly WorkbookChoiceOption[] => {
-    let items = sources.get(options)
-    if (!items) {
-      const counts = new Map<string, number>()
-      const texts = new Set<string>()
-      options.forEach(option => counts.set(option.label.toLowerCase(), (counts.get(option.label.toLowerCase()) ?? 0) + 1))
-      items = options.map(option => {
-        const text = counts.get(option.label.toLowerCase())! > 1 ? `${option.label} [${option.key}]` : option.label
-        if (texts.has(text.toLowerCase())) {
-          throw new SyntaxError('Choice display labels are ambiguous after adding keys')
-        }
-        texts.add(text.toLowerCase())
-        return { ...option, text }
-      })
-      sources.set(options, items)
+function choiceLabels(options: readonly ChoiceOption[]): readonly WorkbookChoiceOption[] {
+  const counts = new Map<string, number>()
+  const texts = new Set<string>()
+  options.forEach(option => counts.set(option.label.toLowerCase(), (counts.get(option.label.toLowerCase()) ?? 0) + 1))
+  return options.map(option => {
+    const text = counts.get(option.label.toLowerCase())! > 1 ? `${option.label} [${option.key}]` : option.label
+    if (texts.has(text.toLowerCase())) {
+      throw new SyntaxError('Choice display labels are ambiguous after adding keys')
     }
-    return items
-  }
+    texts.add(text.toLowerCase())
+    return { ...option, text }
+  })
 }

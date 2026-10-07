@@ -133,7 +133,7 @@ it('keeps requested dictionary columns when an empty source allows free input', 
   const text = workbookChoiceRange(rule)
   const template = await importAuthoredWorkbook(book => {
     book.addWorksheet('Input').addRow([
-      '{selected}{@choice:Options; key=id; label=name; return=key; emptySource=input}',
+      '{selected}{@choice:Options; key=id; label=name; return=key}',
       { formula: `SUM(${rate})+COUNTA(${text})` },
     ])
   })

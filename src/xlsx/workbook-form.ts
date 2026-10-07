@@ -19,7 +19,7 @@ import { readFormValue } from './form-value'
 import { formCarrierDefinition, readFormStructure, placeFormMarkers, readFormMarkers } from './workbook-form-markers'
 import { writeWorkbookPackage } from './workbook-source'
 import { TaggedXlsxError, withTemplateLocations } from './tagged-template'
-import { allowsChoiceInput, createChoiceResolver, returnsObject, createChoiceLabels } from '../core/choices'
+import { createChoiceResolver, returnsObject } from '../core/choices'
 import { equalJson, isDataObject } from '../core/json'
 import { validateList } from '../core/field-rules'
 import { isBlank } from '../core/validation'
@@ -29,7 +29,7 @@ import { collectWorkbookDictionarySources } from '../grid/workbook'
 /** Issue input fields and structural boundaries. Blank required fields can be completed later. */
 export async function renderWorkbookForm(value: WorkbookTemplate, data: unknown, options: { readonly dictionaries?: Dictionaries } = {}): Promise<Buffer> {
   const { definition, source, resources } = WorkbookTemplate.content(value)
-  const dictionaries = parseDictionaries(options.dictionaries === undefined ? {} : options.dictionaries)
+  const dictionaries = parseDictionaries(options.dictionaries, collectWorkbookDictionarySources(definition))
   const prepared = withTemplateLocations(definition, () => prepareWorkbookForm(definition, 'issue'))
   const issued = issueWorkbookFormData(prepared.template, data)
   const placed = withTemplateLocations(prepared.template, () => placeWorkbook(prepared.template, issued, { dictionaries, purpose: 'issue' }))
@@ -57,7 +57,7 @@ export async function readWorkbookForm(value: WorkbookTemplate, bytes: Uint8Arra
     }
     const sources = [...prepared.fields.values()].some(field => field.rules?.choice || field.rules?.list)
       ? readWorkbookChoiceSources(returned, workbookListSheetName(prepared.template.sheets.map(sheet => sheet.name)))
-      : { dictionaries: {}, context: {}, local: {} }
+      : { dictionaries: {}, context: {}, local: {}, skipped: new Set<string>() }
     return readWorkbookFormFields(prepared, result, sources)
   }
   catch (error) {
@@ -219,7 +219,13 @@ function decodeFormFields(prepared: PreparedWorkbookForm, submission: WorkbookFo
   const issues = new Map<WorkbookFormField, WorkbookFormIssue>()
   const fields = new Map<string, FieldValue>()
   const choiceOptions = createChoiceResolver()
-  const choiceLabels = createChoiceLabels()
+  const warnings = new Set<string>()
+  function warn(field: PreparedWorkbookField, message = 'choice source is missing or empty'): void {
+    if (!warnings.has(field.id)) {
+      console.warn(`sheetbind: ${field.id}: ${message}; its lookup and list validation are skipped`)
+      warnings.add(field.id)
+    }
+  }
   const locations = new Map<string, WorkbookFormField['location']>()
   for (const field of submission.fields) {
     if (!locations.has(field.id)) {
@@ -242,24 +248,39 @@ function decodeFormFields(prepared: PreparedWorkbookForm, submission: WorkbookFo
   function resolve(field: PreparedWorkbookField, location?: WorkbookFormField['location']) {
     const rule = field.rules!.choice!
     const source = rule.source
+    if (options.skipped.has(field.id)) {
+      warn(field, 'choice source was unavailable when the form was issued')
+      return []
+    }
+    let values: unknown
     if ('dictionary' in source) {
-      return Object.hasOwn(options.dictionaries, source.dictionary) ? choiceOptions(rule, options.dictionaries[source.dictionary]) : undefined
+      values = options.dictionaries[source.dictionary]
     }
-    if (source.from === 'root') {
-      return choiceOptions(rule, readDataPath(options.context, source.path))
+    else if (source.from === 'root') {
+      values = readDataPath(options.context, source.path)
     }
-    const stored = options.local[field.id]
-    if (!location || !isDataObject(stored) || !Array.isArray(stored[location.path])) {
-      throw new SyntaxError('local source was not issued for this field')
+    else {
+      const stored = options.local[field.id]
+      if (!location || !isDataObject(stored) || !Array.isArray(stored[location.path])) {
+        throw new SyntaxError('local source was not issued for this field')
+      }
+      values = stored[location.path]
     }
-    return choiceOptions(rule, stored[location.path])
+    const { items, problem } = choiceOptions(rule, values)
+    if (problem) {
+      throw new SyntaxError(problem)
+    }
+    if (!items.length && !('dictionary' in source)) {
+      warn(field)
+    }
+    return items
   }
   // Validate the issued sources before interpreting user values, including blank fields.
   for (const field of prepared.fields.values()) {
     savedSource(field, () => {
       const list = field.rules?.list
-      if (list && Object.hasOwn(options.dictionaries, list) && (!options.dictionaries[list].length || !options.dictionaries[list].every(item => typeof item === 'string'))) {
-        throw new SyntaxError(`dictionary ${list} must contain strings`)
+      if (list && options.dictionaries[list]?.some(item => typeof item !== 'string')) {
+        warn(field, `dictionary ${list} does not contain strings`)
       }
       const source = field.rules?.choice?.source
       if (source && ('dictionary' in source || source.from === 'root')) {
@@ -269,16 +290,16 @@ function decodeFormFields(prepared: PreparedWorkbookForm, submission: WorkbookFo
   }
   for (const field of submission.fields) {
     const { location, rules } = field
-    const source = rules?.choice ? savedSource(field, () => resolve(field, location), location) : undefined
-    const items = source && savedSource(field, () => choiceLabels(source), location)
+    const items = rules?.choice ? savedSource(field, () => resolve(field, location), location) : undefined
     if (field.issue) {
       issues.set(field, { phase: 'value', ...field.issue, ...location })
       continue
     }
-    let raw: FieldValue = rules?.list ? field.text ?? field.raw : field.raw
-    if (rules?.choice && items && !isBlank(raw)) {
+    const list = rules?.list && options.dictionaries[rules.list]
+    let raw: FieldValue = list && list.length && list.every(item => typeof item === 'string') ? field.text ?? field.raw : field.raw
+    if (rules?.choice && items?.length && !isBlank(raw)) {
       const selected = items.find(item => item.text === (field.text ?? raw))
-      if (!selected && !allowsChoiceInput(rules.choice, items)) {
+      if (!selected) {
         raw = field.text ?? raw
         issues.set(field, { phase: 'value', code: 'choice', message: 'select a label from the declared choice source', ...location })
       }

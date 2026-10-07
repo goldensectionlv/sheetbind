@@ -113,7 +113,7 @@ it('decodes numeric-looking list labels before applying numeric input formats', 
     const sheet = book.addWorksheet('Input')
     sheet.addRows([[
       '{year}{@list:Years}', '{selected}{@choice:Options; key=id; label=name; return=key}',
-      '{free}{@choice:.options; key=id; label=name; return=key; emptySource=input}',
+      '{free}{@choice:.options; key=id; label=name; return=key}',
     ]])
     sheet.getCell('B1').numFmt = '0.00'
     sheet.getCell('C1').numFmt = '0.00'

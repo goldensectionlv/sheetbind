@@ -177,7 +177,7 @@ function importRegions(compiled: ReturnType<typeof compileWorkbookSheet>, create
 export function resolveWorkbook(template: WorkbookTemplate, data: unknown, options: { readonly dictionaries?: Dictionaries } = {}): WorkbookLayout {
   const { definition } = WorkbookTemplate.content(template)
   assertInputData(data)
-  const plan = withTemplateLocations(definition, () => planWorkbook(definition, data, { dictionaries: parseDictionaries(options.dictionaries ?? {}) }))
+  const plan = withTemplateLocations(definition, () => planWorkbook(definition, data, { dictionaries: parseDictionaries(options.dictionaries, collectWorkbookDictionarySources(definition)) }))
   return { sheets: plan.sheets.map(({ sheet }) => ({
     ...structuredClone({ id: sheet.id, name: sheet.name, state: sheet.state, rows: sheet.rows, columns: sheet.columns, print: sheet.print }),
     cells: sheet.cells.map(cell => ({
@@ -195,7 +195,7 @@ export function workbookDictionarySources(template: WorkbookTemplate): string[] 
 /** Render data into the imported workbook while preserving its native content. */
 export async function renderWorkbookReport(template: WorkbookTemplate, data: unknown, options: { readonly dictionaries?: Dictionaries } = {}): Promise<Buffer> {
   const { definition, source, resources } = WorkbookTemplate.content(template)
-  const dictionaries = parseDictionaries(options.dictionaries ?? {})
+  const dictionaries = parseDictionaries(options.dictionaries, collectWorkbookDictionarySources(definition))
   assertInputData(data)
   const plan = withTemplateLocations(definition, () => planWorkbook(definition, data, { dictionaries }))
   return writeWorkbookPackage({ source, plan, dictionaries, resources })
@@ -249,7 +249,7 @@ export function inspectWorkbookTemplate(template: WorkbookTemplate, options: { r
           prepareFormatting(cell.rules.format)
         }
         catch (error) {
-          findings.push({ ...location, code: 'invalid-format', severity: 'error', message: (error as Error).message })
+          findings.push({ ...location, code: 'invalid-format', severity: 'warning', message: (error as Error).message })
         }
       }
       const choice = cell.rules?.choice?.source

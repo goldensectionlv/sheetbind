@@ -168,10 +168,8 @@ describe('scope and repeat placement', () => {
   })
 
   it.each([
-    [{ ...project.data, provider: [] }, 'missing-source', '$data.provider.name'],
     [{ ...project.data, work: {} }, 'invalid-collection', '$data.work'],
     [{ ...project.data, work: [0] }, 'invalid-item', '$data.work[0]'],
-    [{ ...project.data, work: [{}] }, 'missing-source', '$data.work[0].code'],
   ])('reports concrete data paths for invalid sources', (data, code, path) => {
     try {
       resolveWorkbook(project.definition, data)

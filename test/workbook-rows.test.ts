@@ -155,7 +155,7 @@ it.each(['choice', 'choice-source'])('distinguishes invalid input from a damaged
     const header = helper.getCell(start)
     const payload = helper.getCell(Number(header.row) + 1, Number(header.col))
     const stored = JSON.parse(String(payload.value))
-    stored.context = {}
+    stored.context.products = [{ id: '001', name: 'Paper' }, { id: '001', name: 'Different item' }]
     payload.value = JSON.stringify(stored)
   }
   const result = await readWorkbookForm(template, await saveWorkbook(book))

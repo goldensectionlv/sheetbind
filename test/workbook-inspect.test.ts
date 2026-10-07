@@ -13,7 +13,7 @@ it('locates missing render dependencies inside empty repeats without executing h
     [null, null, null, '{/items}'],
   ]))
   expect(inspectWorkbookTemplate(template, { dictionaries: ['Known'] })).toMatchObject([
-    { code: 'invalid-format', severity: 'error', sheetName: 'Input', address: 'B2' },
+    { code: 'invalid-format', severity: 'warning', sheetName: 'Input', address: 'B2' },
     { code: 'unknown-dict', severity: 'warning', sheetName: 'Input', address: 'C2' },
   ])
   expect(formatter).not.toHaveBeenCalled()
@@ -24,5 +24,5 @@ it('checks builtin arguments before rendering and only checks dictionaries when 
   const template = await importAuthoredWorkbook(book => book.addWorksheet('Input').addRows([
     ['{value | bool_replace:"Yes"}', '{status}{@list:External}'],
   ]))
-  expect(inspectWorkbookTemplate(template)).toMatchObject([{ severity: 'error', address: 'A1', message: 'bool_replace requires two text labels' }])
+  expect(inspectWorkbookTemplate(template)).toMatchObject([{ severity: 'warning', address: 'A1', message: 'bool_replace requires two text labels' }])
 })

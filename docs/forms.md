@@ -142,7 +142,9 @@ This is the top of the [issued form](/examples/tutorials/issued.xlsx). Input row
 
 The form stores the issuance dictionaries in its hidden sheet. Reading needs the original template and the completed file; `return=key` returns the selected ID. See [validation and lists](./fields.md) for other sources.
 
-Named and root choice sources are checked before the file is written, including fields in empty multirow repeats. Missing labels, duplicate keys and incompatible source types are issuance data errors.
+Unavailable or invalid choice sources emit warnings at issuance and leave ordinary input. Available sources are stored in the form; disabled projections remain disabled on read. A later malformed saved mapping or damaged control structure is a reading error. Field validation is performed when reading the completed form.
+
+An unmatched input value can be issued for correction unless its displayed text equals another option's label. That case produces `ambiguous-choice` during issuance: reading would otherwise return a different ID or object. Reports can still display the supplied text.
 
 ### 3. Fill and read
 

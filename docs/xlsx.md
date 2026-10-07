@@ -23,7 +23,7 @@ Form reading uses the format of the submitted cell before running validation. A 
 | Date as text | Text (`@`), entered as `2026-01-15` | A string; add a custom calendar-date rule if needed |
 | Native Excel date | A date format such as `dd.mm.yyyy` | An ISO string, for example `2026-01-15T00:00:00.000Z` |
 
-For form fields with `string` validation or an active choice list, issuance changes `General` to text. An empty choice source with `emptySource=input` leaves the format unchanged. Explicit formats in the template take precedence.
+For form fields with `string` validation or an active choice list, issuance changes `General` to text. An empty or unavailable choice source leaves the format unchanged. Explicit formats in the template take precedence.
 
 `General` keeps numeric precision. It accepts numeric text with a decimal point or comma, while text with leading zeroes such as `"006"` remains text. Use `@` to make an identifier's type explicit. Fixed and optional decimal places, percent, scientific notation, scaling commas and numeric format sections determine rounding. Percent values stay fractional numbers: `0.123456` with `0.00%` reads as `0.1235`. Fraction and elapsed-time formats do not round the stored number. Reading does not change the workbook. Trailing zeroes are display information: the JSON number `12.30` is represented as `12.3`.
 
@@ -31,7 +31,7 @@ Native Excel dates become ISO strings; Sheetbind does not infer a timezone from 
 
 Engineering notation accounts for the number of integer positions: `12345.67` with `##0.0E+0` displays as `12.3E+3` and reads as `12300`.
 
-List labels are matched using the original text: `"2026"` stays a list option, and selected objects or keys follow the `@choice` return setting. Numeric conversion applies to free input, including `emptySource=input`.
+List labels are matched using the original text: `"2026"` stays a list option, and selected objects or keys follow the `@choice` return setting. Numeric conversion applies to free input, including fields without available choice options.
 
 Use strings for long identifiers: Excel numeric precision can lose digits. Cell text is limited to 32,767 UTF-16 code units, and characters that XML cannot represent are rejected. Standard XLSX row and column limits also apply.
 
@@ -82,7 +82,7 @@ A picture's position and a chart's data references are different concerns. Retai
 
 Sheetbind creates Excel dropdowns for [lists and choices](./fields.md). If a source cell has only an input prompt, that prompt is retained when adding the dropdown.
 
-If the same output cell already has a full Excel validation rule, rendering rejects the conflict with `RangeError`. Remove the native rule or the Sheetbind list/choice for that field. A cell's native rule is not silently combined with a second validation rule.
+If the same output cell already has a full Excel validation rule, rendering preserves it, warns and omits the generated dropdown on the overlapping cells. Other generated dropdowns remain. The field's declared list or choice is still checked by `readWorkbookForm`; authored Excel rules are not executed by the reader.
 
 Excel's validation UI does not replace form reading. Pasted values can still need checking; `readWorkbookForm` resolves the choice and runs the declared field rules.
 

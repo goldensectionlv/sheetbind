@@ -47,7 +47,7 @@ Rules run from left to right. The first failure stops validation of that field; 
 
 `null`, `""`, and whitespace-only strings count as empty. All built-in rules except `required` skip empty values. `0` and `false` are not empty. Rules do not convert values: the string `"12"` fails `number`, and whitespace is not trimmed.
 
-For an optional field, omit `required`. The `?` binding prefix permits a missing field in report input; it does not cancel `required` when reading a form. An omitted property and a property containing `undefined` both mean absence, including in nested objects. You do not need to replace them with `null` before issuing a form.
+For an optional field, omit `required`. The `?` binding prefix suppresses the warning about missing report input; it does not cancel `required` on read. Omitted and `undefined` properties both produce blank cells, including nested paths.
 
 ## A list of strings
 
@@ -79,7 +79,7 @@ Cell B1 in `list-report.xlsx` contains `Draft` and offers the `Draft`, `Ready` l
 
 This example creates a report. For a file the user will return to your application, replace `renderWorkbookReport` with `renderWorkbookForm` in both the import and the call. Reading that [form](./forms.md) returns the selected string. A dropdown alone does not make a report readable by `readWorkbookForm`.
 
-The list must contain at least one string. The issued form stores this list; no dictionary argument is needed when reading. A value outside the list produces a `list` issue.
+A populated list contains strings. The issued form stores it, so reading does not need external dictionaries. An out-of-list value produces a `list` issue on read; it does not prevent rendering. Missing or empty lists leave ordinary input and emit a warning.
 
 ## Selecting an object or a key
 
@@ -132,7 +132,7 @@ const data = { product: '001' }
 
 The dictionary stays the same. Excel shows `Paper`; reading the form returns `{ "product": "001" }`. The key keeps its type: the string `'001'` does not become a number.
 
-Keys must be unique nonempty strings or finite numbers. Labels must be nonempty strings. Duplicate labels appear in Excel as, for example, `Paper [001]` and `Paper [002]`. Rendering rejects the dictionary if adding keys still leaves ambiguous display labels.
+Keys are nonempty strings or finite numbers and must be unique; labels are nonempty strings. Duplicate labels display as, for example, `Paper [001]` and `Paper [002]`. If keys or display labels are ambiguous, rendering warns and skips that projection, preserving the supplied value. A saved mapping that becomes ambiguous after issuance is a file error on read.
 
 You cannot combine `@list` and `@choice` in one field. Set requiredness and other checks separately with `@validate`.
 
@@ -189,9 +189,9 @@ Local options are saved for the issued fields. Fill or clear values while keepin
 
 Omitted, `undefined` and `null` data sources such as `.answers` or `$root.catalog.options` behave like an empty array. You do not need to add `answers: []` to every record.
 
-For questions that accept text when `answers` is empty or absent, add `emptySource=input` together with `return=key`. Populated sources still require a listed value, and `@validate` rules still apply. An empty source allows ordinary input without a dropdown.
+An empty or unavailable `answers` source leaves ordinary input without a dropdown and emits a warning. No extra option is needed. Populated sources are checked when reading the completed form; `@validate` rules also run only on read.
 
-If a named dictionary is absent, each resolve, render or read call emits one `console.warn` per missing name. The field keeps ordinary input without a dropdown, dictionary lookup or list validation; `@validate` still applies. Rendering keeps scalar input as supplied and uses the declared `label` property for an object value. Reading returns the cell value without reconstructing a key or object. Supplied dictionaries remain validated; an explicitly empty string list is invalid. Supply named dictionaries through `options.dictionaries` when issuing the file; available sources are saved in the form.
+Named, root and local sources use the same fallback: keep the scalar value, or the declared `label` property of an object, and skip unavailable lookup and list validation. Reading returns the cell value in that case. Unused named dictionaries are ignored, and duplicate strings are removed with a warning. Invalid projections are disabled independently, so another valid projection of the same dictionary continues to work. Supply named sources through `options.dictionaries` when rendering or issuing the form.
 
 ## Custom messages
 
@@ -307,7 +307,7 @@ registerFormatter('suffix', (value, args) => String(value ?? '') + String(args[0
 
 Built-in formatters preserve `null`, empty strings and whitespace-only text. A blank answer does not become `0` or the negative label; actual `0` and `false` still get formatted.
 
-Pipelines run left to right. Each handler receives a value and JSON argument array and synchronously returns a string, finite number, boolean or `null`. Unknown formatters, handler failures and invalid results stop rendering. Built-in names are reserved; duplicate registration of an application name is an error. Register separately for each loaded package instance, process or worker.
+Pipelines run left to right. Each handler receives a value and JSON arguments and synchronously returns a string, finite number, boolean or `null`. An unknown formatter, invalid arguments, handler failure or invalid result emits a warning and retains the original value before the whole pipeline. Formatters are not prepared or run for absent repeat instances, or when reading a form. Built-in names are reserved; duplicate registration is an error.
 
 Formatters **never run on read** and are not inverted: a cell formatted with `bool_replace` returns the text “Yes”, not a boolean. Use `@choice` to return a key or object from a display label. Formatting cannot share a cell with `@choice` or `@list`. Handler registrations are not stored in XLSX.
 

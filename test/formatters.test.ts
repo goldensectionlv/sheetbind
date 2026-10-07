@@ -57,14 +57,38 @@ it('registers custom formatter pipelines once, retains quoted arguments and neve
   expect(custom).not.toHaveBeenCalled()
 })
 
-it('rejects unknown formatters even in empty repeats and rejects invalid formatter results', async () => {
+it('keeps original values when formatting is unavailable, invalid or fails and skips absent cells', async () => {
   const template = await importAuthoredWorkbook(book => book.addWorksheet('Data').addRows([
     ['{#items}'], ['{.v | absentFormatter}'], ['{/items}'],
   ]))
-  await expect(renderWorkbookReport(template, { items: [] })).rejects.toThrow('Unknown formatter')
-  registerFormatter('testBadResult', (() => ({ invalid: true })) as unknown as Formatter)
-  const invalid = await importAuthoredWorkbook(book => book.addWorksheet('Data').getCell('A1').value = '{v | testBadResult}')
-  await expect(renderWorkbookForm(invalid, { v: 1 })).rejects.toThrow('synchronous finite scalar')
+  const warning = vi.spyOn(console, 'warn').mockImplementation(() => {})
+  try {
+    await renderWorkbookReport(template, { items: [] })
+    expect(warning).not.toHaveBeenCalled()
+    registerFormatter('testBadResult', (() => ({ invalid: true })) as unknown as Formatter)
+    registerFormatter('testThrows', () => {
+      throw new Error('formatter failed')
+    })
+    registerFormatter('testNull', () => null)
+    const invalid = await importAuthoredWorkbook(book => book.addWorksheet('Data').addRows([[
+      '{unknown | absentFormatter}', '{bad | float | testBadResult}', '{args | bool_replace:"Yes"}', '{fails | testThrows}', '{blank | testNull}',
+    ]]))
+    const data = { unknown: '006', bad: '007', args: false, fails: 0, blank: 'becomes blank' }
+    for (const render of [renderWorkbookReport, renderWorkbookForm]) {
+      warning.mockClear()
+      const bytes = await render(invalid, data)
+      expect((await openWorkbook(bytes)).worksheets[0].getRow(1).values).toEqual([undefined, '006', '007', false, 0])
+      expect(warning).toHaveBeenCalledTimes(4)
+      if (render === renderWorkbookForm) {
+        warning.mockClear()
+        expect(await readWorkbookForm(invalid, bytes)).toEqual({ success: true, data: { ...data, blank: null } })
+        expect(warning).not.toHaveBeenCalled()
+      }
+    }
+  }
+  finally {
+    warning.mockRestore()
+  }
   expect(() => registerFormatter('float', value => value)).toThrow('reserved')
   expect(() => registerFormatter('__proto__', value => value)).toThrow('reserved')
 })

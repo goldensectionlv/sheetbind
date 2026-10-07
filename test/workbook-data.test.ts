@@ -1,4 +1,4 @@
-import { expect, it } from 'vitest'
+import { expect, it, vi } from 'vitest'
 import { resolveWorkbook, renderWorkbookReport } from '../src/index'
 import type { WorkbookTemplate } from '../src/index'
 import { importAuthoredWorkbook, openWorkbook } from './xlsx'
@@ -22,18 +22,25 @@ it.each([{}, [], NaN, Infinity, new Date()])('rejects undeclared structured or n
 })
 
 it('does not fall back to a parent when the current field is absent', async () => {
-  expect(() => values(repeatTemplate, { name: 'Wrong', items: [{}] })).toThrow('source is missing')
+  const warning = vi.spyOn(console, 'warn').mockImplementation(() => {})
+  try {
+    expect(values(repeatTemplate, { name: 'Wrong', items: [{}] })).toEqual(['Header', null, 'End'])
+    expect(warning).toHaveBeenCalledExactlyOnceWith(expect.stringContaining('$data.items[0].name'))
+  }
+  finally {
+    warning.mockRestore()
+  }
   const optional = await importAuthoredWorkbook(book => book.addWorksheet('Values').addRows([
     ['{#items}'], ['{?.name}'], ['{/items}'],
   ]))
   expect(values(optional, { name: 'Wrong', items: [{}] })).toEqual([null])
 })
 
-it.each([{}, { details: null }])('keeps object scopes strict when their source is absent %#', async data => {
+it.each([{}, { details: null }])('renders blank fields for absent object scopes %#', async data => {
   const template = await importAuthoredWorkbook(book => book.addWorksheet('Scope').addRows([
     ['{#with details}'], ['{.name}'], ['{/with}'],
   ]))
-  expect(() => values(template, data)).toThrow()
+  expect(values(template, data)).toEqual([null])
 })
 
 it('composes scopes, nested repeats and explicit root access with concrete origins', async () => {

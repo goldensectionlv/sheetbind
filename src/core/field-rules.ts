@@ -185,8 +185,8 @@ export function hasValidation(rules: FieldRules | undefined, name: string): bool
   return !!validation && (typeof validation === 'string' ? parseValidation(validation) : validation).some(use => use.rule === name)
 }
 
-export function validateList(value: unknown, rules: FieldRules, choices?: readonly string[]): { code: string, message: string } | undefined {
-  if (!rules.list || !choices || isBlank(value)) {
+export function validateList(value: unknown, rules: FieldRules, choices?: readonly unknown[]): { code: string, message: string } | undefined {
+  if (!rules.list || !choices?.length || !choices.every(item => typeof item === 'string') || isBlank(value)) {
     return undefined
   }
   if (!choices.includes(value as string)) {

@@ -1,7 +1,7 @@
 import type { Workbook } from 'exceljs'
 import { validateDictionaryShape } from '../core/dictionaries'
 import type { Dictionaries } from '../core/dictionaries'
-import { createChoiceResolver, createChoiceLabels } from '../core/choices'
+import { createChoiceResolver } from '../core/choices'
 import type { ChoiceRule } from '../core/choices'
 import { hasValidation } from '../core/field-rules'
 import { assertInputData, assertJson, isDataObject } from '../core/json'
@@ -109,6 +109,9 @@ export function workbookLists(plan: WorkbookPlan, dictionaries: Dictionaries, re
       else {
         continue
       }
+      if (!items.length || !items.every(item => typeof item === 'string')) {
+        continue
+      }
       let reference = byItems.get(items)
       if (!reference) {
         const key = JSON.stringify(items)
@@ -120,7 +123,7 @@ export function workbookLists(plan: WorkbookPlan, dictionaries: Dictionaries, re
         }
         byItems.set(items, reference)
       }
-      const xml = `<dataValidation type="${items.length ? 'list' : 'custom'}" allowBlank="${hasValidation(cell.rules, 'required') ? 0 : 1}" showErrorMessage="1" errorStyle="stop" errorTitle="Choose a listed value" error="Select a value from the dropdown list."><formula1>${items.length ? reference : 'FALSE'}</formula1></dataValidation>`
+      const xml = `<dataValidation type="list" allowBlank="${hasValidation(cell.rules, 'required') ? 0 : 1}" showErrorMessage="1" errorStyle="stop" errorTitle="Choose a listed value" error="Select a value from the dropdown list."><formula1>${reference}</formula1></dataValidation>`
       const previous = last.get(cell.at.column)
       if (previous && previous.range.end.row + 1 === cell.at.row && previous.xml === xml) {
         previous.range = { start: previous.range.start, end: cell.at }
@@ -137,7 +140,6 @@ export function workbookLists(plan: WorkbookPlan, dictionaries: Dictionaries, re
   // Formula references declare dictionary columns independently of the issued rows.
   const named = new Set<string>()
   const resolve = createChoiceResolver()
-  const labels = createChoiceLabels()
   for (const rule of rules) {
     if (!('dictionary' in rule.source)) {
       continue
@@ -154,7 +156,7 @@ export function workbookLists(plan: WorkbookPlan, dictionaries: Dictionaries, re
     if (!fields.length && !resources.references.has(rangeName(prefix).toLowerCase())) {
       continue
     }
-    const items = labels(resolve(rule, dictionaries[rule.source.dictionary] ?? []))
+    const { items } = resolve(rule, dictionaries[rule.source.dictionary])
     writeColumn(resources.allocate(rangeName(prefix), true), items.map(item => item.text), 'Selection')
     for (const field of fields) {
       writeColumn(resources.allocate(rangeName(prefix, field), true), items.map(item => fieldValue(item.value[field])), field)
@@ -202,10 +204,11 @@ export function readWorkbookChoiceSources(book: Workbook, sheetName: string) {
     if (!isDataObject(payload) || !isDataObject(payload.context) || payload.local !== undefined && !isDataObject(payload.local)) {
       throw new Error('invalid source payload')
     }
-    if (Object.keys(payload).some(key => !['context', 'dictionaries', 'local'].includes(key))) {
+    if (Object.keys(payload).some(key => !['context', 'dictionaries', 'local', 'skipped'].includes(key))
+      || payload.skipped !== undefined && (!Array.isArray(payload.skipped) || !payload.skipped.every(id => typeof id === 'string'))) {
       throw new Error('unknown source property')
     }
-    return { context: payload.context, dictionaries: validateDictionaryShape(payload.dictionaries), local: payload.local ?? {} }
+    return { context: payload.context, dictionaries: validateDictionaryShape(payload.dictionaries), local: payload.local ?? {}, skipped: new Set(payload.skipped as string[] | undefined) }
   }
   catch {
     throw new WorkbookFormInputError({ phase: 'xlsx', code: 'choice-source', path: '$workbook', message: 'form dictionary source data is missing or malformed' })
@@ -215,6 +218,8 @@ export function readWorkbookChoiceSources(book: Workbook, sheetName: string) {
 export function serializeWorkbookChoiceSources(plan: WorkbookPlan, data: unknown, dictionaries: Dictionaries): string | undefined {
   const context: Record<string, unknown> = {}
   const selected: Record<string, Dictionaries[string]> = {}
+  const skipped: string[] = []
+  const resolve = createChoiceResolver()
   const fields = plan.sheets.flatMap(({ definition }) => workbookCells(definition)).filter(cell => cell.rules?.choice || cell.rules?.list)
   if (!fields.length) {
     return undefined
@@ -231,10 +236,16 @@ export function serializeWorkbookChoiceSources(plan: WorkbookPlan, data: unknown
       if (Object.hasOwn(dictionaries, source.dictionary)) {
         selected[source.dictionary] = dictionaries[source.dictionary]
       }
+      if (resolve(cell.rules!.choice!, dictionaries[source.dictionary]).problem) {
+        skipped.push(cell.id)
+      }
     }
     else if (source.from === 'root') {
       const path = source.path.split('.')
       writeData(context, path, readData(data, path) ?? [], true)
+      if (resolve(cell.rules!.choice!, readData(data, path)).problem) {
+        skipped.push(cell.id)
+      }
     }
   }
   const local: Record<string, Record<string, readonly Readonly<Record<string, unknown>>[]>> = {}
@@ -247,7 +258,7 @@ export function serializeWorkbookChoiceSources(plan: WorkbookPlan, data: unknown
       }
     }
   }
-  const sources = { context, dictionaries: selected, local }
+  const sources = { context, dictionaries: selected, local, ...(skipped.length ? { skipped } : {}) }
   assertInputData(sources)
   return JSON.stringify(sources)
 }

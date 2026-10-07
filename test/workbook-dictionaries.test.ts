@@ -25,20 +25,20 @@ describe('named string dictionaries', () => {
     expect(workbookDictionarySources(imported)).toEqual(['workCodes'])
   })
 
-  it('validates dependencies before execution even when a repeat is empty', () => {
+  it('warns about unavailable lists without validating report values or empty repeats', () => {
     const warning = vi.spyOn(console, 'warn').mockImplementation(() => {})
     try {
       expect(() => resolveWorkbook(project.definition, { ...project.data, sites: [] })).not.toThrow()
-      expect(warning).toHaveBeenCalledExactlyOnceWith(expect.stringContaining('dictionary workCodes was not supplied'))
+      expect(warning).toHaveBeenCalledExactlyOnceWith(expect.stringContaining('dictionary workCodes is missing or empty'))
+      expect(() => resolveWorkbook(project.definition, { ...project.data, sites: [] }, { dictionaries: { workCodes: [] } })).not.toThrow()
     }
     finally {
       warning.mockRestore()
     }
-    expect(() => resolveWorkbook(project.definition, { ...project.data, sites: [] }, { dictionaries: { workCodes: [] } })).toThrow('dictionary workCodes is empty')
     expect(() => resolveWorkbook(project.definition, { ...project.data, sites: [] }, options)).not.toThrow()
     const data = structuredClone(project.data) as { sites: { work: { code: string }[] }[] }
     data.sites[1].work[0].code = '7'
-    expect(() => resolveWorkbook(project.definition, data, options)).toThrow('$data.sites[1].work[0].code: must be a value from workCodes')
+    expect(() => resolveWorkbook(project.definition, data, options)).not.toThrow()
     expect(validateList('00042', { validation: [{ rule: 'string' }], list: 'codes' }, ['00042'])).toBeUndefined()
     expect(validateList(42, { validation: [{ rule: 'string' }], list: 'codes' }, ['00042'])?.code).toBe('list')
   })
@@ -63,7 +63,7 @@ describe('named string dictionaries', () => {
         warning.mockClear()
         const rendered = await load(await render(template, data, { dictionaries }))
         expect(warning.mock.calls.map(([message]) => message)).toEqual([
-          expect.stringContaining('dictionary Codes was not supplied'), expect.stringContaining('dictionary Products was not supplied'),
+          expect.stringContaining('dictionary Codes is missing or empty'), expect.stringContaining('dictionary Products is missing or empty'),
         ])
         const input = rendered.getWorksheet('Input')!
         expect(input.getRow(1).values).toEqual([undefined, '006', '007', 'Label from input', 'Open', { formula: `COUNTA(${range})` }])
@@ -182,13 +182,27 @@ describe('named string dictionaries', () => {
     }
   })
 
-  it('rejects invalid dictionary shapes without coercion or aliases', () => {
-    for (const value of [null, [], { codes: [42] }, { codes: [''] }, { codes: new Array(1) }, { codes: ['a', 'a'] }, { 'bad|name': ['a'] }, JSON.parse('{"__proto__":["a"]}'), { constructor: ['a'] }]) {
-      expect(() => parseDictionaries(value)).toThrow()
+  it('owns declared sources, skips unavailable sources and ignores unused input', () => {
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      for (const value of [null, [], { codes: [42] }, { codes: [''] }, { codes: new Array(1) }]) {
+        expect(parseDictionaries(value, ['codes'])).toEqual({})
+      }
+      expect(parseDictionaries({ codes: ['a', 'a'] }, ['codes'])).toEqual({ codes: ['a'] })
+      expect(warning).toHaveBeenCalledWith(expect.stringContaining('duplicate strings'))
+      warning.mockClear()
+      const unused = { get unused() {
+        throw new Error('must not be inspected')
+      }, bad: new Date(), constructor: ['a'] }
+      expect(parseDictionaries(unused, [])).toEqual({})
+      expect(warning).not.toHaveBeenCalled()
     }
-    expect(parseDictionaries({ codes: Array.from({ length: 10001 }, (_, i) => String(i)) }).codes).toHaveLength(10001)
+    finally {
+      warning.mockRestore()
+    }
+    expect(parseDictionaries({ codes: Array.from({ length: 10001 }, (_, i) => String(i)) }, ['codes']).codes).toHaveLength(10001)
     const original = { codes: ['00042', 'a,b', '"x"'] }
-    const parsed = parseDictionaries(original)
+    const parsed = parseDictionaries(original, ['codes'])
     original.codes.push('after')
     expect(parsed.codes).toHaveLength(3)
 

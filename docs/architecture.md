@@ -30,7 +30,7 @@ The sheet definition owns its source package path. Cells retain authored address
 
 Each `WorkbookSheetPlan` carries a sheet and its geometry together. Definitions and axes use logical coordinates; placed cells receive final positions and formulas. XLSX mapping accounts for removed tag rows and inserted form control rows. Native ranges, formulas and form boundaries reuse these mappings.
 
-Dictionary input is copied and validated at the operation boundary. Choice projections borrow validated records. Public layouts copy option values; form reading copies selected objects into independent fields. Missing named dictionaries warn once per name per call and leave ordinary input. Supplied sources retain their checks.
+Only declared named dictionaries are copied at the operation boundary. Choice resolution returns either usable options or a diagnostic: rendering warns and skips an unusable projection, while reading rejects malformed saved mappings. Public layouts copy option values; form reading copies selected objects into independent fields. Missing and empty sources leave ordinary input with a warning.
 
 ## Reports and form issuance
 
@@ -48,7 +48,7 @@ Data + dictionaries --------+
               write into the source XLSX -> file
 ```
 
-Import uses ExcelJS to decode the workbook, compiles tags and checks region ownership. Execution resolves values, expands repeats and prepares choice labels. Formatting runs during execution; validation handlers run when reading completed forms.
+Import uses ExcelJS to decode the workbook, compiles tags and checks region ownership. Execution resolves values, expands repeats and prepares choice labels. Formatting runs only for expanded cells. Missing values produce blank cells; failed formatting retains the original value with a warning. Rendering does not check membership in lists or execute validation handlers. Those checks belong to reading completed forms.
 
 The writer opens the source ZIP and applies the plan to cells, dimensions, merges, names and form structure. The shared cell writer owns text limits, the string table and derived styles. Existing style IDs remain valid. Native validation conflicts and inherited prompts are handled at final worksheet coordinates.
 

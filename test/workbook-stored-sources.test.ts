@@ -3,9 +3,9 @@ import ExcelJS from 'exceljs'
 import { importWorkbookXlsx, readWorkbookForm, renderWorkbookForm, renderWorkbookReport, resolveWorkbook } from '../src/index'
 import { openWorkbook as load, importAuthoredWorkbook, saveWorkbook } from './xlsx'
 
-const sourceTag = '{.answer}{@choice:.answers; key=id; label=label; return=key; emptySource=input}'
+const sourceTag = '{.answer}{@choice:.answers; key=id; label=label; return=key}'
 
-it.each(['Options', '$root.options'])('validates shared choice source %s before issuing an empty multirow repeat', async source => {
+it.each(['Options', '$root.options'])('warns about unavailable shared source %s without blocking empty repeats', async source => {
   const book = new ExcelJS.Workbook()
   book.addWorksheet('Form').addRows([
     ['{#items}'], ['Name', '{.name}'], ['Selected', `{.selected}{@choice:${source}; key=id; label=name; return=key}`], [null, '{/items}'],
@@ -14,9 +14,10 @@ it.each(['Options', '$root.options'])('validates shared choice source %s before 
   const template = await importWorkbookXlsx(authored)
   for (const values of [[{ id: 'a' }], ['Allowed'], [{ id: 'a', name: 'A' }, { id: 'a', name: 'B' }]]) {
     for (const render of [resolveWorkbook, renderWorkbookReport, renderWorkbookForm]) {
-      await expect(Promise.resolve().then<unknown>(() => render(template, { items: [], options: values }, { dictionaries: { Options: values } }))).rejects.toMatchObject({
-        issues: [{ phase: 'data', code: 'choice-source', path: source === 'Options' ? '$dictionaries.Options' : '$data.options', sheetName: 'Form', address: 'B3' }],
-      })
+      const result = await render(template, { items: [], options: values }, { dictionaries: { Options: values } })
+      if (render === renderWorkbookForm) {
+        expect(await readWorkbookForm(await importWorkbookXlsx(authored), result as Buffer)).toEqual({ success: true, data: { items: [] } })
+      }
     }
   }
   for (const values of [[], [{ id: 'a', name: 'Allowed' }]]) {
@@ -111,14 +112,14 @@ it('issues twenty blank inputs with row-local sources and keeps only completed r
   expect(await readWorkbookForm(template, await saveWorkbook(book))).toEqual({ success: true, data: { questions: [{ answer: 'a' }, { answer: 'a' }] } })
 })
 
-it.each([{}, { options: undefined }, { options: null }, { options: [] }])('rejects input for an absent or empty local source unless free input was explicitly enabled %#', async empty => {
+it.each([{}, { options: undefined }, { options: null }, { options: [] }])('allows ordinary input for an absent or empty local source %#', async empty => {
   const template = await importAuthoredWorkbook(book => book.addWorksheet('Survey').addRows([
     ['{#items}'], ['{.answer}{@choice:.options; key=id; label=label; return=key}'], ['{/items}'],
   ]))
   const book = await load(await renderWorkbookForm(template, { items: [empty, { options: [{ id: 'a', label: 'A' }], answer: 'a' }] }))
   expect(await readWorkbookForm(template, await saveWorkbook(book))).toEqual({ success: true, data: { items: [{ answer: 'a' }] } })
   book.worksheets[0].getCell('A2').value = 'A'
-  expect(await readWorkbookForm(template, await saveWorkbook(book))).toMatchObject({ success: false, issues: [{ code: 'choice', address: 'A2' }] })
+  expect(await readWorkbookForm(template, await saveWorkbook(book))).toEqual({ success: true, data: { items: [{ answer: 'A' }, { answer: 'a' }] } })
 })
 
 it('accepts omitted, undefined and null local sources as empty without weakening populated choices or required fields', async () => {
@@ -150,7 +151,7 @@ it('accepts omitted, undefined and null local sources as empty without weakening
 })
 
 it.each([{}, { catalog: undefined }, { catalog: null }, { catalog: {} }, { catalog: { options: null } }])('treats absent nested root sources as empty in reports and self-contained forms %#', async source => {
-  const template = await importAuthoredWorkbook(book => book.addWorksheet('Input').getCell('A1').value = '{answer}{@choice:$root.catalog.options; key=id; label=label; return=key; emptySource=input}')
+  const template = await importAuthoredWorkbook(book => book.addWorksheet('Input').getCell('A1').value = '{answer}{@choice:$root.catalog.options; key=id; label=label; return=key}')
   const data = { ...source, answer: 'Free text' }
   const before = structuredClone(data)
   expect((await load(await renderWorkbookReport(template, data))).worksheets[0].getCell('A1').value).toBe('Free text')
@@ -158,14 +159,15 @@ it.each([{}, { catalog: undefined }, { catalog: null }, { catalog: {} }, { catal
   expect(data).toStrictEqual(before)
 })
 
-it('still rejects invalid source types', async () => {
+it('skips unusable local sources and retains input through issued files', async () => {
   const template = await importAuthoredWorkbook(book => book.addWorksheet('Input').getCell('A1').value = sourceTag)
   for (const answers of ['', 0, false, {}]) {
-    await expect(renderWorkbookForm(template, { answers })).rejects.toMatchObject({ issues: [{ code: 'choice-source' }] })
+    const bytes = await renderWorkbookForm(template, { answer: '006', answers })
+    expect(await readWorkbookForm(template, bytes)).toEqual({ success: true, data: { answer: '006' } })
   }
 })
 
-it.each(['named', 'root', 'local', 'list'])('distinguishes absent dictionaries from damaged contextual sources (%s)', async kind => {
+it.each(['named', 'root', 'local', 'list'])('distinguishes absent shared dictionaries from lost local field mappings (%s)', async kind => {
   const rule = kind === 'list' ? '{@list:Options}' : `{@choice:${kind === 'named' ? 'Options' : kind === 'root' ? '$root.options' : '.options'}; key=id; label=name; return=key}`
   const template = await importAuthoredWorkbook(book => book.addWorksheet('Input').getCell('A1').value = '{selected}' + rule)
   const options = [{ id: 'a', name: 'Allowed' }]
@@ -188,8 +190,8 @@ it.each(['named', 'root', 'local', 'list'])('distinguishes absent dictionaries f
     const warning = vi.spyOn(console, 'warn').mockImplementation(() => {})
     try {
       const result = await readWorkbookForm(template, await saveWorkbook(book))
-      if (kind === 'named' || kind === 'list') {
-        expect(warning).toHaveBeenCalledExactlyOnceWith(expect.stringContaining('dictionary Options was not supplied'))
+      if (kind !== 'local') {
+        expect(warning).toHaveBeenCalledTimes(1)
         expect(result).toEqual(typeof input === 'object' && input !== null
           ? { success: false, data: { selected: null }, issues: [expect.objectContaining({ code: 'non-scalar' })] }
           : { success: true, data: { selected: input } })

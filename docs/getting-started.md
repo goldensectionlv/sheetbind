@@ -57,7 +57,7 @@ pnpm exec tsx report.ts
 
 Open `report.xlsx` in the same directory. A1 still contains `Customer`; B1 now contains `Sample customer`.
 
-If rendering reports `missing-source` for `$data.customer.name`, check the data structure. `{ name: 'Sample customer' }` does not match `{customer.name}`; the code above provides the required `customer` object.
+If rendering warns that `$data.customer.name` is missing, check the data structure. `{ name: 'Sample customer' }` does not match `{customer.name}`; rendering leaves that cell blank. The example above supplies the required `customer` object.
 
 Keep the tagged file as your template. After changing its tags or formatting, save it and call `importWorkbookXlsx` again.
 

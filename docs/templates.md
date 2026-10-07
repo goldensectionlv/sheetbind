@@ -144,7 +144,7 @@ For example, `{customer.name}` and `{?customer.note}` accept:
 }
 ```
 
-The name cell contains `Sample customer`; the note cell is blank. Without `?`, a missing property causes `missing-source`. `null` produces a blank cell; `0` and `false` keep their values. Ordinary fields accept strings, finite numbers, booleans and `null`. To display an object, select one of its properties or use an [object choice](./fields.md).
+The name cell contains `Sample customer`; the note cell is blank. A missing property without `?` emits a warning and leaves the cell blank. `null` is blank; `0` and `false` retain their values. Ordinary fields accept strings, finite numbers, booleans and `null`. To display an object, select a property or use an [object choice](./fields.md).
 
 Paths use property names separated by dots. Tags do not run JavaScript: expressions such as `{price * quantity}` or `{items[0].name}` are unsupported. Calculate values in your application or use an Excel formula.
 

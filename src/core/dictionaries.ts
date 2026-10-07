@@ -5,8 +5,8 @@ export type Dictionaries = Readonly<Record<string, readonly string[] | readonly 
 
 export function warnMissingDictionaries(names: Iterable<string>, dictionaries: Dictionaries): void {
   for (const name of new Set(names)) {
-    if (!Object.hasOwn(dictionaries, name)) {
-      console.warn(`sheetbind: dictionary ${name} was not supplied; its dropdown, lookup and list validation are skipped`)
+    if (!Object.hasOwn(dictionaries, name) || !dictionaries[name].length) {
+      console.warn(`sheetbind: dictionary ${name} is missing or empty; its dropdown, lookup and list validation are skipped`)
     }
   }
 }
@@ -16,9 +16,36 @@ export function isDictionaryName(value: unknown): value is string {
     && !['__proto__', 'constructor', 'prototype'].includes(value)
 }
 
-/** Own application dictionaries before asynchronous workbook writing. */
-export function parseDictionaries(value: unknown): Dictionaries {
-  return validateDictionaryShape(jsonSnapshot(value))
+/** Own only declared sources; an unavailable optional list must not stop rendering. */
+export function parseDictionaries(value: unknown, names: Iterable<string>): Dictionaries {
+  const dictionaries: Record<string, Dictionaries[string]> = {}
+  for (const name of new Set(names)) {
+    const property = isDataObject(value) ? Object.getOwnPropertyDescriptor(value, name) : undefined
+    if (!property || 'value' in property && property.value == null) {
+      warnMissingDictionaries([name], {})
+      continue
+    }
+    try {
+      if (!('value' in property)) {
+        throw new SyntaxError('Dictionary sources cannot be accessors')
+      }
+      const source = jsonSnapshot(property.value)
+      const items = validateDictionaryShape({ [name]: source })[name]
+      const unique = items.every(item => typeof item === 'string') ? [...new Set(items)] : items
+      if (unique.length !== items.length) {
+        console.warn(`sheetbind: dictionary ${name} contains duplicate strings; repeated entries are ignored`)
+      }
+      dictionaries[name] = unique
+      warnMissingDictionaries([name], dictionaries)
+    }
+    catch (error) {
+      if (!(error instanceof SyntaxError)) {
+        throw error
+      }
+      console.warn(`sheetbind: dictionary ${name} is unavailable: ${error.message}; its dropdown, lookup and list validation are skipped`)
+    }
+  }
+  return dictionaries
 }
 
 /** The caller has already validated the JSON content; this check does not copy it. */
@@ -34,9 +61,6 @@ export function validateDictionaryShape(value: unknown): Dictionaries {
     if (items.every(item => typeof item === 'string')) {
       if (items.some(item => !item.length)) {
         throw new SyntaxError(`Dictionary ${name} must contain nonempty strings`)
-      }
-      if (new Set(items).size !== items.length) {
-        throw new SyntaxError(`Dictionary ${name} contains duplicate values`)
       }
       continue
     }
