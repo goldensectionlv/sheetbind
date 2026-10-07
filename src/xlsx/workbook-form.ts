@@ -6,7 +6,7 @@ import { TemplateError, readDataPath } from '../core/template'
 import { prepareWorkbookForm, WorkbookFormInputError } from './form-definition'
 import type { PreparedWorkbookField, PreparedWorkbookForm, WorkbookFormIssue, WorkbookFormResult } from './form-definition'
 import { issueWorkbookFormData, readWorkbookRows, referencePath, dataPath, readData, writeData } from './form-records'
-import { workbookChoiceSources, readWorkbookChoiceSources, workbookListSheetName } from './workbook-lists'
+import { serializeWorkbookChoiceSources, readWorkbookChoiceSources, workbookListSheetName } from './workbook-lists'
 import type { DataPath, WorkbookFormRows } from './form-records'
 import { placeWorkbook } from '../grid/workbook-layout'
 import type { WorkbookPlacedSheet } from '../grid/workbook-layout'
@@ -34,7 +34,7 @@ export async function renderWorkbookForm(value: WorkbookTemplate, data: unknown,
   const placed = withTemplateLocations(prepared.template, () => placeWorkbook(prepared.template, issued, { dictionaries, purpose: 'issue' }))
   const carrier = placeFormMarkers(placed, formCarrierDefinition(prepared.template))
   const plan = resolveWorkbookFormulas(carrier.plan, carrier.formulaRows)
-  const choices = workbookChoiceSources(plan, issued, dictionaries)
+  const choices = serializeWorkbookChoiceSources(plan, issued, dictionaries)
   return writeWorkbookPackage({ source, plan, dictionaries, resources, form: { markers: carrier.markers, rows: carrier.formulaRows, choices } })
 }
 

@@ -4,7 +4,7 @@ import type { Dictionaries } from '../core/dictionaries'
 import { createChoiceResolver, createWorkbookChoiceDisplay } from '../core/choices'
 import type { ChoiceRule } from '../core/choices'
 import { hasValidation } from '../core/field-rules'
-import { jsonSnapshot, assertJson, isDataObject } from '../core/json'
+import { assertInputData, assertJson, isDataObject } from '../core/json'
 import type { TemplateValue } from '../core/template'
 import { workbookCells } from '../grid/workbook'
 import type { GridRange } from '../grid/geometry'
@@ -66,7 +66,7 @@ export function workbookListSheetName(authoredNames: readonly string[]): string 
 
 /** One hidden sheet contains named lists, referenced dictionary fields and issued form sources. */
 export function workbookLists(plan: WorkbookPlan, dictionaries: Dictionaries, resources: WorkbookResources,
-  cells: WorkbookCells, sources?: WorkbookChoiceSources) {
+  cells: WorkbookCells, sources?: string) {
   const name = workbookListSheetName(plan.sheets.map(({ sheet }) => sheet.name))
   const rows: string[][] = []
   const names: string[] = []
@@ -161,8 +161,7 @@ export function workbookLists(plan: WorkbookPlan, dictionaries: Dictionaries, re
     }
   }
   if (sources) {
-    const payload = jsonSnapshot(sources)
-    const json = JSON.stringify(payload).replace(/[^\x20-\x7e]/g, character => `\\u${character.charCodeAt(0).toString(16).padStart(4, '0')}`)
+    const json = sources.replace(/[^\x20-\x7e]/g, character => `\\u${character.charCodeAt(0).toString(16).padStart(4, '0')}`)
     const chunks = [SOURCE_VERSION, ...json.match(/.{1,30000}/g)!]
     writeColumn(resources.allocate(SOURCE_NAME), chunks)
   }
@@ -172,7 +171,7 @@ export function workbookLists(plan: WorkbookPlan, dictionaries: Dictionaries, re
   return { name, xml, names, validations }
 }
 
-export function readWorkbookChoiceSources(book: Workbook, sheetName: string): Omit<WorkbookChoiceSources, 'local'> & { readonly local: Readonly<Record<string, unknown>> } {
+export function readWorkbookChoiceSources(book: Workbook, sheetName: string) {
   try {
     const prefix = `'${sheetName}'!`
     const ranges = book.definedNames.model.filter(entry => /^_sb_object_sources(?:_\d+)?$/i.test(entry.name))
@@ -211,14 +210,8 @@ export function readWorkbookChoiceSources(book: Workbook, sheetName: string): Om
     throw new WorkbookFormInputError({ phase: 'xlsx', code: 'choice-source', path: '$workbook', message: 'form dictionary source data is missing or malformed' })
   }
 }
-export interface WorkbookChoiceSources {
-  readonly dictionaries: Dictionaries
-  readonly context: Readonly<Record<string, unknown>>
-  readonly local: Readonly<Record<string, Readonly<Record<string, readonly Readonly<Record<string, unknown>>[]>>>>
-}
-
-/** Keep the issued dictionaries and root sources needed to read any return mode. */
-export function workbookChoiceSources(plan: WorkbookPlan, data: unknown, dictionaries: Dictionaries): WorkbookChoiceSources | undefined {
+/** Capture issued sources as JSON before asynchronous package writing can outlive the input. */
+export function serializeWorkbookChoiceSources(plan: WorkbookPlan, data: unknown, dictionaries: Dictionaries): string | undefined {
   const context: Record<string, unknown> = {}
   const selected: Record<string, Dictionaries[string]> = {}
   const fields = plan.sheets.flatMap(({ definition }) => workbookCells(definition)).filter(cell => cell.rules?.choice || cell.rules?.list)
@@ -251,5 +244,7 @@ export function workbookChoiceSources(plan: WorkbookPlan, data: unknown, diction
       }
     }
   }
-  return { context, dictionaries: selected, local }
+  const sources = { context, dictionaries: selected, local }
+  assertInputData(sources)
+  return JSON.stringify(sources)
 }

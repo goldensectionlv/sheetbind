@@ -17,21 +17,27 @@ async function load(bytes: Uint8Array) {
   return book
 }
 
-it('reads named key, object, root and string-list sources without a second input or dictionary', async () => {
+it('captures named, root, local and string-list sources before asynchronous form writing', async () => {
   const template = await importAuthoredWorkbook(book => book.addWorksheet('Form').addRows([
     ['{key}{@choice:Options; key=id; label=label; return=key}'],
     ['{object}{@choice:Options; key=id; label=label}'],
     ['{rootKey}{@choice:$root.catalog; key=id; label=label; return=key}'],
     ['{status}{@list:Statuses}'],
+    ['{local}{@choice:.catalog; key=id; label=label}'],
   ]))
   const object = { id: '006', label: 'Original', nested: { rate: 0, enabled: false } }
+  const root = { id: 0, label: 'Zero', nested: { retained: true } }
   const dictionaries = { Options: [object], Statuses: ['Open', 'Closed'] }
-  const issued = await renderWorkbookForm(template, { key: '006', object, rootKey: 0, catalog: [{ id: 0, label: 'Zero' }], status: 'Open' }, { dictionaries })
+  const data = { key: '006', object, rootKey: 0, status: 'Open', local: root }
+  const expected = structuredClone(data)
+  const pending = renderWorkbookForm(template, { ...data, catalog: [root] }, { dictionaries })
   object.label = 'Changed later'
+  object.nested.rate = 99
+  root.label = 'Changed while writing'
+  root.nested.retained = false
   dictionaries.Statuses.splice(0)
-  expect(await readWorkbookForm(template, issued)).toEqual({ success: true, data: {
-    key: '006', object: { ...object, label: 'Original' }, rootKey: 0, status: 'Open',
-  } })
+  const issued = await pending
+  expect(await readWorkbookForm(template, issued)).toEqual({ success: true, data: expected })
   const book = await load(issued)
   book.worksheets[0].getCell('A4').value = 'Unknown'
   expect(await readWorkbookForm(template, await saveWorkbook(book))).toMatchObject({ success: false, issues: [{ code: 'list' }] })

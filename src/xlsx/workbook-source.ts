@@ -1,6 +1,5 @@
 import JSZip from 'jszip'
 import type { Dictionaries } from '../core/dictionaries'
-import type { WorkbookChoiceSources } from './workbook-lists'
 import type { WorkbookPlan } from '../grid/workbook-layout'
 import type { FormulaRows } from '../grid/workbook-formula'
 import { prepareWorkbookCells } from './workbook-cells'
@@ -24,7 +23,7 @@ interface WorkbookSource {
   readonly form?: {
     readonly markers: ReadonlyMap<string, FormMarkers>
     readonly rows: ReadonlyMap<string, FormulaRows>
-    readonly choices?: WorkbookChoiceSources
+    readonly choices?: string
   }
 }
 
