@@ -158,14 +158,27 @@ describe('named string dictionaries', () => {
     }
   })
 
-  it.each(['list', 'custom', 'whole'] as const)('rejects native %s conflicts at the saved source boundary', async type => {
+  it.each(['list', 'custom', 'whole'] as const)('preserves native %s validation and skips only the overlapping generated dropdown', async type => {
     const template = await importAuthoredWorkbook(book => {
       const sheet = book.addWorksheet('Conflict')
-      sheet.getCell('A1').value = '{name}{@list:Names}'
-      sheet.getCell('A1').dataValidation = { type, formulae: [type === 'list' ? '"Other"' : '1'] }
+      sheet.addRows([['{name}{@list:Names}', '{second}{@list:Names}'], ['Authored only']])
+      Reflect.get(sheet, 'dataValidations').add('A1:A2', { type, formulae: [type === 'list' ? '"Other"' : '1'] })
     })
-    for (const render of [renderWorkbookReport, renderWorkbookForm]) {
-      await expect(render(template, { name: 'Alex' }, { dictionaries: { Names: ['Alex'] } })).rejects.toThrow('Existing validation at Conflict!A')
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      for (const render of [renderWorkbookReport, renderWorkbookForm]) {
+        warning.mockClear()
+        const bytes = await render(template, { name: 'Alex', second: 'Alex' }, { dictionaries: { Names: ['Alex'] } })
+        const output = (await load(bytes)).worksheets[0]
+        for (const address of ['A1', 'A2']) {
+          expect(output.getCell(address).dataValidation).toMatchObject({ type, formulae: [type === 'list' ? '"Other"' : type === 'custom' ? '1' : 1] })
+        }
+        expect(output.getCell('B1').dataValidation).toMatchObject({ type: 'list', formulae: [expect.stringMatching(/^_sb_list_/)] })
+        expect(warning).toHaveBeenCalledExactlyOnceWith(expect.stringContaining('existing validation at Conflict!A1'))
+      }
+    }
+    finally {
+      warning.mockRestore()
     }
   })
 

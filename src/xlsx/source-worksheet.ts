@@ -220,13 +220,21 @@ function mergeValidations(xml: string, fresh: string, sheetName: string): string
   const nodes: string[] = []
   for (const entry of source) {
     let remaining = entry.ranges
-    for (const cut of claimed) {
-      for (const range of remaining) {
-        const overlap = validationOverlap(range, cut)
-        if (overlap && entry.attributes.type && !['none', 'any'].includes(entry.attributes.type)) {
-          throw new RangeError(`Existing validation at ${sheetName}!${formatRange(overlap)}`)
+    if (entry.attributes.type && !['none', 'any'].includes(entry.attributes.type)) {
+      for (const cut of claimed) {
+        for (const range of remaining) {
+          const overlap = validationOverlap(range, cut)
+          if (overlap) {
+            console.warn(`sheetbind: existing validation at ${sheetName}!${formatRange(overlap)} is retained; the generated dropdown is skipped`)
+          }
         }
       }
+      if (remaining.length) {
+        nodes.push(entry.node)
+      }
+      continue
+    }
+    for (const cut of claimed) {
       remaining = remaining.flatMap(range => withoutValidation(range, cut))
     }
     if (remaining.length) {
@@ -246,7 +254,7 @@ function mergeValidations(xml: string, fresh: string, sheetName: string): string
         }
         remaining = remaining.flatMap(target => withoutValidation(target, range))
       }
-      if (inherited.length) {
+      if (inherited.length && (!original.attributes.type || ['none', 'any'].includes(original.attributes.type))) {
         nodes.push(setXmlAttributes(entry.node, { ...original.attributes, type: entry.attributes.type, operator: undefined,
           allowBlank: entry.attributes.allowBlank, sqref: inherited.map(formatRange).join(' ') }))
       }
