@@ -4,6 +4,25 @@ import JSZip from 'jszip'
 import { importWorkbookXlsx, readWorkbookForm, renderWorkbookForm, renderWorkbookReport, resolveWorkbook, workbookChoiceRange } from '../src/index'
 import { importAuthoredWorkbook, openWorkbook, saveWorkbook } from './xlsx'
 
+it('keeps hidden list sheets valid after an ExcelJS edit', async () => {
+  const authored = new ExcelJS.Workbook()
+  authored.addWorksheet('Input').getCell('A1').value = '{code}{@list:Codes}'
+  const source = await saveWorkbook(authored)
+  const template = await importWorkbookXlsx(source)
+  for (const render of [renderWorkbookReport, renderWorkbookForm]) {
+    const book = await openWorkbook(await render(template, { code: '0007' }, { dictionaries: { Codes: ['0007', '0008'] } }))
+    book.getWorksheet('Input')!.getCell('A1').value = '0008'
+    const edited = await saveWorkbook(book)
+    const zip = await JSZip.loadAsync(edited)
+    // Once sheetFormatPr is serialized, its defaultRowHeight attribute is required by XLSX.
+    expect(await zip.file('xl/worksheets/sheet2.xml')!.async('string')).toMatch(/<sheetFormatPr\b[^>]*\bdefaultRowHeight="\d/)
+    expect((await openWorkbook(edited)).getWorksheet('Input')!.getCell('A1').value).toBe('0008')
+    if (render === renderWorkbookForm) {
+      expect(await readWorkbookForm(await importWorkbookXlsx(source), edited)).toEqual({ success: true, data: { code: '0008' } })
+    }
+  }
+})
+
 it('preserves existing relationships when adding strings and the hidden list sheet', async () => {
   const book = new ExcelJS.Workbook()
   book.addWorksheet('Input').getCell('A1').value = 7

@@ -165,8 +165,9 @@ export function workbookLists(plan: WorkbookPlan, dictionaries: Dictionaries, re
     const chunks = [SOURCE_VERSION, ...json.match(/.{1,30000}/g)!]
     writeColumn(resources.allocate(SOURCE_NAME), chunks)
   }
+  // ExcelJS needs an explicit default height to preserve a valid sheetFormatPr when saving.
   const xml = column
-    ? `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><dimension ref="A1:${formatAddress({ row: Math.max(1, rows.length), column })}"/><sheetData>${rows.map((cells, row) => `<row r="${row + 1}">${cells.join('')}</row>`).join('')}</sheetData></worksheet>`
+    ? `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><dimension ref="A1:${formatAddress({ row: Math.max(1, rows.length), column })}"/><sheetFormatPr defaultRowHeight="15"/><sheetData>${rows.map((cells, row) => `<row r="${row + 1}">${cells.join('')}</row>`).join('')}</sheetData></worksheet>`
     : undefined
   return { name, xml, names, validations }
 }
