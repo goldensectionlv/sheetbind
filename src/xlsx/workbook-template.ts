@@ -178,7 +178,7 @@ function importRegions(compiled: ReturnType<typeof compileWorkbookSheet>, create
 export function resolveWorkbook(template: WorkbookTemplate, data: unknown, options: { readonly dictionaries?: Dictionaries } = {}): WorkbookLayout {
   const { definition } = WorkbookTemplate.content(template)
   assertInputData(data)
-  return withTemplateLocations(definition, () => resolveDefinition(definition, data, options))
+  return withTemplateLocations(definition, () => resolveDefinition(definition, data, { dictionaries: parseDictionaries(options.dictionaries ?? {}) }))
 }
 
 export function workbookDictionarySources(template: WorkbookTemplate): string[] {

@@ -1,16 +1,14 @@
 import { isDataObject } from '../core/json'
 import { isBlank } from '../core/validation'
-import { compileDataPath, isDataPath } from '../core/reference'
+import { compileDataPath } from '../core/reference'
 import { TemplateError } from '../core/template'
 import type { DataReference, FieldValue, Origin, TemplateIssue, TemplateValue } from '../core/template'
-import { parseFieldRules, validateList } from '../core/field-rules'
-import type { FieldRules } from '../core/field-rules'
-import { parseDictionaries } from '../core/dictionaries'
+import { validateList } from '../core/field-rules'
 import type { Dictionaries } from '../core/dictionaries'
 import { allowsChoiceInput, choiceKey, createChoiceResolver, selectedChoice, returnsObject } from '../core/choices'
 import type { ResolvedChoice } from '../core/choices'
 import { prepareFormatting } from '../core/formatters'
-import { workbookCells, workbookRegions, workbookIssue } from './workbook'
+import { workbookCells, workbookIssue } from './workbook'
 import type { WorkbookBody, WorkbookCell, WorkbookDefinition, WorkbookRegion } from './workbook'
 
 export interface WorkbookCellData {
@@ -37,7 +35,8 @@ function scalar(value: unknown): value is TemplateValue {
 
 /** Resolve bindings and region instances directly from the imported workbook definition. */
 export function resolveWorkbookData(template: WorkbookDefinition, data: unknown, options: WorkbookDataOptions = {}): WorkbookData[] {
-  const { fields, dictionaries } = prepareWorkbookData(template, options)
+  const dictionaries = options.dictionaries ?? {}
+  const formatters = prepareWorkbookValues(template, dictionaries)
   if (!isDataObject(data)) {
     workbookIssue('invalid-data', '$template', 'root data must be an object', '$data', 'data')
   }
@@ -55,7 +54,8 @@ export function resolveWorkbookData(template: WorkbookDefinition, data: unknown,
     return { value: read(source.value), path: `${source.path}.${ref.path}` }
   }
   function value(cell: WorkbookCell, context: DataContext): WorkbookCellData {
-    const { rules, format } = fields.get(cell.id)!
+    const rules = cell.rules
+    const format = formatters.get(cell.id)
     const result = 'path' in cell.value
       ? reference(cell.value, context)
       : { value: 'literal' in cell.value ? cell.value.literal : null, path: context.path }
@@ -139,46 +139,28 @@ export function resolveWorkbookData(template: WorkbookDefinition, data: unknown,
 }
 
 /** Check dependencies even when their fields belong to empty repeats. */
-function prepareWorkbookData(template: WorkbookDefinition, options: WorkbookDataOptions) {
-  const fields = new Map<string, { rules?: FieldRules, format?: ReturnType<typeof prepareFormatting> }>()
+function prepareWorkbookValues(template: WorkbookDefinition, dictionaries: Dictionaries) {
+  const formatters = new Map<string, ReturnType<typeof prepareFormatting>>()
   const lists = new Map<string, string[]>()
   const choiceSources = new Set<string>()
-  function reference(ref: DataReference, id: string) {
-    if (!isDataPath(ref.path) || ref.from !== undefined && ref.from !== 'current' && ref.from !== 'root') {
-      workbookIssue('invalid-reference', id, 'expected a safe path and current/root context')
-    }
-  }
   for (const sheet of template.sheets) {
-    for (const region of workbookRegions(sheet)) {
-      reference(region.source, region.id)
-    }
     for (const cell of workbookCells(sheet)) {
-      const rules = cell.rules === undefined ? undefined : parseFieldRules(cell.rules)
-      let format
+      const rules = cell.rules
       try {
-        format = rules?.format ? prepareFormatting(rules.format) : undefined
+        if (rules?.format) {
+          formatters.set(cell.id, prepareFormatting(rules.format))
+        }
       }
       catch (error) {
         workbookIssue('invalid-rules', cell.id, (error as Error).message)
       }
-      fields.set(cell.id, { rules, format })
       if (rules?.list) {
         lists.set(rules.list, [...lists.get(rules.list) ?? [], cell.id])
       }
       if (rules?.choice && 'dictionary' in rules.choice.source) {
         choiceSources.add(rules.choice.source.dictionary)
       }
-      if ('path' in cell.value) {
-        reference(cell.value, cell.id)
-      }
     }
-  }
-  let dictionaries: Dictionaries
-  try {
-    dictionaries = parseDictionaries(options.dictionaries ?? {})
-  }
-  catch (error) {
-    workbookIssue('invalid-dictionaries', '$template', (error as Error).message, '$dictionaries', 'data')
   }
   const missing: TemplateIssue[] = []
   for (const [name, consumers] of lists) {
@@ -199,5 +181,5 @@ function prepareWorkbookData(template: WorkbookDefinition, options: WorkbookData
   if (missing.length) {
     throw new TemplateError(missing)
   }
-  return { fields, dictionaries }
+  return formatters
 }

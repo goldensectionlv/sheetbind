@@ -3,7 +3,6 @@ import type { DataValidation, Workbook, Worksheet } from 'exceljs'
 import { equalJson } from '../core/json'
 import type { GridAddress } from '../grid/geometry'
 import type { FieldRules } from '../core/field-rules'
-import { parseDictionaries } from '../core/dictionaries'
 import type { Dictionaries } from '../core/dictionaries'
 import { formatAddress, formatRange, parseAddress } from './addresses'
 import { assertXlsxText } from './report-text'
@@ -37,8 +36,7 @@ export function workbookListSheetName(authoredNames: readonly string[]): string 
 }
 
 /** Install lists only after placement. Template files contain named dependencies, not these values. */
-function prepareDropdowns(book: Workbook, targets: readonly DropdownTarget[], values: Dictionaries) {
-  const dictionaries = parseDictionaries(values)
+function prepareDropdowns(book: Workbook, targets: readonly DropdownTarget[], dictionaries: Dictionaries) {
   const sources = new Map<string, readonly string[]>()
   const fields: PreparedDropdown[] = []
   const sourceIds = new WeakMap<readonly string[], string>()

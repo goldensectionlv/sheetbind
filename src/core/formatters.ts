@@ -86,7 +86,7 @@ export function registerFormatter(name: string, formatter: Formatter): void {
 }
 
 export function prepareFormatting(formatting: Formatting): (value: TemplateValue) => TemplateValue {
-  const chain = parseFormatting(formatting).map(use => {
+  const chain = (typeof formatting === 'string' ? parseFormatting(formatting) : formatting).map(use => {
     const formatter = registered.get(use.formatter) ?? (Object.hasOwn(builtins, use.formatter) ? builtins[use.formatter] : undefined)
     if (!formatter) {
       throw new SyntaxError(`Unknown formatter: ${use.formatter}`)

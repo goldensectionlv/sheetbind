@@ -33,6 +33,8 @@ Import compiles tags into a `WorkbookDefinition`, validates region ownership and
 
 Execution resolves values and expands regions directly from the workbook definition, retaining their definitions and concrete data paths. There is no separate generic operation tree or identity translation. Field declarations and dictionary dependencies are checked before expanding repeats, including empty ones. Execution does not look up or execute validation handlers. The grid builds row and column plans; values, formulas, sheet settings and native content use those plans to find their output positions. The XLSX writer combines placed values with the retained source content.
 
+Field rules are normalized at import, and dictionaries are validated and copied once at the operation boundary. Internal steps reuse those values without reparsing; dictionary dependencies are checked even for empty repeats.
+
 Form issuance uses the same placement and writing path. It prepares editable fields, permits blank required values and adds the structure needed to recognize records when reading. Its hidden rows participate in coordinate mapping before formulas and other references are written.
 
 ## Reading a form

@@ -68,34 +68,9 @@ export function prepareWorkbookForm(value: WorkbookDefinition, purpose: 'issue' 
       throw new TemplateError([{ phase: 'template', code: 'invalid-rules', nodeId: cell.id, path: cell.id, message: (error as Error).message }])
     }
   }
-  if (purpose === 'issue') {
-    assertFormDictionaries(definitions, dictionaries)
-  }
   assertFormBindings(template)
   const layoutTemplate = { ...template, sheets: template.sheets.map(sheet => mapWorkbookCells(sheet, cell => layoutFormCell(cell, purpose))) }
   return { template, layoutTemplate, fields, dictionaries }
-}
-
-function assertFormDictionaries(cells: readonly WorkbookCell[], dictionaries: Dictionaries): void {
-  const sources = new Map<string, boolean>()
-  for (const { rules } of cells) {
-    if (rules?.list) {
-      sources.set(rules.list, true)
-    }
-    const choice = rules?.choice
-    if (choice && 'dictionary' in choice.source) {
-      const source = choice.source.dictionary
-      sources.set(source, sources.get(source) ?? false)
-    }
-  }
-  for (const source of [...sources.keys()].sort()) {
-    const stringList = sources.get(source)
-    if (!Object.hasOwn(dictionaries, source) || stringList && (!dictionaries[source].length || !dictionaries[source].every(item => typeof item === 'string'))) {
-      throw new TemplateError([{
-        phase: 'data', code: 'missing-dictionary', path: `$dictionaries.${source}`, nodeId: '', message: `dictionary ${source} must supply the declared list values`,
-      }])
-    }
-  }
 }
 
 function assertFormBindings(template: WorkbookDefinition): void {
