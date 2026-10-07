@@ -3,7 +3,6 @@ import type { DataValidation, Workbook, Worksheet } from 'exceljs'
 import { equalJson } from '../core/json'
 import type { GridAddress } from '../grid/geometry'
 import type { FieldRules } from '../core/field-rules'
-import type { Dictionaries } from '../core/dictionaries'
 import { formatAddress, formatRange, parseAddress } from './addresses'
 import { assertXlsxText } from './report-text'
 import { createWorkbookResources } from './workbook-resources'
@@ -12,8 +11,8 @@ import type { WorkbookResources } from './workbook-resources'
 export interface DropdownTarget {
   readonly sheet: Worksheet
   readonly address: string
-  readonly rules: Pick<FieldRules, 'validation' | 'list'>
-  readonly items?: readonly string[]
+  readonly rules: Pick<FieldRules, 'validation'>
+  readonly items: readonly string[]
 }
 interface PreparedDropdown {
   readonly target: DropdownTarget
@@ -35,32 +34,11 @@ export function workbookListSheetName(authoredNames: readonly string[]): string 
   return name
 }
 
-/** Install lists only after placement. Template files contain named dependencies, not these values. */
-function prepareDropdowns(book: Workbook, targets: readonly DropdownTarget[], dictionaries: Dictionaries) {
+/** Check ready-to-write lists and authored validation before changing the workbook. */
+function prepareDropdowns(book: Workbook, targets: readonly DropdownTarget[]) {
   const sources = new Map<string, readonly string[]>()
   const fields: PreparedDropdown[] = []
   const sourceIds = new WeakMap<readonly string[], string>()
-  function addSource(items: readonly string[], target: DropdownTarget): string {
-    const source = sourceIds.get(items) ?? JSON.stringify(items)
-    sourceIds.set(items, source)
-    if (sources.has(source)) {
-      return source
-    }
-    for (const item of items) {
-      assertXlsxText(item, `Dropdown ${target.sheet.name}!${target.address}`)
-    }
-    sources.set(source, items)
-    return source
-  }
-  for (const target of targets) {
-    const values = target.items ?? dictionaries[target.rules.list!]
-    if (!values || !target.items && !values.length || values.some(value => typeof value !== 'string')) {
-      throw new RangeError(`Dictionary ${target.rules.list} must contain string values`)
-    }
-    const items = values as readonly string[]
-    const source = addSource(items, target)
-    fields.push({ target, source })
-  }
   for (const target of targets) {
     if (target.sheet.workbook !== book) {
       throw new RangeError('Dropdown target belongs to another workbook')
@@ -70,16 +48,25 @@ function prepareDropdowns(book: Workbook, targets: readonly DropdownTarget[], di
     if (existing?.type && String(existing.type) !== 'any') {
       throw new RangeError(`Existing validation at ${target.sheet.name}!${target.address}`)
     }
+    const source = sourceIds.get(target.items) ?? JSON.stringify(target.items)
+    sourceIds.set(target.items, source)
+    if (!sources.has(source)) {
+      for (const item of target.items) {
+        assertXlsxText(item, `Dropdown ${target.sheet.name}!${target.address}`)
+      }
+      sources.set(source, target.items)
+    }
+    fields.push({ target, source })
   }
   return { sources, fields }
 }
 
 /** Preflight precedes all writes; an existing validation is never silently replaced. */
-export function writeWorkbookDropdowns(book: Workbook, targets: readonly DropdownTarget[], values: Dictionaries = {}, resources: WorkbookResources = createWorkbookResources({ names: book.definedNames.model.map(entry => entry.name), references: new Set() })): Worksheet | undefined {
+export function writeWorkbookDropdowns(book: Workbook, targets: readonly DropdownTarget[], resources: WorkbookResources = createWorkbookResources({ names: book.definedNames.model.map(entry => entry.name), references: new Set() })): Worksheet | undefined {
   if (!targets.length) {
     return
   }
-  const { sources, fields } = prepareDropdowns(book, targets, values)
+  const { sources, fields } = prepareDropdowns(book, targets)
   const sheetName = workbookListSheetName(book.worksheets.map(sheet => sheet.name))
   const sheet = book.addWorksheet(sheetName, { state: 'veryHidden' })
   const references = new Map<string, string>()

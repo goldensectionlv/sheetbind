@@ -35,6 +35,8 @@ Execution resolves values and expands regions directly from the workbook definit
 
 Field rules are normalized at import, and dictionaries are validated and copied once at the operation boundary. Internal steps reuse those values without reparsing; dictionary dependencies are checked even for empty repeats.
 
+The dropdown writer receives ready-to-write strings regardless of source kind. It checks text limits and native validation conflicts, deduplicates identical lists and writes Excel ranges.
+
 Form issuance uses the same placement and writing path. It prepares editable fields, permits blank required values and adds the structure needed to recognize records when reading. Its hidden rows participate in coordinate mapping before formulas and other references are written.
 
 ## Reading a form

@@ -6,7 +6,7 @@ import type { WorkbookFormula } from '../grid/workbook-formula'
 import type { WorkbookChoice } from '../grid/workbook-choice-display'
 import { formatAddress, formatRange } from './addresses'
 import { writeWorkbookPrint } from './workbook-print'
-import { workbookListSheetName, writeWorkbookDropdowns } from './workbook-dropdowns'
+import { writeWorkbookDropdowns } from './workbook-dropdowns'
 import type { DropdownTarget } from './workbook-dropdowns'
 import { writeWorkbookChoiceFields } from './workbook-choice-fields'
 import type { WorkbookChoiceTarget } from './workbook-choice-fields'
@@ -24,7 +24,7 @@ export interface WorkbookOutputSheet extends Omit<WorkbookSheet, 'cells' | 'regi
   readonly cells: readonly WorkbookOutputCell[]
 }
 
-export function createWorkbookOutput(sheets: readonly WorkbookOutputSheet[], dictionaries?: Dictionaries, resources: WorkbookResources = createWorkbookResources()) {
+export function createWorkbookOutput(sheets: readonly WorkbookOutputSheet[], dictionaries: Dictionaries, resources: WorkbookResources = createWorkbookResources()) {
   const book = new ExcelJS.Workbook()
   book.calcProperties.fullCalcOnLoad = true
   const dropdowns: DropdownTarget[] = []
@@ -75,20 +75,17 @@ export function createWorkbookOutput(sheets: readonly WorkbookOutputSheet[], dic
         }
         const items = choiceTexts.get(choice.items) ?? choice.items.map(item => item.text)
         choiceTexts.set(choice.items, items)
-        if (items.length || definition.rules?.choice?.emptySource !== 'input') {
-          dropdowns.push({ sheet, address, rules: definition.rules ?? {}, items })
-        }
+        dropdowns.push({ sheet, address, rules: definition.rules ?? {}, items })
       }
       if (merged) {
         sheet.mergeCells(formatRange({ start: at, end: { row: at.row + definition.size.rows - 1, column: at.column + definition.size.columns - 1 } }))
       }
       if (definition.rules?.list) {
-        dropdowns.push({ sheet, address, rules: definition.rules })
+        dropdowns.push({ sheet, address, rules: definition.rules, items: dictionaries[definition.rules.list] as readonly string[] })
       }
     }
   }
-  const listSheet = writeWorkbookDropdowns(book, dropdowns, dictionaries, resources)
-    ?? (choices.length ? book.addWorksheet(workbookListSheetName(book.worksheets.map(sheet => sheet.name)), { state: 'veryHidden' }) : undefined)
+  const listSheet = writeWorkbookDropdowns(book, dropdowns, resources)
   if (listSheet) {
     writeWorkbookChoiceFields(book, listSheet, choices, resources)
   }

@@ -83,8 +83,9 @@ describe('named string dictionaries', () => {
     book.definedNames.add("'_SHEETBIND_LISTS'!$A$1", '_SB_LIST_1')
     const existing = { type: 'any', formulae: [], showInputMessage: true, promptTitle: 'Choose code', prompt: 'Provided by the application', errorTitle: 'Custom error' }
     Reflect.set(sheet.getCell('B2'), 'dataValidation', existing)
-    const rules = { validation: [{ rule: 'string' }], list: 'codes' }
-    writeWorkbookDropdowns(book, [{ sheet, address: 'B2', rules }, { sheet: second, address: 'C4', rules }, { sheet, address: 'D2', rules: { ...rules, list: 'other' } }], { codes: ['00042', 'a,b', 'say "yes"'], other: ['Other'] })
+    const rules = { validation: [{ rule: 'string' }] }
+    const items = ['00042', 'a,b', 'say "yes"']
+    writeWorkbookDropdowns(book, [{ sheet, address: 'B2', rules, items }, { sheet: second, address: 'C4', rules, items }, { sheet, address: 'D2', rules, items: ['Other'] }])
     const saved = await load(Buffer.from(await book.xlsx.writeBuffer()))
     const first = saved.worksheets[0]
     expect(saved.worksheets.map(sheet => sheet.name)).toEqual(['_SHEETBIND_LISTS', 'Second', '_sheetbind_lists_2'])
@@ -100,12 +101,12 @@ describe('named string dictionaries', () => {
   it('rejects a conflicting validation or unrepresentable text before changing the workbook', () => {
     const book = new ExcelJS.Workbook()
     const sheet = book.addWorksheet('Report')
-    const rules = { validation: [{ rule: 'string' }], list: 'codes' }
+    const rules = { validation: [{ rule: 'string' }] }
     sheet.getCell('A2').dataValidation = { type: 'whole', operator: 'greaterThan', formulae: [0] }
-    expect(() => writeWorkbookDropdowns(book, [{ sheet, address: 'A1', rules }, { sheet, address: 'A2', rules }], { codes: ['ok'] })).toThrow('Existing validation')
+    expect(() => writeWorkbookDropdowns(book, [{ sheet, address: 'A1', rules, items: ['ok'] }, { sheet, address: 'A2', rules, items: ['ok'] }])).toThrow('Existing validation')
     expect(book.worksheets).toHaveLength(1)
     expect(sheet.getCell('A1').dataValidation).toBeUndefined()
-    expect(() => writeWorkbookDropdowns(book, [{ sheet, address: 'A1', rules }], { codes: ['\u0001'] })).toThrow('XML cannot represent')
+    expect(() => writeWorkbookDropdowns(book, [{ sheet, address: 'A1', rules, items: ['\u0001'] }])).toThrow('XML cannot represent')
     expect(book.worksheets).toHaveLength(1)
     expect(book.definedNames.model).toEqual([])
   })
