@@ -79,7 +79,7 @@ type FormSubmissionResult = ({ readonly success: true } & WorkbookFormSubmission
 function readFormSubmission(workbook: ExcelJS.Workbook, prepared: PreparedWorkbookForm): FormSubmissionResult {
   const definition = formCarrierDefinition(prepared.template)
   const issues: WorkbookFormIssue[] = []
-  for (const name of definition.sheets) {
+  for (const name of definition.sheets.keys()) {
     if (!workbook.getWorksheet(name)) {
       issues.push(structureIssue('sheets', 'an input worksheet is missing or renamed', name))
     }
@@ -87,7 +87,7 @@ function readFormSubmission(workbook: ExcelJS.Workbook, prepared: PreparedWorkbo
   if (issues.length) {
     return { success: false, issues }
   }
-  const markers = new Map([...definition.sheets].map(name => [name, readFormMarkers(workbook.getWorksheet(name)!)]))
+  const markers = new Map([...definition.sheets].map(([name, column]) => [name, readFormMarkers(workbook.getWorksheet(name)!, column)]))
   const shape = withTemplateLocations(prepared.template, () => readFormStructure(prepared.template, definition, markers))
   const expected = placeFormMarkers(shape.plan, definition)
   const fields: WorkbookFormField[][] = []

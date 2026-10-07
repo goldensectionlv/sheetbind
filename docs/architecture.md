@@ -33,7 +33,7 @@ The library has three operations: rendering a report, issuing a form and reading
 
 Within `WorkbookPlan`, each `WorkbookSheetPlan` retains one sheet and its geometry. Stages pass these plans together; matching a sheet with its axes and regions does not depend on indexes in parallel arrays. The original definition and axes retain logical coordinates, while placed cells receive final positions and formulas in sequence. The XLSX adapter also accounts for removed tag rows and inserted form control rows.
 
-The sheet plan also owns its regions in worksheet coordinates. Placement, native range mapping and form markers reuse those region objects. The form carrier definition contains only participating sheet names and stable marker numbers, without rebuilding a separate geometry index.
+The sheet plan also owns its regions in worksheet coordinates. Placement, native range mapping and form markers reuse those region objects. The form carrier definition contains participating sheet names, stable marker numbers and one control column per sheet, beyond all authored content. That column stays fixed for empty repeats too; reading does not search user text for marker prefixes.
 
 Cell traversal returns original definitions for rules, dictionary dependencies and diagnostics. Only placement derives worksheet positions and row settings from the shared regions. The plan retains a cell-to-position map for placement and formula references, rather than copies of complete cells in another coordinate system.
 

@@ -4,7 +4,7 @@ import JSZip from 'jszip'
 import * as fieldsProject from '../examples/fields/template'
 import { TemplateError, readWorkbookForm, renderWorkbookForm, renderWorkbookReport } from '../src/index'
 import { FORM_MARKER_COLUMN, FORM_MARKER_PREFIX } from '../src/xlsx/workbook-form-markers'
-import { openWorkbook as open, importAuthoredWorkbook } from './xlsx'
+import { openWorkbook as open, importAuthoredWorkbook, saveWorkbook } from './xlsx'
 
 function authorForm(book: ExcelJS.Workbook, name = 'Form', contact = 'contact.name') {
   const sheet = book.addWorksheet(name)
@@ -46,15 +46,35 @@ const codes = (result: Awaited<ReturnType<typeof readWorkbookForm>>) => {
 describe('shared workbook forms: definition + marked XLSX', () => {
   it('keeps form markers clear of authored columns beyond 256', async () => {
     const wide = await importAuthoredWorkbook(book => {
-      book.addWorksheet('Wide').getCell(1, 300).value = '{value}'
+      const sheet = book.addWorksheet('Wide')
+      sheet.getCell(1, 300).value = '{value}'
+      sheet.getCell('A2').value = '{#items}'
+      sheet.getCell('A3').value = '{.name}'
+      sheet.getCell(4, 400).value = '{.detail}'
+      sheet.getCell(5, 420).value = '{/items}'
+      sheet.getColumn(410).width = 20
+      sheet.getCell(4, 420).note = 'Keep this note'
     })
-    const bytes = await renderWorkbookForm(wide, { value: 'ready' })
-    const book = await open(bytes)
-    const sheet = book.getWorksheet('Wide')!
-    expect(sheet.getCell(1, 300).value).toBe('ready')
-    expect(sheet.getRow(1).hidden).toBeFalsy()
-    expect(sheet.getCell(2, 301).value).toBe(FORM_MARKER_PREFIX + '["/sheet"]')
-    expect(await readWorkbookForm(wide, bytes)).toEqual({ success: true, data: { value: 'ready' } })
+    for (const value of ['ready', FORM_MARKER_PREFIX + 'any text', FORM_MARKER_PREFIX + '["/sheet"]']) {
+      for (const count of [0, 2]) {
+        const data = { value, items: Array.from({ length: count }, () => ({ name: 'Item', detail: value })) }
+        const bytes = await renderWorkbookForm(wide, data)
+        const sheet = (await open(bytes)).getWorksheet('Wide')!
+        expect(sheet.getCell(1, 300).value).toBe(value)
+        expect(sheet.getRow(1).hidden).toBeFalsy()
+        expect(sheet.getColumn(410).width).toBe(20)
+        expect(sheet.getColumn(421).values).toContain(FORM_MARKER_PREFIX + '["/sheet"]')
+        expect(await readWorkbookForm(wide, bytes)).toEqual({ success: true, data })
+        if (count) {
+          // ExcelJS does not clear every deleted row when the remaining tail is shorter.
+          for (const row of sheet.getRows(3, 8)!) {
+            row.values = []
+          }
+          sheet.spliceRows(3, 8)
+          expect(await readWorkbookForm(wide, await saveWorkbook(sheet.workbook))).toEqual({ success: true, data: { value, items: [] } })
+        }
+      }
+    }
   })
 
   it('reads nested 0/1/many repeats from tagged XLSX', async () => {

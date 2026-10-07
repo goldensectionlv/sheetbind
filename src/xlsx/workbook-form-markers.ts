@@ -28,20 +28,38 @@ interface FormMarker { readonly row: number, readonly token: FormMarkerToken }
 export interface FormMarkers { readonly column: number, readonly rows: readonly FormMarker[] }
 interface FormCarrierDefinition {
   readonly numbers: ReadonlyMap<string, number>
-  readonly sheets: ReadonlySet<string>
+  /** Row-only forms reserve one column beyond all authored content, including empty repeats. */
+  readonly sheets: ReadonlyMap<string, number>
 }
 
 export function formCarrierDefinition(template: WorkbookDefinition): FormCarrierDefinition {
-  const sheets = new Set(template.sheets.filter(sheet => sheet.regions?.length || sheet.cells.some(cell => 'path' in cell.value)).map(sheet => sheet.name))
+  const sheets = new Map<string, number>()
   const numbers = new Map<string, number>()
   let serial = 0
-  const visit = (source: WorkbookBody): void => {
+  const visit = (source: WorkbookBody, offset = 0): number => {
+    let end = 0
+    for (const cell of source.cells) {
+      end = Math.max(end, offset + cell.at.column + cell.size.columns - 1)
+    }
+    for (const range of source.occupied ?? []) {
+      end = Math.max(end, offset + range.end.column)
+    }
     for (const region of [...source.regions ?? []].sort((a, b) => a.row - b.row)) {
       numbers.set(region.id, ++serial)
-      visit(region)
+      end = Math.max(end, visit(region, offset + (region.column ?? 1) - 1))
     }
+    return end
   }
-  template.sheets.filter(sheet => sheets.has(sheet.name)).sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0).forEach(visit)
+  for (const sheet of template.sheets.filter(sheet => sheet.regions?.length || sheet.cells.some(cell => 'path' in cell.value)).sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0)) {
+    let column = Math.max(FORM_MARKER_COLUMN, visit(sheet) + 1)
+    for (const setting of sheet.columns ?? []) {
+      column = Math.max(column, setting.index + 1)
+    }
+    if (column > WORKBOOK_LIMITS.columns) {
+      throw new RangeError('No XLSX column remains for form control markers')
+    }
+    sheets.set(sheet.name, column)
+  }
   return { numbers, sheets }
 }
 
@@ -51,7 +69,8 @@ export function placeFormMarkers(plan: WorkbookPlan, definition: FormCarrierDefi
   const formulaRows = new Map<string, FormulaRows>()
   const placed: WorkbookPlan = { sheets: plan.sheets.map(source => {
     const { sheet, data, axes, extent, regions } = source
-    if (!definition.sheets.has(sheet.name)) {
+    const markerColumn = definition.sheets.get(sheet.name)
+    if (markerColumn === undefined) {
       return source
     }
     const events: FormMarker[] = []
@@ -77,7 +96,6 @@ export function placeFormMarkers(plan: WorkbookPlan, definition: FormCarrierDefi
     }
     visit(data)
     let end = Math.max(2, extent.rows + 1)
-    let markerColumn = Math.max(FORM_MARKER_COLUMN, extent.columns + 1)
     for (const row of sheet.rows ?? []) {
       end = Math.max(end, row.index + 1)
     }
@@ -90,12 +108,6 @@ export function placeFormMarkers(plan: WorkbookPlan, definition: FormCarrierDefi
     const placed = events.map((event, offset) => ({ ...event, row: event.row + offset }))
     if (placed.at(-1)!.row > WORKBOOK_LIMITS.rows) {
       throw new RangeError('Form control rows exceed the XLSX row limit')
-    }
-    for (const column of sheet.columns ?? []) {
-      markerColumn = Math.max(markerColumn, column.index + 1)
-    }
-    if (markerColumn > WORKBOOK_LIMITS.columns) {
-      throw new RangeError('No XLSX column remains for form control markers')
     }
     markers.set(sheet.name, { column: markerColumn, rows: placed })
     const placedRows = new Map<number, number>()
@@ -131,19 +143,6 @@ export function placeFormMarkers(plan: WorkbookPlan, definition: FormCarrierDefi
   return { plan: placed, markers, formulaRows }
 }
 
-function formMarkerColumn(sheet: Worksheet): number {
-  const columns = new Set<number>()
-  sheet.eachRow(row => row.eachCell(cell => {
-    if (Number(cell.col) >= FORM_MARKER_COLUMN && typeof cell.value === 'string' && cell.value.startsWith(FORM_MARKER_PREFIX)) {
-      columns.add(Number(cell.col))
-    }
-  }))
-  if (columns.size > 1) {
-    throw new WorkbookFormInputError({ phase: 'structure', code: 'invalid-marker', path: '$workbook', sheetName: sheet.name, message: 'form control markers must occupy one column' })
-  }
-  return columns.values().next().value ?? FORM_MARKER_COLUMN
-}
-
 function isFormMarkerToken(value: unknown): value is FormMarkerToken {
   if (!Array.isArray(value)) {
     return false
@@ -161,8 +160,7 @@ function isFormMarkerToken(value: unknown): value is FormMarkerToken {
   }
 }
 
-export function readFormMarkers(sheet: Worksheet): FormMarkers {
-  const column = formMarkerColumn(sheet)
+export function readFormMarkers(sheet: Worksheet, column: number): FormMarkers {
   const result: FormMarker[] = []
   sheet.getColumn(column).eachCell(cell => {
     if (cell.value === null) {
