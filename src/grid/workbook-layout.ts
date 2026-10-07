@@ -1,5 +1,5 @@
 import { resolveWorkbookData } from './workbook-data'
-import type { WorkbookData, WorkbookCellData, WorkbookDataOptions } from './workbook-data'
+import type { WorkbookData, WorkbookDataOptions } from './workbook-data'
 import type { Origin, TemplateValue } from '../core/template'
 import type { Dictionaries } from '../core/dictionaries'
 import type { FieldRules } from '../core/field-rules'
@@ -44,7 +44,7 @@ export interface WorkbookLayout {
 
 /** Internal placement retains the source references needed by the XLSX writer. */
 export interface WorkbookPlacedCell extends WorkbookCellInstance { readonly xlsx?: WorkbookCell['xlsx'] }
-export interface WorkbookPlacedSheet extends Omit<WorkbookSheet, 'cells' | 'regions'> { readonly cells: readonly WorkbookPlacedCell[] }
+export interface WorkbookPlacedSheet extends Pick<WorkbookSheet, 'id' | 'name' | 'state' | 'rows' | 'columns' | 'print'> { readonly cells: readonly WorkbookPlacedCell[] }
 
 /** A sheet and its geometry travel together through every placement stage. */
 export interface WorkbookSheetPlan {
@@ -82,47 +82,36 @@ export function placeWorkbook(config: WorkbookDefinition, data: unknown, options
 }
 
 export function placeWorkbookSheet(sheet: WorkbookSheet, group: WorkbookData): WorkbookSheetPlan {
-  const settings = { id: sheet.id, name: sheet.name, state: sheet.state, xlsx: sheet.xlsx, occupied: sheet.occupied }
   const cells: WorkbookPlacedCell[] = []
   const axes = planWorkbookAxes(group)
   const extent = { rows: 0, columns: 0 }
   const authored = new Map(workbookCells(sheet).map(cell => [cell.id, cell]))
   const views = new Map(workbookRegions(sheet).map(region => [region.id, region]))
   const displayChoice = createWorkbookChoiceDisplay()
-  const contexts = new WeakMap<Origin['iterations'], { indexes: ReadonlyMap<string, number>, suffix: string }>()
   const instances = new Map<string, WorkbookIndexes[]>()
-  function context(value: Pick<Origin, 'iterations'>) {
-    let found = contexts.get(value.iterations)
-    if (!found) {
-      found = { indexes: new Map(value.iterations.map(item => [item.nodeId, item.index])), suffix: JSON.stringify(value.iterations) + ']' }
-      contexts.set(value.iterations, found)
-    }
-    return found
-  }
-  const ids = new Map(workbookCells(sheet).map(cell => [cell.id, '[' + JSON.stringify(cell.id) + ',']))
-  function placeCells(nodes: readonly WorkbookCellData[], contextPath: string): WorkbookPlacedCell[] {
-    return nodes.map(value => {
+  function placeCells(body: WorkbookData, indexes: WorkbookIndexes): WorkbookPlacedCell[] {
+    const suffix = JSON.stringify(body.iterations) + ']'
+    return body.cells.map(value => {
       const cell = value.definition
-      const source = value.origin
+      const origin = { nodeId: cell.id, dataPath: value.dataPath, iterations: body.iterations }
       const position = authored.get(cell.id)!.at
-      const { indexes, suffix } = context(source)
       const at = placeWorkbookPoint(axes, position, indexes)
       if (!at) {
-        workbookIssue('growth-crosses-cell', cell.id, 'A fixed cell occupies a removed band; put it inside the repeat or outside its band', source.dataPath, 'data')
+        workbookIssue('growth-crosses-cell', cell.id, 'A fixed cell occupies a removed band; put it inside the repeat or outside its band', value.dataPath, 'data')
       }
       const end = { row: cell.size.rows === 1 ? at.row : mapAxis(axes.rows, position.row + cell.size.rows - 1, FormulaEdge.End, indexes)!,
         column: cell.size.columns === 1 ? at.column : mapAxis(axes.columns, position.column + cell.size.columns - 1, FormulaEdge.End, indexes)! }
       if (at.row === undefined || at.column === undefined || end.row === undefined || end.column === undefined) {
-        workbookIssue('growth-crosses-cell', cell.id, 'A fixed cell occupies a removed band; put it inside the repeat or outside its band', source.dataPath, 'data')
+        workbookIssue('growth-crosses-cell', cell.id, 'A fixed cell occupies a removed band; put it inside the repeat or outside its band', value.dataPath, 'data')
       }
       const rows = end.row - at.row + 1
       const columns = end.column - at.column + 1
       const size = rows === cell.size.rows && columns === cell.size.columns ? cell.size : { rows, columns }
       if (end.row > WORKBOOK_LIMITS.rows) {
-        workbookIssue('row-limit', cell.id, 'Rendered content exceeds the XLSX row limit', source.dataPath, 'data')
+        workbookIssue('row-limit', cell.id, 'Rendered content exceeds the XLSX row limit', value.dataPath, 'data')
       }
       if (end.column > WORKBOOK_LIMITS.columns) {
-        workbookIssue('column-limit', cell.id, 'Rendered content exceeds the XLSX column limit', source.dataPath, 'data')
+        workbookIssue('column-limit', cell.id, 'Rendered content exceeds the XLSX column limit', value.dataPath, 'data')
       }
       extent.rows = Math.max(extent.rows, end.row)
       extent.columns = Math.max(extent.columns, end.column)
@@ -131,18 +120,19 @@ export function placeWorkbookSheet(sheet: WorkbookSheet, group: WorkbookData): W
         choice = value.choice ? displayChoice(value.choice) : undefined
       }
       catch (error) {
-        workbookIssue('choice-display', cell.id, (error as Error).message, source.dataPath, 'data')
+        workbookIssue('choice-display', cell.id, (error as Error).message, value.dataPath, 'data')
       }
       const literal = value.value !== null && typeof value.value === 'object' ? choice!.text : value.value
-      return { id: ids.get(cell.id)! + suffix, definitionId: cell.id, at, size,
-        value: 'path' in cell.value ? { literal } : cell.value, rules: cell.rules, xlsx: cell.xlsx, origin: source, contextPath, choice }
+      return { id: '[' + JSON.stringify(cell.id) + ',' + suffix, definitionId: cell.id, at, size,
+        value: 'path' in cell.value ? { literal } : cell.value, rules: cell.rules, xlsx: cell.xlsx, origin, contextPath: body.path, choice }
     })
   }
   function layout(body: WorkbookData, id?: string): void {
     const definition = body.definition
+    const indexes = new Map(body.iterations.map(item => [item.nodeId, item.index]))
     if (id) {
       const copies = instances.get(id) ?? []
-      copies.push(context(body).indexes)
+      copies.push(indexes)
       instances.set(id, copies)
     }
     const owner = id ? views.get(id) : undefined
@@ -150,13 +140,13 @@ export function placeWorkbookSheet(sheet: WorkbookSheet, group: WorkbookData): W
       const end = placeWorkbookPoint(axes, {
         row: range.end.row + (owner?.row ?? 1) - 1,
         column: range.end.column + (owner?.column ?? 1) - 1,
-      }, context(body).indexes)!
+      }, indexes)!
       extent.rows = Math.max(extent.rows, end.row)
       extent.columns = Math.max(extent.columns, end.column)
     }
     for (const node of [...body.regions].sort((a, b) => a.definition.row - b.definition.row)) {
       const region = node.definition
-      const placed = placeWorkbookRegion(axes, views.get(region.id)!, context(body).indexes)
+      const placed = placeWorkbookRegion(axes, views.get(region.id)!, indexes)
       if (placed.row + placed.height - 1 > WORKBOOK_LIMITS.rows) {
         workbookIssue('row-limit', region.id, 'Repeated rows exceed the XLSX row limit', node.path, 'data')
       }
@@ -165,7 +155,7 @@ export function placeWorkbookSheet(sheet: WorkbookSheet, group: WorkbookData): W
       }
       node.instances.forEach(instance => layout(instance, region.id))
     }
-    cells.push(...placeCells(body.cells, body.path))
+    cells.push(...placeCells(body, indexes))
   }
   layout(group)
   const print = mapWorkbookPrint(sheet.print, {
@@ -189,7 +179,7 @@ export function placeWorkbookSheet(sheet: WorkbookSheet, group: WorkbookData): W
       }
     }
   }
-  const placed = { ...structuredClone(settings), ...(print ? { print } : {}), rows, columns, cells: cells.sort((a, b) => a.at.row - b.at.row || a.at.column - b.at.column) }
+  const placed = { id: sheet.id, name: sheet.name, state: sheet.state, ...(print ? { print } : {}), rows, columns, cells: cells.sort((a, b) => a.at.row - b.at.row || a.at.column - b.at.column) }
   return { definition: sheet, data: group, sheet: placed, axes, coordinates: workbookCoordinates(sheet, axes, instances), authored, extent }
 }
 

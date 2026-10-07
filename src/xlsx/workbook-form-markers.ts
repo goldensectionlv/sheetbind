@@ -221,7 +221,7 @@ export function readFormStructure(template: WorkbookDefinition, definition: Form
         if ('path' in cell.value) {
           shape.field(path)
         }
-        return { definition: cell, value: null, origin: { nodeId: cell.id, dataPath: dataPath(path), iterations } }
+        return { definition: cell, value: null, dataPath: dataPath(path) }
       })
       const regions = [...body.regions ?? []].sort((a, b) => a.row - b.row).map(region => {
         const id = definition.numbers.get(region.id)!

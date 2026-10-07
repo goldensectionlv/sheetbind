@@ -33,6 +33,8 @@ Within `WorkbookPlan`, each `WorkbookSheetPlan` retains one sheet and its geomet
 
 Placement retains the existing `WorkbookData` instances instead of constructing another region tree. Form markers traverse those instances and obtain their boundaries through the same axis mapping used for placement. Reports do not build a separate form-region layout.
 
+The expanded body owns the iteration context shared by its cells. Placement creates public cell origins from that context directly. Source worksheet metadata remains in the definition; the placed sheet contains only output settings and cells.
+
 The XLSX writer consumes these placed cells directly. Form input formatting is applied while writing source cell styles; it does not require another copy of the workbook or a second output-cell model. Explicit number formats from the template remain authoritative.
 
 When simplifying, first examine representations and the transitions between them. Shared geometry serves all three operations, retained XLSX parts preserve native Excel features, and the returned form structure supports reading changed records. Removing one of these contracts requires checking every consumer; moving functions between directories does not itself reduce the number of contracts.

@@ -13,7 +13,7 @@ import type { WorkbookBody, WorkbookCell, WorkbookDefinition, WorkbookRegion } f
 
 export interface WorkbookCellData {
   readonly definition: WorkbookCell
-  readonly origin: Origin
+  readonly dataPath: string
   readonly value: FieldValue
   readonly choice?: ResolvedChoice
 }
@@ -60,7 +60,6 @@ export function resolveWorkbookData(template: WorkbookDefinition, data: unknown,
     const result = 'path' in cell.value
       ? reference(cell.value, context)
       : { value: 'literal' in cell.value ? cell.value.literal : null, path: context.path }
-    const origin = { nodeId: cell.id, dataPath: result.path, iterations: context.iterations }
     if (result.value === undefined && 'path' in cell.value && (cell.value.optional || purpose === 'issue')) {
       result.value = null
     }
@@ -104,7 +103,7 @@ export function resolveWorkbookData(template: WorkbookDefinition, data: unknown,
         workbookIssue('format', cell.id, (error as Error).message, result.path, 'data')
       }
     }
-    return { definition: cell, origin, value: resolved, ...(choice ? { choice } : {}) }
+    return { definition: cell, dataPath: result.path, value: resolved, ...(choice ? { choice } : {}) }
   }
   function expand(definition: WorkbookBody, context: DataContext): WorkbookData {
     const cells = definition.cells.map(cell => value(cell, context))
