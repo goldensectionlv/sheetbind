@@ -63,7 +63,7 @@ Execution resolves values and expands regions directly from the workbook definit
 
 Field tags are parsed directly into typed rules in `core/field-rules.ts`; there is no intermediate JSON rules object to validate and copy again. Dictionaries are validated and copied once at the operation boundary. Internal steps reuse those values without reparsing; dictionary dependencies are checked even for empty repeats.
 
-The dropdown writer receives ready-to-write strings regardless of source kind, deduplicates identical lists and writes Excel ranges. The shared cell serializer checks text limits. Native validation conflicts and inherited prompts are handled when writing the source worksheet, at final coordinates.
+The dropdown writer receives ready-to-write strings regardless of source kind, deduplicates identical lists and writes Excel ranges. The shared cell writer in `xlsx/workbook-cells.ts` owns text limits, the string table and derived styles; it saves both package parts together after all worksheets have been written. Native validation conflicts and inherited prompts are handled when writing the source worksheet, at final coordinates.
 
 Dictionary ranges for formulas come directly from declared choices and the supplied dictionaries. Formula references determine their columns; repeated cell instances and the properties present in individual records do not determine whether a range exists. Dropdowns and formula ranges share the hidden sheet but are written independently.
 

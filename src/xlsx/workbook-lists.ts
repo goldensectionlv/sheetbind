@@ -15,7 +15,6 @@ import { readData, writeData } from './form-records'
 import { cellXml } from './workbook-cells'
 import type { WorkbookCells } from './workbook-cells'
 import type { WorkbookResources } from './workbook-resources'
-import type { sourceStyles } from './source-styles'
 import { protect } from './report-text'
 import { encodeXml, setXmlAttributes } from './xml'
 
@@ -67,7 +66,7 @@ export function workbookListSheetName(authoredNames: readonly string[]): string 
 
 /** One hidden sheet contains named lists, referenced dictionary fields and issued form sources. */
 export function workbookLists(plan: WorkbookPlan, dictionaries: Dictionaries, resources: WorkbookResources,
-  cells: WorkbookCells, styles: Awaited<ReturnType<typeof sourceStyles>>, sources?: WorkbookChoiceSources) {
+  cells: WorkbookCells, sources?: WorkbookChoiceSources) {
   const name = workbookListSheetName(plan.sheets.map(({ sheet }) => sheet.name))
   const rows: string[][] = []
   const names: string[] = []
@@ -81,7 +80,7 @@ export function workbookLists(plan: WorkbookPlan, dictionaries: Dictionaries, re
     function write(row: number, value: TemplateValue) {
       const content = cells.content(value)
       const target = rows[row - 1] ??= []
-      target.push(cellXml(formatAddress({ row, column }), { ...content, style: typeof value === 'string' ? styles.textStyle() : styles.style(0) }))
+      target.push(cellXml(formatAddress({ row, column }), { ...content, style: typeof value === 'string' ? cells.textStyle() : cells.style(0) }))
     }
     if (header !== undefined) {
       write(1, header)

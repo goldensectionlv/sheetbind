@@ -7,7 +7,6 @@ import type { WorkbookCells } from './workbook-cells'
 import type { SourceCoordinates } from './source-coordinates'
 import { sourceFormula } from './source-coordinates'
 import { relocateFilterRanges } from './source-metadata'
-import type { sourceStyles } from './source-styles'
 import { formatAddress, formatRange, parseAddress, parseRange } from '../grid/geometry'
 import { FORM_MARKER_PREFIX } from './workbook-form-markers'
 import type { FormMarkers } from './workbook-form-markers'
@@ -18,13 +17,12 @@ export function sourceWorksheet(xml: string, options: {
   readonly output: WorkbookPlacedSheet
   readonly map: SourceCoordinates
   readonly maps: ReadonlyMap<string, SourceCoordinates>
-  readonly styles: Awaited<ReturnType<typeof sourceStyles>>
   readonly writer: WorkbookCells
   readonly validations: string
   readonly markers?: FormMarkers
   readonly form?: boolean
 }) {
-  const { output, map, maps, styles, writer } = options
+  const { output, map, maps, writer } = options
   const sourceRows = new Map<number, string>()
   const extra = new Map<number, Map<number, string>>()
   const originals = new Map<string, ReturnType<typeof sourceCell>>()
@@ -40,7 +38,7 @@ export function sourceWorksheet(xml: string, options: {
       sourceRows.set(target, setXmlAttributes(row.split('>')[0].replace(/\/$/, '') + '/>', { r: target, spans: undefined }))
     }
     for (const cell of xmlElements(row, 'c')) {
-      const original = sourceCell(cell, map, maps, styles, options.form)
+      const original = sourceCell(cell, map, maps, writer, options.form)
       const address = original.attributes.r
       originals.set(address, original)
       if (owned.has(address)) {
@@ -65,7 +63,7 @@ export function sourceWorksheet(xml: string, options: {
   const rows = worksheetCells(output, (definition, address) => {
     const content = writer.content('formula' in definition.value ? definition.value : definition.choice ? definition.choice.text : definition.value.literal)
     const original = definition.xlsx && definition.xlsx.part === map.part ? originals.get(definition.xlsx.address) : undefined
-    return original ? original.render(address, content.type, definition, content.body) : cellXml(address, { ...content, style: styles.style(0) })
+    return original ? original.render(address, content.type, definition, content.body) : cellXml(address, { ...content, style: writer.style(0) })
   }, { rows: sourceRows, cells: extra })
   const merges = output.cells.filter(cell => cell.size.rows > 1 || cell.size.columns > 1).map(cell =>
     `<mergeCell ref="${formatRange({ start: cell.at, end: { row: cell.at.row + cell.size.rows - 1, column: cell.at.column + cell.size.columns - 1 } })}"/>`)
@@ -78,7 +76,7 @@ export function sourceWorksheet(xml: string, options: {
   return orderWorksheet(xml).replace('<sheetData/>', () => rows.data)
 }
 
-function sourceCell(xml: string, map: SourceCoordinates, maps: ReadonlyMap<string, SourceCoordinates>, styles: Awaited<ReturnType<typeof sourceStyles>>, form = false) {
+function sourceCell(xml: string, map: SourceCoordinates, maps: ReadonlyMap<string, SourceCoordinates>, writer: WorkbookCells, form = false) {
   xml = mapCellFormula(xml, map, maps)
   const head = xml.slice(0, xml.indexOf('>') + 1)
   const attributes = xmlAttributes(head)
@@ -95,7 +93,7 @@ function sourceCell(xml: string, map: SourceCoordinates, maps: ReadonlyMap<strin
     const key = `${text}:${type ?? ''}`
     let prefix = variants.get(key)
     if (!prefix) {
-      const merged = styles.style(Number(attributes.s ?? 0), text)
+      const merged = writer.style(Number(attributes.s ?? 0), text)
       prefix = setXmlAttributes(head, { r: undefined, s: merged, t: type }).replace(/\/?>$/, '')
       variants.set(key, prefix)
     }

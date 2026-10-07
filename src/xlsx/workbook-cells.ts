@@ -5,12 +5,38 @@ import type { WorkbookFormula } from '../grid/workbook-formula'
 import { formatRange } from '../grid/geometry'
 import type { WorkbookPlacedCell, WorkbookPlacedSheet } from '../grid/workbook-layout'
 import { assertXlsxText, protect } from './report-text'
-import { appendXmlChildren, encodeXml, setXmlAttributes, xmlElements } from './xml'
+import { appendXmlChildren, encodeXml, setXmlAttributes, setXmlElement, xmlAttributes, xmlElements } from './xml'
 
 export type WorkbookCells = Awaited<ReturnType<typeof prepareWorkbookCells>>
 
-/** Serialize resolved values into the final workbook string table. */
+/** One writer owns shared strings and derived styles for all output cells. */
 export async function prepareWorkbookCells(zip: JSZip) {
+  const xml = await zip.file('xl/styles.xml')!.async('string')
+  const originals = xmlElements(xmlElements(xml, 'cellXfs')[0] ?? '', 'xf')
+  const all = [...originals]
+  const textStyles = new Map<number, number>()
+  let normal: number | undefined
+  function textStyle(original = 0): number {
+    const cached = textStyles.get(original)
+    if (cached !== undefined) {
+      return cached
+    }
+    const id = all.length
+    all.push(setXmlAttributes(originals[original] ?? originals[0], { numFmtId: 49, applyNumberFormat: 1 }))
+    textStyles.set(original, id)
+    return id
+  }
+  function style(original: number, text = false): number {
+    if (text && Number(xmlAttributes(originals[original] ?? originals[0]).numFmtId ?? 0) === 0) {
+      return textStyle(original)
+    }
+    // A nonzero ID prevents a moved General cell from inheriting its new row/column format.
+    if (!original && normal === undefined) {
+      normal = all.length
+      all.push(originals[0])
+    }
+    return original || normal!
+  }
   const prior = await zip.file('xl/sharedStrings.xml')?.async('string')
   const strings = xmlElements(prior ?? '', 'si')
   const values = new Map<string, number>()
@@ -38,11 +64,17 @@ export async function prepareWorkbookCells(zip: JSZip) {
     }
     return { style, body: value === null ? '' : `<v>${value}</v>` }
   }
-  return { content, strings: strings as readonly string[] }
+  return { content, style, textStyle,
+    async save() {
+      if (all.length !== originals.length) {
+        zip.file('xl/styles.xml', setXmlElement(xml, 'cellXfs', `<cellXfs count="${all.length}">${all.join('')}</cellXfs>`))
+      }
+      await writeWorkbookStrings(zip, strings)
+    } }
 }
 
 /** Cells share one string table for the final package; no intermediate ZIP round-trip. */
-export async function writeWorkbookStrings(zip: JSZip, strings: readonly string[]): Promise<void> {
+async function writeWorkbookStrings(zip: JSZip, strings: readonly string[]): Promise<void> {
   if (!strings.length) {
     return
   }

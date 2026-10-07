@@ -3,10 +3,9 @@ import type { Dictionaries } from '../core/dictionaries'
 import type { WorkbookChoiceSources } from './workbook-lists'
 import type { WorkbookPlan } from '../grid/workbook-layout'
 import type { FormulaRows } from '../grid/workbook-formula'
-import { prepareWorkbookCells, writeWorkbookStrings } from './workbook-cells'
+import { prepareWorkbookCells } from './workbook-cells'
 import { sourceCoordinates, sourceFormula } from './source-coordinates'
 import type { SourceCoordinates } from './source-coordinates'
-import { sourceStyles } from './source-styles'
 import { sourceWorksheet } from './source-worksheet'
 import { relocateSourceMetadata } from './source-metadata'
 import { appendXmlChildren, decodeXml, encodeXml, setXmlElement, xmlAttributes, xmlElements } from './xml'
@@ -40,12 +39,11 @@ export async function writeWorkbookPackage(source: WorkbookSource): Promise<Buff
     coordinates: sourceCoordinates(plan, source.form?.rows.get(plan.sheet.name.toLowerCase())),
   }))
   const maps = new Map(bindings.map(binding => [binding.original.name.toLowerCase(), binding.coordinates]))
-  const styles = await sourceStyles(zip)
   const cells = await prepareWorkbookCells(zip)
-  const lists = workbookLists(source.plan, source.dictionaries, createWorkbookResources(source.resources), cells, styles, source.form?.choices)
+  const lists = workbookLists(source.plan, source.dictionaries, createWorkbookResources(source.resources), cells, source.form?.choices)
   for (const { original, output, coordinates } of bindings) {
     const xml = sourceWorksheet(await zip.file(original.part)!.async('string'), {
-      output, map: coordinates, maps, styles, writer: cells, form: !!source.form,
+      output, map: coordinates, maps, writer: cells, form: !!source.form,
       markers: source.form?.markers.get(output.name), validations: lists.validations.get(output.name)!,
     })
     zip.file(original.part, new TextEncoder().encode(xml))
@@ -80,8 +78,7 @@ export async function writeWorkbookPackage(source: WorkbookSource): Promise<Buff
   zip.file('xl/workbook.xml', workbook)
   zip.file('xl/_rels/workbook.xml.rels', relations)
   zip.file('[Content_Types].xml', types)
-  styles.save()
-  await writeWorkbookStrings(zip, cells.strings)
+  await cells.save()
   await relocateSourceMetadata(zip, maps)
   return zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' })
 }
