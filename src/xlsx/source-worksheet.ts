@@ -6,6 +6,7 @@ import { cellXml, worksheetCells } from './workbook-cells'
 import type { WorkbookCells } from './workbook-cells'
 import type { SourceCoordinates } from './source-coordinates'
 import { sourceFormula } from './source-coordinates'
+import { decodeXstring, protect } from './report-text'
 import { relocateFilterRanges } from './source-metadata'
 import { formatAddress, formatRange, parseAddress, parseRange } from '../grid/geometry'
 import { FORM_MARKER_PREFIX } from './workbook-form-markers'
@@ -147,8 +148,9 @@ function mapWorksheetReferences(xml: string, map: SourceCoordinates, maps: Reado
   xml = xml.replace(data, '<sheetData/>')
   xml = relocateFilterRanges(xml, map)
   xml = xml.replace(/<hyperlink\b[^>]*\/?>(?:[\s\S]*?<\/hyperlink>)?/g, element => {
-    const ref = xmlAttributes(element.split('>')[0]).ref
-    return ref ? map.references(ref).map(ref => setXmlAttributes(element, { ref })).join('') : element
+    const attr = xmlAttributes(element.split('>')[0])
+    const location = attr.location && !attr['r:id'] ? protect(sourceFormula(decodeXstring(attr.location), map, maps)) : attr.location
+    return attr.ref ? map.references(attr.ref).map(ref => setXmlAttributes(element, { ref, location })).join('') : element
   })
   xml = xml.replace(/<[\w:]+\b[^>]*>/g, tag => {
     if (/^<selection\b/.test(tag)) {

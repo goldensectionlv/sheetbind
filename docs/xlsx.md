@@ -68,6 +68,7 @@ Sheetbind returns an XLSX; Excel determines pagination and printing. Check print
 | Content | How it follows the output |
 | --- | --- |
 | Notes and hyperlinks | Their cell addresses move or repeat with the owning region |
+| Internal hyperlink targets | Local A1 targets follow placement, including other sheets; a repeated target uses its first copy, and a removed target becomes `#REF!` |
 | Pictures | Drawing anchors move or repeat with their region; both bounds move together |
 | Native validation and conditional formatting | Their ranges follow the actual target cells, including otherwise empty cells |
 | Filters and sort settings | Their enclosing range follows placement; a setting is removed when its whole target disappears |
