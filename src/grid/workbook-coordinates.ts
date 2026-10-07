@@ -3,18 +3,18 @@ import { mapAxis } from './workbook-axis'
 import type { WorkbookAxes } from './workbook-axis'
 import { FormulaEdge } from './workbook-formula'
 import { WORKBOOK_LIMITS } from './workbook'
-import type { WorkbookRegionView } from './workbook'
+import type { WorkbookRegion } from './workbook'
 
 export type WorkbookIndexes = ReadonlyMap<string, number>
 const root: WorkbookIndexes = new Map()
 
-function contains(region: WorkbookRegionView, at: GridAddress): boolean {
+function contains(region: WorkbookRegion, at: GridAddress): boolean {
   return at.row >= region.row && at.row < region.row + region.height
     && at.column >= (region.column ?? 1) && at.column < (region.column ?? 1) + (region.width ?? WORKBOOK_LIMITS.columns)
 }
 
 /** Split at band boundaries, without enumerating the cells in a native range. */
-export function partitionWorkbookRange(regions: readonly WorkbookRegionView[], range: GridRange) {
+export function partitionWorkbookRange(regions: readonly WorkbookRegion[], range: GridRange) {
   const rows = new Set([range.start.row, range.end.row + 1])
   const columns = new Set([range.start.column, range.end.column + 1])
   for (const region of regions) {
@@ -45,7 +45,7 @@ export function placeWorkbookPoint(axes: WorkbookAxes, at: GridAddress, indexes:
   return row === undefined || column === undefined ? undefined : { row, column }
 }
 
-export function placeWorkbookRegion(axes: WorkbookAxes, region: WorkbookRegionView, indexes: WorkbookIndexes) {
+export function placeWorkbookRegion(axes: WorkbookAxes, region: WorkbookRegion, indexes: WorkbookIndexes) {
   const row = mapAxis(axes.rows, region.row, FormulaEdge.Start, indexes)!
   const column = mapAxis(axes.columns, region.column ?? 1, FormulaEdge.Start, indexes)!
   return { row, column, height: mapAxis(axes.rows, region.row + region.height - 1, FormulaEdge.End, indexes)! - row + 1,
@@ -73,8 +73,8 @@ function mergeRanges(ranges: GridRange[]): GridRange[] {
   return ranges
 }
 
-export function workbookCoordinates(regions: readonly WorkbookRegionView[], axes: WorkbookAxes, instances: ReadonlyMap<string, readonly WorkbookIndexes[]>) {
-  const contexts = (owner?: WorkbookRegionView) => owner ? instances.get(owner.id) ?? [] : [root]
+export function workbookCoordinates(regions: readonly WorkbookRegion[], axes: WorkbookAxes, instances: ReadonlyMap<string, readonly WorkbookIndexes[]>) {
+  const contexts = (owner?: WorkbookRegion) => owner ? instances.get(owner.id) ?? [] : [root]
   return {
     points(at: GridAddress): GridAddress[] {
       return contexts(regions.findLast(region => contains(region, at))).flatMap(indexes => {

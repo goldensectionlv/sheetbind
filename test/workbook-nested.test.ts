@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import * as project from '../examples/regions/nested'
-import { workbookCells, workbookRegions, workbookRows } from '../src/grid/workbook'
 import { resolveWorkbook, renderWorkbookReport } from '../src/xlsx/workbook-template'
 import { WorkbookTemplate } from '../src/xlsx/workbook-template'
 import { renderWorkbookForm, readWorkbookForm } from '../src/index'
@@ -9,17 +8,18 @@ import { importAuthoredWorkbook, openWorkbook } from './xlsx'
 const definition = WorkbookTemplate.content(project.definition).definition
 
 describe('nested row placement', () => {
-  it('keeps local ownership, absolute projections and every iteration of the data origin', () => {
-    const regions = workbookRegions(definition.sheets[0])
-    expect(regions.map(region => [region.source.path, region.row, region.depth])).toEqual([['sites', 4, 0], ['work', 6, 1]])
-    const code = workbookCells(definition.sheets[0]).find(cell => 'path' in cell.value && cell.value.path === 'code')!
-    expect(code.at).toEqual({ row: 6, column: 1 })
-    expect(workbookRows(definition.sheets[0])).toContainEqual({ index: 6, height: 26 })
+  it('keeps nested field positions, row settings and every iteration of the data origin', () => {
+    const sites = definition.sheets[0].regions![0]
+    const work = sites.regions![0]
+    const code = work.cells.find(cell => 'path' in cell.value && cell.value.path === 'code')!
     const result = resolveWorkbook(project.definition, project.data).sheets[0]
     expect(result.cells.filter(cell => /^\$data.sites\[\d+\].name$/.test(cell.origin.dataPath)).map(cell => cell.at.row)).toEqual([4, 9, 16])
     expect(result.cells.filter(cell => /^\$data.sites\[\d+\].note$/.test(cell.origin.dataPath)).map(cell => cell.at.row)).toEqual([6, 13, 24])
     expect(result.cells.find(cell => 'literal' in cell.value && cell.value.literal === 'Prepared by')!.at.row).toBe(28)
-    expect(result.cells.find(cell => cell.definitionId === code.id)!.origin).toEqual({ nodeId: code.id, dataPath: '$data.sites[1].work[0].code', iterations: [{ nodeId: regions[0].id, index: 1 }, { nodeId: regions[1].id, index: 0 }] })
+    expect(result.cells.find(cell => cell.definitionId === code.id)).toMatchObject({ at: { row: 11, column: 1 },
+      origin: { nodeId: code.id, dataPath: '$data.sites[1].work[0].code', iterations: [{ nodeId: sites.id, index: 1 }, { nodeId: work.id, index: 0 }] },
+    })
+    expect(result.rows).toContainEqual({ index: 11, height: 26 })
     expect(new Set(result.cells.map(cell => cell.id)).size).toBe(result.cells.length)
   })
 

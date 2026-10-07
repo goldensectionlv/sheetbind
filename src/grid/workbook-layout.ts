@@ -4,8 +4,8 @@ import type { Origin, TemplateValue } from '../core/template'
 import type { FieldRules } from '../core/field-rules'
 import type { GridAddress, GridOffset } from './geometry'
 import type { WorkbookChoice } from '../core/choices'
-import { workbookCells, workbookRegions, workbookRows, workbookIssue, WORKBOOK_LIMITS } from './workbook'
-import type { WorkbookCell, WorkbookSheet, WorkbookDefinition, WorkbookRow, WorkbookColumn, WorkbookRegionView } from './workbook'
+import { workbookRegions, workbookIssue, WORKBOOK_LIMITS } from './workbook'
+import type { WorkbookCell, WorkbookSheet, WorkbookDefinition, WorkbookRow, WorkbookColumn, WorkbookRegion } from './workbook'
 import { mapWorkbookPrint } from './workbook'
 import type { WorkbookPrint } from './workbook'
 import type { WorkbookFormula } from './workbook-formula'
@@ -52,8 +52,8 @@ export interface WorkbookSheetPlan {
   readonly axes: WorkbookAxes
   readonly coordinates: WorkbookCoordinates
   readonly extent: { readonly rows: number, readonly columns: number }
-  readonly authored: ReadonlyMap<string, WorkbookCell>
-  readonly regions: ReadonlyMap<string, WorkbookRegionView>
+  readonly authored: ReadonlyMap<string, GridAddress>
+  readonly regions: ReadonlyMap<string, WorkbookRegion>
 }
 export interface WorkbookPlan { readonly sheets: readonly WorkbookSheetPlan[] }
 
@@ -72,16 +72,21 @@ export function placeWorkbookSheet(sheet: WorkbookSheet, group: WorkbookData): W
   const cells: WorkbookPlacedCell[] = []
   const axes = planWorkbookAxes(group)
   const extent = { rows: 0, columns: 0 }
-  const authored = new Map(workbookCells(sheet).map(cell => [cell.id, cell]))
   const regions = workbookRegions(sheet)
   const views = new Map(regions.map(region => [region.id, region]))
+  const authored = new Map<string, GridAddress>(sheet.cells.map(cell => [cell.id, cell.at]))
+  for (const region of regions) {
+    for (const cell of region.cells) {
+      authored.set(cell.id, { row: region.row + cell.at.row - 1, column: (region.column ?? 1) + cell.at.column - 1 })
+    }
+  }
   const instances = new Map<string, WorkbookIndexes[]>()
   function placeCells(body: WorkbookData, indexes: WorkbookIndexes): WorkbookPlacedCell[] {
     const suffix = JSON.stringify(body.iterations) + ']'
     return body.cells.map(value => {
       const cell = value.definition
       const origin = { nodeId: cell.id, dataPath: value.dataPath, iterations: body.iterations }
-      const position = authored.get(cell.id)!.at
+      const position = authored.get(cell.id)!
       const at = placeWorkbookPoint(axes, position, indexes)
       if (!at) {
         workbookIssue('growth-crosses-cell', cell.id, 'A fixed cell occupies a removed band; put it inside the repeat or outside its band', value.dataPath, 'data')
@@ -144,7 +149,8 @@ export function placeWorkbookSheet(sheet: WorkbookSheet, group: WorkbookData): W
   if (print?.area && (print.area.end.row > WORKBOOK_LIMITS.rows || print.area.end.column > WORKBOOK_LIMITS.columns) || print?.repeatRows && print.repeatRows.end > WORKBOOK_LIMITS.rows) {
     workbookIssue('print-limit', sheet.id, 'Rendered print range exceeds the XLSX grid', `$template.${sheet.id}.print`, 'data')
   }
-  const rows = placeSettings(workbookRows(sheet), axes.rows, WORKBOOK_LIMITS.rows)
+  const rowSettings = [...sheet.rows ?? [], ...regions.flatMap(region => (region.rows ?? []).map(row => ({ ...row, index: region.row + row.index - 1 })))]
+  const rows = placeSettings(rowSettings, axes.rows, WORKBOOK_LIMITS.rows)
   const columns = placeSettings(sheet.columns ?? [], axes.columns, WORKBOOK_LIMITS.columns)
   const occupied = new Set<number>()
   for (const cell of cells) {

@@ -35,6 +35,8 @@ Within `WorkbookPlan`, each `WorkbookSheetPlan` retains one sheet and its geomet
 
 The sheet plan also owns its regions in worksheet coordinates. Placement, native range mapping and form markers reuse those region objects. The form carrier definition contains only participating sheet names and stable marker numbers, without rebuilding a separate geometry index.
 
+Cell traversal returns original definitions for rules, dictionary dependencies and diagnostics. Only placement derives worksheet positions and row settings from the shared regions. The plan retains a cell-to-position map for placement and formula references, rather than copies of complete cells in another coordinate system.
+
 Placement retains the existing `WorkbookData` instances instead of constructing another region tree. Form markers traverse those instances and obtain their boundaries through the same axis mapping used for placement. Reports do not build a separate form-region layout.
 
 The expanded body owns the iteration context shared by its cells. Placement creates public cell origins from that context directly. Source worksheet metadata remains in the definition; the placed sheet contains only output settings and cells.

@@ -53,24 +53,19 @@ export { WORKBOOK_LIMITS } from './geometry'
 export function workbookIssue(code: string, nodeId: string, message: string, path = nodeId, phase: 'template' | 'data' = 'template'): never {
   throw new TemplateError([{ phase, code, nodeId, path, message }])
 }
-/** Flattened regions with sheet coordinates and nesting information. */
-export type WorkbookRegionView = WorkbookRegion & { readonly parentId?: string, readonly depth: number }
-export function workbookRegions(sheet: WorkbookBody): WorkbookRegionView[] {
-  const visit = (body: WorkbookBody, offset: number, columnOffset: number, width: number, depth: number, parentId?: string): WorkbookRegionView[] => (body.regions ?? []).flatMap(region => {
+/** Flattened regions in worksheet coordinates; nested definitions remain unchanged. */
+export function workbookRegions(sheet: WorkbookBody): WorkbookRegion[] {
+  const visit = (body: WorkbookBody, offset: number, columnOffset: number, width: number): WorkbookRegion[] => (body.regions ?? []).flatMap(region => {
     const row = offset + region.row
     const column = columnOffset + (region.column ?? 1)
     const extent = region.width ?? width
-    return [{ ...region, row, ...(column !== 1 || region.column !== undefined ? { column } : {}), ...(extent !== WORKBOOK_LIMITS.columns ? { width: extent } : {}), parentId, depth }, ...visit(region, row - 1, column - 1, extent, depth + 1, region.id)]
+    return [{ ...region, row, ...(column !== 1 || region.column !== undefined ? { column } : {}), ...(extent !== WORKBOOK_LIMITS.columns ? { width: extent } : {}) }, ...visit(region, row - 1, column - 1, extent)]
   })
-  return visit(sheet, 0, 0, WORKBOOK_LIMITS.columns, 0)
+  return visit(sheet, 0, 0, WORKBOOK_LIMITS.columns)
 }
-/** A cell projected to sheet coordinates with its owning region. */
-type WorkbookCellView = WorkbookCell & { readonly regionId?: string }
-export function workbookCells(sheet: WorkbookSheet): WorkbookCellView[] {
-  return [...sheet.cells, ...workbookRegions(sheet).flatMap(region => region.cells.map(cell => ({ ...cell, regionId: region.id, at: { row: region.row + cell.at.row - 1, column: (region.column ?? 1) + cell.at.column - 1 } })))]
-}
-export function workbookRows(sheet: WorkbookBody): WorkbookRow[] {
-  return [...sheet.rows ?? [], ...workbookRegions(sheet).flatMap(region => (region.rows ?? []).map(row => ({ ...row, index: region.row + row.index - 1 })))]
+/** Traverse original definitions without projecting or copying their cells. */
+export function workbookCells(body: WorkbookBody): WorkbookCell[] {
+  return [...body.cells, ...(body.regions ?? []).flatMap(workbookCells)]
 }
 /** Discover declared dictionaries without resolving data or layout. */
 export function collectWorkbookDictionarySources(template: WorkbookDefinition): string[] {
