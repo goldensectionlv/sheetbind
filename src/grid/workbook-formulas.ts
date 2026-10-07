@@ -1,17 +1,14 @@
 import { WorkbookAxis } from './workbook'
-import type { WorkbookCell } from './workbook'
-import type { WorkbookPlacedCell, WorkbookPlacement } from './workbook-layout'
+import type { WorkbookPlacedCell, WorkbookPlan, WorkbookSheetPlan } from './workbook-layout'
 import { FormulaEdge, compileWorkbookFormula } from './workbook-formula'
 import type { FormulaAddress, FormulaReference, FormulaRows } from './workbook-formula'
 import { mapAxis, sharedAxisContext, workbookAxes } from './workbook-axis'
-import type { WorkbookAxes } from './workbook-axis'
-
-interface FormulaSource { readonly axes: WorkbookAxes, readonly authored: ReadonlyMap<string, WorkbookCell> }
 
 /** Formulas use the same two axis plans as cells, dimensions and print ranges. */
-export function resolveWorkbookFormulas(layout: WorkbookPlacement, sources: ReadonlyMap<string, FormulaSource>, rows?: ReadonlyMap<string, FormulaRows>): WorkbookPlacement {
+export function resolveWorkbookFormulas(plan: WorkbookPlan, rows?: ReadonlyMap<string, FormulaRows>): WorkbookPlan {
+  const sources = new Map(plan.sheets.map(source => [source.sheet.name.toLowerCase(), source]))
   const formulas = new Map<string, ReturnType<typeof compileWorkbookFormula>>()
-  return { sheets: layout.sheets.map(sheet => ({ ...sheet, cells: sheet.cells.map(cell => {
+  return { sheets: plan.sheets.map(source => ({ ...source, sheet: { ...source.sheet, cells: source.sheet.cells.map(cell => {
     if (!('formula' in cell.value)) {
       return cell
     }
@@ -20,12 +17,12 @@ export function resolveWorkbookFormulas(layout: WorkbookPlacement, sources: Read
       formula = compileWorkbookFormula(cell.value.formula)
       formulas.set(cell.value.formula, formula)
     }
-    return resolveCellFormula(cell, sheet.name, sources, formula, rows)
-  }) })) }
+    return resolveCellFormula(cell, source, sources, formula, rows)
+  }) } })) }
 }
 
-function resolveCellFormula(cell: WorkbookPlacedCell, sheetName: string, sources: ReadonlyMap<string, FormulaSource>, formula: ReturnType<typeof compileWorkbookFormula>, rows?: ReadonlyMap<string, FormulaRows>): WorkbookPlacedCell {
-  const source = sources.get(sheetName.toLowerCase())!
+function resolveCellFormula(cell: WorkbookPlacedCell, source: WorkbookSheetPlan, sources: ReadonlyMap<string, WorkbookSheetPlan>, formula: ReturnType<typeof compileWorkbookFormula>, rows?: ReadonlyMap<string, FormulaRows>): WorkbookPlacedCell {
+  const sheetName = source.sheet.name
   const authored = source.authored.get(cell.definitionId)!
   const indexes = new Map(cell.origin.iterations.map(item => [item.nodeId, item.index]))
   const at = { row: mapAxis(source.axes.rows, authored.at.row, FormulaEdge.Cell, indexes)!, column: mapAxis(source.axes.columns, authored.at.column, FormulaEdge.Cell, indexes)! }

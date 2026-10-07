@@ -2,7 +2,7 @@ import type { Dictionaries } from '../core/dictionaries'
 import type { WorkbookDefinition } from '../grid/workbook'
 import { workbookCells } from '../grid/workbook'
 import { readData, writeData } from './records'
-import type { WorkbookPlacement } from '../grid/workbook-layout'
+import type { WorkbookPlacedSheet } from '../grid/workbook-layout'
 
 export interface WorkbookChoiceSources {
   readonly dictionaries: Dictionaries
@@ -11,7 +11,7 @@ export interface WorkbookChoiceSources {
 }
 
 /** Keep the issued dictionaries and root sources needed to read any return mode. */
-export function workbookChoiceSources(template: WorkbookDefinition, data: unknown, dictionaries: Dictionaries, sheets: WorkbookPlacement['sheets']): WorkbookChoiceSources | undefined {
+export function workbookChoiceSources(template: WorkbookDefinition, data: unknown, dictionaries: Dictionaries, sheets: readonly WorkbookPlacedSheet[]): WorkbookChoiceSources | undefined {
   const context: Record<string, unknown> = {}
   const selected: Record<string, Dictionaries[string]> = {}
   const fields = template.sheets.flatMap(workbookCells).filter(cell => cell.rules?.choice || cell.rules?.list)

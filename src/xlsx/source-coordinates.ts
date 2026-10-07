@@ -1,10 +1,7 @@
 import { axisPositions, mapAxis } from '../grid/workbook-axis'
-import type { WorkbookAxes } from '../grid/workbook-axis'
-import type { WorkbookCoordinates } from '../grid/workbook-coordinates'
+import type { WorkbookSheetPlan } from '../grid/workbook-layout'
 import { FormulaEdge } from '../grid/workbook-formula'
 import type { FormulaRows } from '../grid/workbook-formula'
-import type { WorkbookSheet } from '../grid/workbook'
-import type { WorkbookOutputSheet } from './workbook-output'
 import { columnName, columnNumber } from '../grid/geometry'
 import { formatAddress, formatRange, parseAddress, parseRange } from './addresses'
 import type { GridAddress, GridRange } from '../grid/geometry'
@@ -28,7 +25,8 @@ export interface SourceCoordinates {
 }
 
 /** One source-to-output coordinate transform for cells and coordinate-bearing Excel metadata. */
-export function sourceCoordinates(source: WorkbookSheet, output: WorkbookOutputSheet, axes: WorkbookAxes, coordinates: WorkbookCoordinates, carrier?: FormulaRows): SourceCoordinates {
+export function sourceCoordinates(plan: WorkbookSheetPlan, carrier?: FormulaRows): SourceCoordinates {
+  const { definition: source, sheet: output, axes, coordinates } = plan
   const markers = source.xlsx?.markers ?? []
   const cells = new Map<string, GridAddress[]>(source.xlsx?.cells.map(address => [address, []]) ?? [])
   const addresses = new Map<string, string[]>()

@@ -1,10 +1,8 @@
 import JSZip from 'jszip'
 import type { Workbook } from 'exceljs'
 import { prepareWorkbookCells, writeWorkbookStrings } from './workbook-cells'
-import type { WorkbookAxes } from '../grid/workbook-axis'
-import type { WorkbookCoordinates } from '../grid/workbook-coordinates'
+import type { WorkbookPlan } from '../grid/workbook-layout'
 import type { FormulaRows } from '../grid/workbook-formula'
-import type { WorkbookDefinition } from '../grid/workbook'
 import type { WorkbookOutputSheet } from './workbook-output'
 import { sourceCoordinates, sourceFormula } from './source-coordinates'
 import type { SourceCoordinates } from './source-coordinates'
@@ -18,10 +16,8 @@ import { workbookParts } from './workbook-resources'
 
 export interface WorkbookSource {
   readonly source: Uint8Array
-  readonly template: WorkbookDefinition
+  readonly plan: WorkbookPlan
   readonly sheets: readonly WorkbookOutputSheet[]
-  readonly axes: readonly WorkbookAxes[]
-  readonly coordinates: readonly WorkbookCoordinates[]
   readonly carriers?: ReadonlyMap<string, FormulaRows>
 }
 interface GeneratedWorkbook {
@@ -34,10 +30,10 @@ interface GeneratedWorkbook {
 function sourceSheets(source: WorkbookSource, parts: GeneratedWorkbook['parts']) {
   const originals = new Map([...parts.values()].map(part => [part.part, part]))
   const output = new Map(source.sheets.map(sheet => [sheet.id, sheet]))
-  return new Map(source.template.sheets.map((sheet, index) => {
-    const target = output.get(sheet.id)!
-    const original = originals.get(sheet.xlsx!.part)!
-    const coordinates = sourceCoordinates(sheet, target, source.axes[index], source.coordinates[index], source.carriers?.get(target.name.toLowerCase()))
+  return new Map(source.plan.sheets.map(plan => {
+    const target = output.get(plan.sheet.id)!
+    const original = originals.get(plan.definition.xlsx!.part)!
+    const coordinates = sourceCoordinates(plan, source.carriers?.get(target.name.toLowerCase()))
     return [target.name, { original, output: target, coordinates }] as const
   }))
 }

@@ -44,7 +44,7 @@ export interface WorkbookLayout {
 
 /** Internal placement retains the source references needed by the XLSX writer. */
 export interface WorkbookPlacedCell extends WorkbookCellInstance { readonly xlsx?: WorkbookCell['xlsx'] }
-export interface WorkbookPlacement { readonly sheets: readonly (Omit<WorkbookSheet, 'cells' | 'regions'> & { readonly cells: readonly WorkbookPlacedCell[] })[] }
+export interface WorkbookPlacedSheet extends Omit<WorkbookSheet, 'cells' | 'regions'> { readonly cells: readonly WorkbookPlacedCell[] }
 
 /** Placement provenance for consumers that need the boundaries of expanded bodies. */
 export interface WorkbookRegionLayout {
@@ -57,18 +57,22 @@ export interface WorkbookRegionLayout {
   readonly width?: number
   readonly instances: readonly { readonly row: number, readonly height: number, readonly regions: readonly WorkbookRegionLayout[] }[]
 }
-export interface WorkbookPlan {
-  readonly layout: WorkbookPlacement
-  readonly regions: readonly (readonly WorkbookRegionLayout[])[]
-  readonly axes: readonly WorkbookAxes[]
-  readonly coordinates: readonly WorkbookCoordinates[]
-  readonly extents: readonly { readonly rows: number, readonly columns: number }[]
+/** A sheet and its geometry travel together through every placement stage. */
+export interface WorkbookSheetPlan {
+  readonly definition: WorkbookSheet
+  readonly sheet: WorkbookPlacedSheet
+  readonly regions: readonly WorkbookRegionLayout[]
+  readonly axes: WorkbookAxes
+  readonly coordinates: WorkbookCoordinates
+  readonly extent: { readonly rows: number, readonly columns: number }
+  readonly authored: ReadonlyMap<string, WorkbookCell>
 }
+export interface WorkbookPlan { readonly sheets: readonly WorkbookSheetPlan[] }
 
 /** Expose independent resolved cells without changing the compiled definition. */
 export function resolveWorkbook(config: WorkbookDefinition, data: unknown, options: { dictionaries?: Dictionaries } = {}): WorkbookLayout {
-  const { layout } = planWorkbook(config, data, options)
-  return { sheets: layout.sheets.map(sheet => ({
+  const plan = planWorkbook(config, data, options)
+  return { sheets: plan.sheets.map(({ sheet }) => ({
     ...structuredClone({ id: sheet.id, name: sheet.name, state: sheet.state, rows: sheet.rows, columns: sheet.columns, print: sheet.print }),
     cells: sheet.cells.map(cell => structuredClone({
       id: cell.id, definitionId: cell.definitionId, at: cell.at, size: cell.size, rules: cell.rules,
@@ -79,20 +83,16 @@ export function resolveWorkbook(config: WorkbookDefinition, data: unknown, optio
 
 /** Accept a normalized definition. Placement never reparses or modifies the input. */
 export function planWorkbook(config: WorkbookDefinition, data: unknown, options: WorkbookDataOptions = {}): WorkbookPlan {
-  const { plan, sources } = placeWorkbook(config, data, options)
-  return { ...plan, layout: resolveWorkbookFormulas(plan.layout, sources) }
+  return resolveWorkbookFormulas(placeWorkbook(config, data, options))
 }
 
 /** Keep authored formulas until all placement transforms are known. */
-export function placeWorkbook(config: WorkbookDefinition, data: unknown, options: WorkbookDataOptions = {}) {
+export function placeWorkbook(config: WorkbookDefinition, data: unknown, options: WorkbookDataOptions = {}): WorkbookPlan {
   const execution = resolveWorkbookData(config, data, options)
-  const placed = config.sheets.map((sheet, index) => placeWorkbookSheet(sheet, execution[index]))
-  const sources = new Map(placed.map(value => [value.sheet.name.toLowerCase(), { axes: value.axes, authored: value.authored }]))
-  const plan: WorkbookPlan = { layout: { sheets: placed.map(value => value.sheet) }, regions: placed.map(value => value.regions), axes: placed.map(value => value.axes), coordinates: placed.map(value => value.coordinates), extents: placed.map(value => value.extent) }
-  return { plan, sources }
+  return { sheets: config.sheets.map((sheet, index) => placeWorkbookSheet(sheet, execution[index])) }
 }
 
-function placeWorkbookSheet(sheet: WorkbookSheet, group: WorkbookData) {
+function placeWorkbookSheet(sheet: WorkbookSheet, group: WorkbookData): WorkbookSheetPlan {
   const settings = { id: sheet.id, name: sheet.name, state: sheet.state, xlsx: sheet.xlsx, occupied: sheet.occupied }
   const cells: WorkbookPlacedCell[] = []
   const axes = planWorkbookAxes(group)
@@ -218,7 +218,7 @@ function placeWorkbookSheet(sheet: WorkbookSheet, group: WorkbookData) {
     }
   }
   const placed = { ...structuredClone(settings), ...(print ? { print } : {}), rows, columns, cells: cells.sort((a, b) => a.at.row - b.at.row || a.at.column - b.at.column) }
-  return { sheet: placed, regions: placedRegions, axes, coordinates: workbookCoordinates(sheet, axes, instances), authored, extent }
+  return { definition: sheet, sheet: placed, regions: placedRegions, axes, coordinates: workbookCoordinates(sheet, axes, instances), authored, extent }
 }
 
 function placeSettings<T extends { readonly index: number }>(settings: readonly T[], axis: AxisPlan, limit: number): T[] {

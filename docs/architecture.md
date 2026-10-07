@@ -13,6 +13,24 @@ This page is for changes to Sheetbind itself. For template behavior and file sup
 
 `src/index.ts` defines the public package API. An internal export does not become public automatically. ESLint enforces the main dependency boundaries: core is independent of grid, form and XLSX; grid and form do not import the XLSX adapter.
 
+## Models and ownership
+
+The library has three operations: rendering a report, issuing a form and reading a completed form. They share bindings and placement but differ in where values come from and which checks apply. `core` contains value rules; workbook region execution belongs to `grid`.
+
+| Representation | Contents | Consumers |
+| --- | --- | --- |
+| Source XLSX inside `WorkbookTemplate` | Formatting and native Excel features | The writer retains source package parts and changes affected fragments |
+| `WorkbookDefinition` | Template bindings, regions and geometry with source cell references | Data resolution, placement, form preparation and diagnostics |
+| `WorkbookData` | Values and repeat instances with concrete data paths | Axis planning and placement; exists only for the current call |
+| `WorkbookPlan` | Sheet plans containing the definition, placed cells, regions, axes and coordinate mapping | Formulas, form control rows and the XLSX writer |
+| `WorkbookFormSubmission` | Fields and records extracted from the returned file | Choice decoding, empty-row removal and validation |
+
+`WorkbookLayout`, returned by `resolveWorkbook`, is an independent public projection of placed cells. It is a consumer result rather than another editable template. The public entry into the current model is tagged XLSX import.
+
+Within `WorkbookPlan`, each `WorkbookSheetPlan` retains one sheet and its geometry. Stages pass these plans together; matching a sheet with its axes and regions does not depend on indexes in parallel arrays. The original definition and axes retain logical coordinates, while placed cells receive final positions and formulas in sequence. The XLSX adapter also accounts for removed tag rows and inserted form control rows.
+
+When simplifying, first examine representations and the transitions between them. Shared geometry serves all three operations, retained XLSX parts preserve native Excel features, and the returned form structure supports reading changed records. Removing one of these contracts requires checking every consumer; moving functions between directories does not itself reduce the number of contracts.
+
 ## Report and form issuance
 
 ```text

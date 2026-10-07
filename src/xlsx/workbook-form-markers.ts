@@ -6,7 +6,7 @@ import type { WorkbookFormRows } from '../form/workbook-rows'
 import type { WorkbookBody, WorkbookRegion, WorkbookDefinition } from '../grid/workbook'
 import { workbookCells, WORKBOOK_LIMITS } from '../grid/workbook'
 import { mapWorkbookPrint } from '../grid/workbook-print'
-import type { WorkbookPlan, WorkbookRegionLayout, WorkbookPlacement } from '../grid/workbook-layout'
+import type { WorkbookPlan, WorkbookRegionLayout } from '../grid/workbook-layout'
 import { formatAddress } from './addresses'
 import { xlsxTextIssues } from './report-text'
 import { FormulaEdge } from '../grid/workbook-formula'
@@ -48,9 +48,10 @@ export function formCarrierDefinition(template: WorkbookDefinition): FormCarrier
 export function placeFormMarkers(plan: WorkbookPlan, definition: FormCarrierDefinition) {
   const markers = new Map<string, FormMarkers>()
   const formulaRows = new Map<string, FormulaRows>()
-  const layout: WorkbookPlacement = { sheets: plan.layout.sheets.map((sheet, index) => {
+  const placed: WorkbookPlan = { sheets: plan.sheets.map(source => {
+    const { sheet, regions, extent } = source
     if (!definition.sheets.has(sheet.name)) {
-      return sheet
+      return source
     }
     const events: FormMarker[] = []
     const visit = (regions: readonly WorkbookRegionLayout[]): void => {
@@ -69,9 +70,9 @@ export function placeFormMarkers(plan: WorkbookPlan, definition: FormCarrierDefi
         events.push({ row: region.row + region.height, token: [FormMarkerKind.RepeatEnd, id] })
       }
     }
-    visit(plan.regions[index])
-    let end = Math.max(2, plan.extents[index].rows + 1)
-    let markerColumn = Math.max(FORM_MARKER_COLUMN, plan.extents[index].columns + 1)
+    visit(regions)
+    let end = Math.max(2, extent.rows + 1)
+    let markerColumn = Math.max(FORM_MARKER_COLUMN, extent.columns + 1)
     for (const row of sheet.rows ?? []) {
       end = Math.max(end, row.index + 1)
     }
@@ -113,16 +114,16 @@ export function placeFormMarkers(plan: WorkbookPlan, definition: FormCarrierDefi
       return logical + low
     }
     formulaRows.set(sheet.name.toLowerCase(), (logical, edge) => edge === FormulaEdge.End ? row(logical + 1) - 1 : row(logical))
-    return { ...sheet, ...(sheet.print ? { print: mapWorkbookPrint(sheet.print, { rowStart: row }) } : {}), cells: sheet.cells.map(cell => {
+    return { ...source, sheet: { ...sheet, ...(sheet.print ? { print: mapWorkbookPrint(sheet.print, { rowStart: row }) } : {}), cells: sheet.cells.map(cell => {
       const start = row(cell.at.row)
       const rows = cell.size.rows === 1 ? 1 : row(cell.at.row + cell.size.rows - 1) - start + 1
       return { ...cell, at: { row: start, column: cell.at.column }, size: rows === cell.size.rows ? cell.size : { ...cell.size, rows } }
     }),
     rows: [...(sheet.rows ?? []).map(setting => ({ ...setting, index: row(setting.index) })), ...placed.map(marker => ({ index: marker.row, hidden: true }))].sort((a, b) => a.index - b.index),
     columns: [...sheet.columns ?? [], { index: markerColumn, hidden: true, width: 2 }],
-    }
+    } }
   }) }
-  return { layout, markers, formulaRows }
+  return { plan: placed, markers, formulaRows }
 }
 
 export function writeFormMarkers(sheet: Worksheet, markers: FormMarkers): void {
