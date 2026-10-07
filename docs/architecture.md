@@ -63,7 +63,7 @@ Reading places only the structure and fields; issuance rules, dictionaries and f
 
 All list and choice sources travel with the issued workbook. Shared dictionaries and root collections are stored once; local sources are saved for the issued field paths. No additional columns carry context between rows. Local lists support filling the issued records; changing their membership or order requires issuing a new form. Reading does not reload application dictionaries, and the return mode only selects an object or its key.
 
-Choice resolution receives the source array directly. Issuance selects it from data or a dictionary; reading selects it from the field's saved source. Reading checks the source even for blank or invalid input, then decodes the field value immediately.
+Form preparation contains the definition and fields; dictionaries belong to a particular issuance or returned file. Choice resolution receives the source array directly. Issuance selects it from data or a dictionary; reading selects it from the field's saved source. Reading checks the source even for blank or invalid input, then decodes the field value immediately.
 
 Template import and form reading use one XLSX decoder. Writers account for authored resources before allocating generated names. Choice objects are stored independently of formula ranges: those ranges are created only for references found in the template's formulas. A damaged saved source is a file failure, not an invalid user value.
 

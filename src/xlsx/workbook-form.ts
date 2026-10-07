@@ -3,6 +3,7 @@ import { readWorkbookFormFields } from '../form/workbook-read'
 import type { WorkbookFormField, WorkbookFormSubmission } from '../form/workbook-read'
 import ExcelJS from 'exceljs'
 import type { ValidationOptions } from '../core/validation'
+import { parseDictionaries } from '../core/dictionaries'
 import type { Dictionaries } from '../core/dictionaries'
 import { TemplateError } from '../core/template'
 import { prepareWorkbookForm, referencePath, WorkbookFormInputError } from '../form/workbook'
@@ -26,44 +27,35 @@ import { formCarrierDefinition, formDataFromMarkers, placeFormMarkers, readFormM
 import { writeWorkbookPackage } from './workbook-source'
 import { TaggedXlsxError, withTemplateLocations } from './tagged-template'
 
-type ReadOptions = ValidationOptions
-
-/** Carrier placement is pure; readers compare this plan without creating a workbook. */
-function planFormWorkbook(prepared: PreparedWorkbookForm, definition: ReturnType<typeof formCarrierDefinition>, data: unknown, purpose: 'issue' | 'read') {
-  const { plan, sources } = withTemplateLocations(prepared.template, () => placeWorkbook(prepared.template, data, { dictionaries: prepared.dictionaries, purpose }))
-  const carrier = placeFormMarkers(plan, definition)
-  return { ...carrier, sources, axes: plan.axes, coordinates: plan.coordinates }
-}
-
 /** Issue input fields and structural boundaries. Blank required fields can be completed later. */
 export async function renderWorkbookForm(value: WorkbookTemplate, data: unknown, options: { readonly dictionaries?: Dictionaries } = {}): Promise<Buffer> {
   const { definition, source } = WorkbookTemplate.content(value)
-  const prepared = withTemplateLocations(definition, () => prepareWorkbookForm(definition, 'issue', options))
+  const dictionaries = parseDictionaries(options.dictionaries === undefined ? {} : options.dictionaries)
+  const prepared = withTemplateLocations(definition, () => prepareWorkbookForm(definition, 'issue'))
   const issued = issueWorkbookFormData(prepared.template, data)
-  const carrier = planFormWorkbook(prepared, formCarrierDefinition(prepared.template), issued, 'issue')
-  const layout = resolveWorkbookFormulas(carrier.layout, carrier.sources, carrier.formulaRows)
+  const { plan, sources } = withTemplateLocations(prepared.template, () => placeWorkbook(prepared.template, issued, { dictionaries, purpose: 'issue' }))
+  const carrier = placeFormMarkers(plan, formCarrierDefinition(prepared.template))
+  const layout = resolveWorkbookFormulas(carrier.layout, sources, carrier.formulaRows)
   const sheets = layout.sheets.map(sheet => ({ ...sheet, cells: sheet.cells.map(cell => {
     const field = prepared.fields.get(cell.definitionId)
     return field && (hasValidation(field.rules, 'string') || cell.choice) ? { ...cell, text: true } : cell
   }) }))
   const resources = createWorkbookResources(WorkbookTemplate.content(value).resources)
-  const workbook = createWorkbookOutput(sheets, prepared.dictionaries, resources)
+  const workbook = createWorkbookOutput(sheets, dictionaries, resources)
   for (const [name, markers] of carrier.markers) {
     writeFormMarkers(workbook.getWorksheet(name)!, markers)
   }
-  const sources = workbookChoiceSources(prepared.template, issued, prepared.dictionaries, sheets)
-  if (sources) {
-    writeWorkbookChoiceSources(workbook, workbookListSheetName(prepared.template.sheets.map(sheet => sheet.name)), sources, resources)
+  const choices = workbookChoiceSources(prepared.template, issued, dictionaries, sheets)
+  if (choices) {
+    writeWorkbookChoiceSources(workbook, workbookListSheetName(prepared.template.sheets.map(sheet => sheet.name)), choices, resources)
   }
-  return writeWorkbookPackage(workbook, { source, template: prepared.template, sheets, axes: carrier.axes, coordinates: carrier.coordinates, carriers: carrier.formulaRows })
+  return writeWorkbookPackage(workbook, { source, template: prepared.template, sheets, axes: plan.axes, coordinates: plan.coordinates, carriers: carrier.formulaRows })
 }
 
 /** Definition + completed form -> data/issues, using only the sources issued with the form. */
-export async function readWorkbookForm(value: WorkbookTemplate, bytes: Uint8Array, options: ReadOptions = {}): Promise<WorkbookFormResult> {
+export async function readWorkbookForm(value: WorkbookTemplate, bytes: Uint8Array, options: ValidationOptions = {}): Promise<WorkbookFormResult> {
   const { definition } = WorkbookTemplate.content(value)
-  const prepared = withTemplateLocations(definition, () => prepareWorkbookForm(definition, 'read', {
-    validationRules: options.validationRules, validationMessages: options.validationMessages,
-  }))
+  const prepared = withTemplateLocations(definition, () => prepareWorkbookForm(definition, 'read', options))
   let returned: ExcelJS.Workbook
   try {
     returned = await loadWorkbook(bytes)
@@ -79,7 +71,7 @@ export async function readWorkbookForm(value: WorkbookTemplate, bytes: Uint8Arra
     const sources = [...prepared.fields.values()].some(field => field.rules?.choice || field.rules?.list)
       ? readWorkbookChoiceSources(returned, workbookListSheetName(prepared.template.sheets.map(sheet => sheet.name)))
       : { dictionaries: {}, context: {}, local: {} }
-    return readWorkbookFormFields({ ...prepared, dictionaries: sources.dictionaries }, result.submission, { context: sources.context, local: sources.local, validateText: xlsxTextIssues })
+    return readWorkbookFormFields(prepared, result.submission, { ...sources, validateText: xlsxTextIssues })
   }
   catch (error) {
     if (error instanceof WorkbookFormInputError) {
@@ -111,7 +103,8 @@ function readFormSubmission(workbook: ExcelJS.Workbook, prepared: PreparedWorkbo
   }
   const markers = new Map([...definition.sheets].map(name => [name, readFormMarkers(workbook.getWorksheet(name)!)]))
   const shape = formDataFromMarkers(prepared.template, definition, markers)
-  const expected = planFormWorkbook(prepared, definition, shape.data, 'read')
+  const { plan } = withTemplateLocations(prepared.template, () => placeWorkbook(prepared.template, shape.data, { purpose: 'read' }))
+  const expected = placeFormMarkers(plan, definition)
   const fields: WorkbookFormField[][] = []
   for (const plan of expected.layout.sheets) {
     if (!definition.sheets.has(plan.name)) {

@@ -4,6 +4,7 @@ import { validateList } from '../core/field-rules'
 import { isBlank } from '../core/validation'
 import { readDataPath } from '../core/reference'
 import type { FieldValue, TemplateValue } from '../core/template'
+import type { Dictionaries } from '../core/dictionaries'
 import { createWorkbookChoiceDisplay } from '../grid/workbook-choice-display'
 import type { PreparedWorkbookField, PreparedWorkbookForm, WorkbookFormIssue, WorkbookFormResult } from './workbook'
 import { WorkbookFormInputError } from './workbook'
@@ -27,8 +28,9 @@ export interface WorkbookFormSubmission {
   readonly fields: readonly WorkbookFormField[]
 }
 interface ReadOptions {
-  readonly context?: Readonly<Record<string, unknown>>
-  readonly local?: Readonly<Record<string, unknown>>
+  readonly dictionaries: Dictionaries
+  readonly context: Readonly<Record<string, unknown>>
+  readonly local: Readonly<Record<string, unknown>>
   readonly validateText?: (text: string) => readonly { code: string, message: string }[]
 }
 
@@ -60,7 +62,7 @@ export function readWorkbookFormFields(prepared: PreparedWorkbookForm, submissio
     const rules = field.rules ?? {}
     const raw = readData(data, path)
     const issue = field.validate?.(raw, { root: data, current: readData(data, context) as Record<string, unknown>, path: location.path })
-      ?? validateList(raw, rules, rules.list ? prepared.dictionaries[rules.list] as readonly string[] : undefined)
+      ?? validateList(raw, rules, rules.list ? options.dictionaries[rules.list] as readonly string[] : undefined)
     if (issue) {
       issues.push({ phase: 'value', ...issue, ...location })
     }
@@ -105,12 +107,12 @@ function decodeFormFields(prepared: PreparedWorkbookForm, submission: WorkbookFo
     const rule = field.rules!.choice!
     const source = rule.source
     if ('dictionary' in source) {
-      return choiceOptions(rule, prepared.dictionaries[source.dictionary])
+      return choiceOptions(rule, options.dictionaries[source.dictionary])
     }
     if (source.from === 'root') {
       return choiceOptions(rule, readDataPath(options.context, source.path))
     }
-    const stored = options.local?.[field.id]
+    const stored = options.local[field.id]
     if (!location || !isDataObject(stored) || !Array.isArray(stored[location.path])) {
       throw new SyntaxError('local source was not issued for this field')
     }
@@ -120,7 +122,7 @@ function decodeFormFields(prepared: PreparedWorkbookForm, submission: WorkbookFo
   for (const field of prepared.fields.values()) {
     savedSource(field, () => {
       const list = field.rules?.list
-      if (list && (!prepared.dictionaries[list]?.length || !prepared.dictionaries[list].every(item => typeof item === 'string'))) {
+      if (list && (!options.dictionaries[list]?.length || !options.dictionaries[list].every(item => typeof item === 'string'))) {
         throw new SyntaxError(`dictionary ${list} must contain strings`)
       }
       const source = field.rules?.choice?.source

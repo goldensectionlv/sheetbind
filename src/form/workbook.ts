@@ -1,8 +1,6 @@
 import { createValidation } from '../core/validation'
 import type { ValidationOptions, ValidateValue } from '../core/validation'
 import type { JsonValue } from '../core/json'
-import { parseDictionaries } from '../core/dictionaries'
-import type { Dictionaries } from '../core/dictionaries'
 import { TemplateError } from '../core/template'
 import type { DataReference } from '../core/template'
 import { workbookCells, workbookRegions, WorkbookAxis } from '../grid/workbook'
@@ -36,7 +34,6 @@ export function referencePath(reference: DataReference, context: DataPath): Data
   return [...(reference.from === 'root' ? [] : context), ...reference.path.split('.')]
 }
 
-export type WorkbookFormOptions = ValidationOptions & { readonly dictionaries?: Dictionaries }
 export interface PreparedWorkbookField extends Pick<WorkbookCell, 'id' | 'rules'> {
   readonly reference: DataReference
   readonly validate?: ValidateValue
@@ -44,12 +41,10 @@ export interface PreparedWorkbookField extends Pick<WorkbookCell, 'id' | 'rules'
 export interface PreparedWorkbookForm {
   readonly template: WorkbookDefinition
   readonly fields: ReadonlyMap<string, PreparedWorkbookField>
-  readonly dictionaries: Dictionaries
 }
 /** Data bindings define input fields; other worksheet content is not submitted. */
-export function prepareWorkbookForm(value: WorkbookDefinition, purpose: 'issue' | 'read', options: WorkbookFormOptions = {}): PreparedWorkbookForm {
+export function prepareWorkbookForm(value: WorkbookDefinition, purpose: 'issue' | 'read', options: ValidationOptions = {}): PreparedWorkbookForm {
   const template = expandWorkbookScopes(value)
-  const dictionaries = parseDictionaries(options.dictionaries === undefined ? {} : options.dictionaries)
   if (template.sheets.some(sheet => workbookRegions(sheet).some(region => region.axis === WorkbookAxis.Columns))) {
     throw new TemplateError([{ phase: 'template', code: 'report-only-region', nodeId: '', path: '$template', message: 'Form records repeat down rows; column repeats support reports' }])
   }
@@ -68,7 +63,7 @@ export function prepareWorkbookForm(value: WorkbookDefinition, purpose: 'issue' 
     }
   }
   assertFormBindings(template)
-  return { template, fields, dictionaries }
+  return { template, fields }
 }
 
 function assertFormBindings(template: WorkbookDefinition): void {
