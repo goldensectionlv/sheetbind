@@ -144,6 +144,9 @@ function assertHandler(name: string, rule: ValidationRule): void {
 /** Register once at application startup; per-read rules override registered rules. */
 export function registerValidationRule(name: string, rule: ValidationRule): void {
   assertHandler(name, rule)
+  if (registered.has(name)) {
+    throw new SyntaxError(`Validation rule is already registered: ${name}`)
+  }
   registered.set(name, { ...rule })
 }
 
@@ -159,22 +162,17 @@ export function createValidation(options: ValidationOptions = {}) {
       throw new SyntaxError('Runtime validation messages must be strings or functions')
     }
   }
-  const unknownRules = new Set<string>()
   return function prepare(validation: Validation = [], messages: Readonly<Record<string, string>> = {}): ValidateValue {
-    const chain = parseValidation(validation).flatMap((use, index) => {
+    const chain = parseValidation(validation).map((use, index) => {
       const handler = rules.get(use.rule)
       if (!handler) {
-        if (!unknownRules.has(use.rule)) {
-          console.warn(`[sheetbind] Unknown validation rule "${use.rule}" was skipped`)
-          unknownRules.add(use.rule)
-        }
-        return []
+        throw new SyntaxError(`Unknown validation rule: ${use.rule}`)
       }
       const args = use.args ?? []
       if ((handler.validateArgs ? handler.validateArgs(args) : args.length === 0) !== true) {
         throw new SyntaxError(`Invalid arguments for validation rule: ${use.rule}`)
       }
-      return [{ use, args, handler, index }]
+      return { use, args, handler, index }
     })
     return function validate(value, context) {
       for (const { use, args, handler, index } of chain) {

@@ -75,32 +75,32 @@ it('renders values and empty repeats without looking up or executing validation 
   }
 })
 
-it('warns once per unknown rule on reading and keeps known rules and their original indexes', async () => {
-  const config = await importAuthoredWorkbook(book => {
-    book.addWorksheet('Data').addRows([
-      ['{#items}'],
-      ['{.value}{@validate:external:{"key":1}|number|external|required|min:1}'],
-      ['{/items}'],
-    ])
-  })
+it('rejects unknown rules before reading, including empty repeats, and preserves occurrence indexes', async () => {
+  const config = await importAuthoredWorkbook(book => book.addWorksheet('Data').addRows([
+    ['{#items}'], ['{.value}{@validate:external:{"key":1}|number|external|required|min:1}'], ['{/items}'],
+  ]))
+  for (const items of [[], [{ value: 0 }, { value: 2 }]]) {
+    const bytes = await renderWorkbookForm(config, { items })
+    await expect(readWorkbookForm(config, bytes)).rejects.toMatchObject({ issues: [{
+      phase: 'template', code: 'invalid-rules', sheetName: 'Data', address: 'A2', message: 'Unknown validation rule: external',
+    }] })
+  }
   const bytes = await renderWorkbookForm(config, { items: [{ value: 0 }, { value: 2 }] })
-  const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-  try {
-    expect(await readWorkbookForm(config, bytes)).toMatchObject({ success: false, issues: [
-      { rule: 'min', index: 4, path: '$data.items[0].value' },
-    ] })
-    expect(warn).toHaveBeenCalledExactlyOnceWith('[sheetbind] Unknown validation rule "external" was skipped')
-    warn.mockClear()
-    const runtime = { validationRules: { external: { validateArgs: () => true, validate: () => false, message: 'Domain check failed' } } }
-    expect(await readWorkbookForm(config, bytes, runtime)).toMatchObject({ success: false, issues: [
-      { rule: 'external', index: 0, message: 'Domain check failed' },
-      { rule: 'external', index: 0, message: 'Domain check failed' },
-    ] })
-    expect(warn).not.toHaveBeenCalled()
-  }
-  finally {
-    warn.mockRestore()
-  }
+  const handler = { validateArgs: () => true, validate: () => true }
+  expect(await readWorkbookForm(config, bytes, { validationRules: { external: handler } })).toMatchObject({ success: false,
+    issues: [{ rule: 'min', index: 4, path: '$data.items[0].value' }],
+  })
+  const runtime = { validationRules: { external: { ...handler, validate: () => false, message: 'Domain check failed' } } }
+  expect(await readWorkbookForm(config, bytes, runtime)).toMatchObject({ success: false, issues: [
+    { rule: 'external', index: 0, message: 'Domain check failed' },
+    { rule: 'external', index: 0, message: 'Domain check failed' },
+  ] })
+})
+
+it('rejects a misspelled required rule instead of accepting a blank field', async () => {
+  const config = await importAuthoredWorkbook(book => book.addWorksheet('Input').getCell('A1').value = '{amount}{@validate:requred|number}')
+  const bytes = await renderWorkbookForm(config, { amount: null })
+  await expect(readWorkbookForm(config, bytes)).rejects.toThrow('Unknown validation rule: requred')
 })
 
 it('keeps malformed handlers, known arguments and execution failures separate from value issues', async () => {

@@ -96,3 +96,15 @@ it('reads an issued form with updated field paths and validation instead of requ
   const source = await importAuthoredWorkbook(book => book.addWorksheet('Data').getCell('A1').value = '{current}{@validate:min:3}')
   expect(await readWorkbookForm(source, bytes)).toMatchObject({ success: false, issues: [{ phase: 'value', path: '$data.current', code: 'min' }] })
 })
+
+it('rejects duplicate registrations without replacing the original handlers', async () => {
+  registerFormatter('testDuplicateFormatter', value => `First: ${value}`)
+  expect(() => registerFormatter('testDuplicateFormatter', () => 'Replaced')).toThrow('already registered')
+  registerValidationRule('testDuplicateRule', { validate: () => false, message: 'Original rule' })
+  expect(() => registerValidationRule('testDuplicateRule', { validate: () => true })).toThrow('already registered')
+  const template = await importAuthoredWorkbook(book => book.addWorksheet('Input').getCell('A1').value = '{value | testDuplicateFormatter}{@validate:testDuplicateRule}')
+  const bytes = await renderWorkbookForm(template, { value: 'data' })
+  expect((await openWorkbook(bytes)).worksheets[0].getCell('A1').value).toBe('First: data')
+  expect(await readWorkbookForm(template, bytes)).toMatchObject({ success: false, issues: [{ message: 'Original rule' }] })
+  expect(await readWorkbookForm(template, bytes, { validationRules: { testDuplicateRule: { validate: () => true } } })).toEqual({ success: true, data: { value: 'First: data' } })
+})

@@ -82,7 +82,7 @@ Value failures contain both `data` and `issues`, so the application can show the
 
 All list and choice sources are embedded in the issued file, including row-local arrays. Reading only uses `validationRules` and `validationMessages` from the options; dictionaries and context are not read inputs. Keep the original template.
 
-An unknown validation rule is skipped with one `console.warn` per rule name per read. Known rules still run in their original order. Invalid arguments for a known rule and errors inside a supplied handler remain errors.
+An unknown validation rule stops reading with a template error, including fields in empty repeats. Register its handler or supply it through `validationRules` for the read call. Rules run in their original order. Invalid arguments for a known rule and errors inside a supplied handler remain errors.
 
 ## Inspect a template without data
 
@@ -201,4 +201,4 @@ declare function registerFormatter(name: string, formatter: Formatter): void
 declare function registerValidationRule(name: string, rule: ValidationRule): void
 ```
 
-Registrations belong to the loaded package instance; register once at application startup. Formatters run during rendering and layout; validators run only on read. Per-call `validationRules` override global rules. Built-in names are reserved; registering an application name again replaces its handler. `Formatter` receives `TemplateValue` and `readonly JsonValue[]` and synchronously returns `TemplateValue`. `FieldRules.format` accepts a pipeline string or `FormatterUse` array (`formatter`, optional `args`); the configuration type is `Formatting`. See [examples](./fields.md#formatting-values).
+Registrations belong to the loaded package instance; register once at application startup. Formatters run during rendering and layout; validators run only on read. Per-call `validationRules` override global rules. Built-in names are reserved; duplicate registration of an application name is an error. `Formatter` receives `TemplateValue` and `readonly JsonValue[]` and synchronously returns `TemplateValue`. `FieldRules.format` accepts a pipeline string or `FormatterUse` array (`formatter`, optional `args`); the configuration type is `Formatting`. See [examples](./fields.md#formatting-values).

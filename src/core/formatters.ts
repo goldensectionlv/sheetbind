@@ -82,6 +82,9 @@ export function registerFormatter(name: string, formatter: Formatter): void {
   if (typeof formatter !== 'function') {
     throw new TypeError(`Invalid formatter: ${name}`)
   }
+  if (registered.has(name)) {
+    throw new SyntaxError(`Formatter is already registered: ${name}`)
+  }
   registered.set(name, formatter)
 }
 

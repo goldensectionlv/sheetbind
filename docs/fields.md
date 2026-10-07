@@ -24,7 +24,7 @@ registerValidationRule('twoLetters', {
 })
 ```
 
-The cell `{code}{@validate:twoLetters}` uses this rule in `readWorkbookForm(template, bytes)` without per-call handlers. Per-call `validationRules` override global registrations. Built-in names cannot be replaced; registering an application name again replaces its handler. Registration belongs to the loaded package instance; register separately in another process or worker.
+The cell `{code}{@validate:twoLetters}` uses this rule in `readWorkbookForm(template, bytes)` without per-call handlers. Per-call `validationRules` override global registrations. Built-in names cannot be replaced; duplicate registration of an application name is an error. Registration belongs to the loaded package instance; register separately in another process or worker.
 
 ## Built-in rules
 
@@ -261,7 +261,7 @@ The script issues `rules-form.xlsx` and reads the saved file. Reading succeeds f
 
 `validateArgs` checks the tag's arguments; a rule without it accepts no arguments. `validate` must synchronously return `true` or `false`. Empty values are skipped by default; set `skipEmpty: false` on the handler to check them. Do not mutate the data or perform asynchronous requests inside the handler.
 
-The XLSX stores the rule's name and arguments. Its implementation stays in the application: supply `validationRules` only when reading a form. An unknown rule is skipped with a console warning; other rules still run. Built-in rules cannot be replaced. Handler types and execution errors are covered in the [API](./api.md).
+The XLSX stores the rule's name and arguments. Its implementation stays in the application: supply `validationRules` only when reading a form. An unknown rule stops reading with a template error; provide its handler before reading. Built-in rules cannot be replaced. Handler types and execution errors are covered in the [API](./api.md).
 
 Next: [issue a form, fill it in Excel, and read the result](./forms.md).
 
@@ -305,7 +305,7 @@ registerFormatter('suffix', (value, args) => String(value ?? '') + String(args[0
 
 Built-in formatters preserve `null`, empty strings and whitespace-only text. A blank answer does not become `0` or the negative label; actual `0` and `false` still get formatted.
 
-Pipelines run left to right. Each handler receives a value and JSON argument array and synchronously returns a string, finite number, boolean or `null`. Unknown formatters, handler failures and invalid results stop rendering. Built-in names are reserved; registering an application name again replaces its handler. Register separately for each loaded package instance, process or worker.
+Pipelines run left to right. Each handler receives a value and JSON argument array and synchronously returns a string, finite number, boolean or `null`. Unknown formatters, handler failures and invalid results stop rendering. Built-in names are reserved; duplicate registration of an application name is an error. Register separately for each loaded package instance, process or worker.
 
 Formatters **never run on read** and are not inverted: a cell formatted with `bool_replace` returns the text “Yes”, not a boolean. Use `@choice` to return a key or object from a display label. Formatting cannot share a cell with `@choice` or `@list`. Handler registrations are not stored in XLSX.
 
