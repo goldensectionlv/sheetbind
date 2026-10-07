@@ -82,7 +82,7 @@ Keep the group names and leave contacts blank. Save a separate file named **`reg
 
 <div class="workbook-preview workbook-preview-wide" tabindex="0" role="region" aria-label="Completed registration with three participants">
 
-[![Alex and Sam belong to Friends; Taylor belongs to Family. Row 9 is blank and Sam has zero sessions.](/images/example-registration-completed.png)](/images/example-registration-completed.png)
+[![Alex and Sam belong to Friends; Taylor belongs to Family. Row 8 is blank and Sam has zero sessions.](/images/example-registration-completed.png)](/images/example-registration-completed.png)
 
 </div>
 

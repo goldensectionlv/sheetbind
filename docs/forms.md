@@ -245,6 +245,6 @@ Reissue forms after changing template bindings, rules, or structure. Keep the or
 
 ## File structure and version
 
-Forms do not prepend a control row or store a template hash. Hidden repeat and sheet-end boundaries describe the current records and allow layout checks. Reading uses bindings and rules from the supplied template without requiring a matching hash. Applications own document type and version checks. Reissue files with the older control-marker format.
+Hidden repeat and sheet-end boundaries describe the records and allow layout checks. The control column sits beyond the complete template, including content in empty repeats. Preserve these control cells in the issued form. Applications own document type and version checks; reading uses the bindings and rules of the supplied template.
 
-The control column is reserved beyond the complete template, including content in empty repeats. For templates that fit within the first 256 columns (`A:IV`), it remains `IW`, so this change does not require reissuing their forms. Reissue an older, wider form only if its control column was chosen from the rendered records and differs from the column reserved by the complete template. The downloadable examples are regenerated from the current code when the documentation is built.
+Use the same Sheetbind build to issue and read a form. Downloadable examples are generated when the documentation is built: use the matching package build described in the [installation guide](./getting-started.md).

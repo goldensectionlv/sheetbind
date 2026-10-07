@@ -6,18 +6,20 @@
 
 - Template formatting pipelines with built-in `float`, `bool_replace` and `format_date`, plus application formatters registered through `registerFormatter`.
 - Global validation registration through `registerValidationRule`. Per-read `validationRules` override global rules; validation still runs only on read.
-- Row-local choice sources such as `.answers` now work in forms, including copied and reordered whole rows, without application record keys.
+- Row-local choice sources such as `.answers` work when filling the issued rows. Changing their membership or order requires issuing a new form.
 - Key choices can use `emptySource=input` to accept ordinary input for an empty source.
 
 ### Changed
 
+- Removed the unused `ResolvedChoice` type export; public layouts expose their actual cell choice shape.
+- ESM and CommonJS entry points share one runtime and one type declaration, so templates and registered handlers work across both loaders.
 - Omitted, `undefined` and `null` choice sources in data behave like empty arrays, including nested root and row-local paths. `emptySource=input` allows free input for these sources.
 - Missing named dictionaries emit one warning per name per call and leave fields as ordinary input without dictionary lookup or list validation. Field validation still applies; supplied dictionaries retain their shape and value checks.
 - Runtime data and dictionaries accept undefined object properties at any depth as absent values. Saved choice-source snapshots omit those properties without changing caller data. Stored JSON definitions remain strict; undefined array items remain invalid.
 - Omitted and `null` repeat sources behave like empty arrays, including nested and column repeats. Forms retain the same blank input row as for an explicit empty array. Other non-array values and non-object items remain errors.
 - Forms no longer insert a first row or store a template hash. Reading checks actual record boundaries and merged fields against the supplied template; application code owns template identity/version checks. Reissue forms produced by earlier versions: the form carrier is now version 4.
 - Rendering and layout resolution no longer execute `@validate` or require its handlers. Supply `validationRules` and `validationMessages` only when reading a form.
-- Unknown validation rules are skipped with one warning per rule name per read. Known rules retain their order and original indexes; invalid known arguments and handler failures remain errors.
+- Unknown validation rules stop reading with a template error, including fields in empty repeats. Rules retain their order and original indexes; invalid known arguments and handler failures remain errors.
 - Form reading uses the dictionaries embedded at issuance for lists, key choices and object choices. `readWorkbookForm` no longer accepts `dictionaries` or `context`; validation handlers and messages remain supported. Reissue older forms whose list or key sources were not embedded.
 
 ## 0.2.0 — 2026-10-06

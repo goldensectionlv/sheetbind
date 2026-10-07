@@ -34,6 +34,8 @@ The docs commands `dev`, `check` and `build` run `docs:prepare` first. It prepar
 
 ## Publishing the documentation
 
+The site follows the source revision, including unreleased changes. Installation instructions and downloadable forms must use a package built from that revision. After publishing a matching npm release, update the installation guide and README together; package verification checks a local archive and does not prove compatibility with an older npm release.
+
 The site is available at [goldensectionlv.github.io/sheetbind/](https://goldensectionlv.github.io/sheetbind/). The `Documentation` workflow builds and publishes it after changes are merged into `main`. It can also be started manually from GitHub Actions on `main`.
 
 The build uses `pnpm docs:check` and `pnpm docs:build`, including the downloadable examples. GitHub Pages serves `docs/.vitepress/dist` through GitHub Actions. Set Pages **Build and deployment → Source** to **GitHub Actions** when configuring the repository.
@@ -69,7 +71,7 @@ When changing the item table:
 3. Save matching PNGs with the same base names in `docs/public/images/`. Keep column letters and row numbers visible. Display the existing formula text in the template, and recalculated values in the results. Do not replace formulas in downloadable files to make an image.
 4. Compare tags, values, formatting and addresses with the workbooks. Check totals of 22, 10 and 0 for three, one and zero items. Check both locales on wide and narrow screens.
 
-For the form, refresh `form-issued.png` from `issued.xlsx` and `form-completed.png` from `completed.xlsx`: sheet `Input`, range A2:C8. Preserve hidden rows and visible row numbers. In the completed form, row 5 is empty, B4 contains 2, B6 contains 0, and C4 contains the text `2026-01-15`.
+For the form, refresh `form-issued.png` from `issued.xlsx` and `form-completed.png` from `completed.xlsx`: sheet `Input`, range A1:C7. Preserve hidden rows and visible row numbers. In the completed form, row 4 is empty, B3 contains 2, B5 contains 0, and C3 contains the text `2026-01-15`.
 
 For these examples, use files from `docs/public/examples/walkthroughs/` and save PNGs with an `example-` prefix:
 
@@ -78,9 +80,9 @@ For these examples, use files from `docs/public/examples/walkthroughs/` and save
 | `budget-template.xlsx`, `budget.xlsx` | `Budget` | A1:C12, A1:E6 |
 | `study-plan-template.xlsx`, `study-plan.xlsx` | `Plan` | A1:C11, A1:C18 |
 | `registration-template.xlsx` | `Registration` | A1:D10 |
-| `registration-issued.xlsx`, `registration-completed.xlsx` | `Registration` | A2:D23, with control rows hidden |
+| `registration-issued.xlsx`, `registration-completed.xlsx` | `Registration` | A1:D22, with control rows hidden |
 
-Check the budget total of 885 and learning-plan total of 135 after recalculation. In registration, keep row 9 blank and C10 equal to 0; compare the completed workbook with `registration-completed.json`.
+Check the budget total of 885 and learning-plan total of 135 after recalculation. In registration, keep row 8 blank and C9 equal to 0; compare the completed workbook with `registration-completed.json`.
 
 Images are updated manually; `docs:prepare` does not redraw them. The template and form guides import code and JSON directly from the example files prepared by that command.
 

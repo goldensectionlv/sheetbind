@@ -126,7 +126,7 @@ for (const count of [0, 1, 3]) {
   }
 }
 
-// Issue twenty empty lines. Persist this exact template and dictionary for the return=key reader.
+// Issue twenty empty lines. Keep the template for reading; the form embeds its dictionaries.
 const formBook = new ExcelJS.Workbook()
 const formSheet = formBook.addWorksheet('Input')
 formSheet.addRows([
@@ -145,7 +145,6 @@ Reflect.set(formSheet.getCell('A3'), 'dataValidation', {
 })
 const dictionaries = { Products: [{ id: '001', name: 'Paper' }, { id: '002', name: 'Paper' }] }
 await save('form-template.xlsx', formBook)
-await writeFile(resolve(directory, 'issued-dictionaries.json'), JSON.stringify(dictionaries, null, 2))
 const formTemplate = await importWorkbookXlsx(await readFile(resolve(directory, 'form-template.xlsx')))
 const issued = await renderWorkbookForm(formTemplate, { items: Array.from({ length: 20 }, () => ({})) }, { dictionaries })
 await writeFile(resolve(directory, 'issued.xlsx'), issued)

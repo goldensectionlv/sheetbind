@@ -6,19 +6,24 @@
 
 ## 1. Установите пакет
 
-Создайте приложение и установите Sheetbind из npm, ExcelJS и средство запуска TypeScript:
+Эти страницы и скачиваемые файлы описывают ещё не опубликованные изменения. Пакет `0.2.0` из npm им не соответствует. Соберите архив из той же рабочей копии Sheetbind, что и документацию. Из корня репозитория:
 
 ```sh
-mkdir sheetbind-example
-cd sheetbind-example
+pnpm install --frozen-lockfile
+pnpm pack --out ./temp/sheetbind.tgz
+```
+
+Создайте папку `sheetbind-example` вне рабочей копии Sheetbind и скопируйте в неё `temp/sheetbind.tgz`. Из этой новой папки установите архив, ExcelJS и средство запуска TypeScript:
+
+```sh
 pnpm init --init-type module
-pnpm add sheetbind@0.2.0 exceljs@4.4.0
+pnpm add ./sheetbind.tgz exceljs@4.4.0
 pnpm add -D tsx
 ```
 
 `--init-type module` добавляет `"type": "module"` в `package.json`: примеры используют `import` и `await` на верхнем уровне. Для существующего приложения установите зависимости в нём и используйте его настройки модулей. ExcelJS — peer dependency: его нужно установить рядом с Sheetbind.
 
-Дальнейшие команды выполняйте из `sheetbind-example`.
+Дальнейшие команды выполняйте из `sheetbind-example`. Используйте одну сборку пакета для выдачи и чтения форм.
 
 ## 2. Создайте шаблон
 

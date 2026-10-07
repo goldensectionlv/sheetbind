@@ -82,7 +82,7 @@ pnpm exec tsx registration-issue.ts
 
 <div class="workbook-preview workbook-preview-wide" tabindex="0" role="region" aria-label="Заполненная регистрация с тремя участниками">
 
-[![Alex и Sam относятся к Friends, Taylor — к Family. Строка 9 пустая, у Sam число занятий равно нулю.](/images/example-registration-completed.png)](/images/example-registration-completed.png)
+[![Alex и Sam относятся к Friends, Taylor — к Family. Строка 8 пустая, у Sam число занятий равно нулю.](/images/example-registration-completed.png)](/images/example-registration-completed.png)
 
 </div>
 
