@@ -5,8 +5,8 @@ import { TemplateError } from '../core/template'
 import type { DataReference } from '../core/template'
 import { workbookCells, workbookRegions, WorkbookAxis } from '../grid/workbook'
 import type { WorkbookBody, WorkbookCell, WorkbookDefinition, WorkbookRegion } from '../grid/workbook'
-import { dataPath, readData, writeData } from './records'
-import type { DataPath } from './records'
+import { dataPath, readData, writeData } from './form-records'
+import type { DataPath } from './form-records'
 
 export interface WorkbookFormIssue {
   readonly rule?: string

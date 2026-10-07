@@ -5,7 +5,7 @@ import { createValidation, parseValidation, ValidationExecutionError } from '../
 import type { ValidationRule } from '../src/core/validation'
 import { parseFieldTag } from '../src/xlsx/field-tag'
 import { importAuthoredWorkbook, saveWorkbook } from './xlsx'
-import { WorkbookTemplate } from '../src/xlsx/template'
+import { WorkbookTemplate } from '../src/xlsx/workbook-template'
 import { resolveWorkbook, importWorkbookXlsx, renderWorkbookReport } from '../src/xlsx/workbook-template'
 import { readWorkbookForm, renderWorkbookForm } from '../src/xlsx/workbook-form'
 

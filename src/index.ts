@@ -13,10 +13,10 @@ export type { ChoiceRule, ChoiceOption, ResolvedChoice } from './core/choices'
 export type { GridAddress, GridOffset } from './grid/geometry'
 export type { WorkbookCellInstance, WorkbookLayout } from './grid/workbook-layout'
 // Keep an alias: declaration bundlers can turn a re-exported class into a value export.
-export type WorkbookTemplate = import('./xlsx/template').WorkbookTemplate
+export type WorkbookTemplate = import('./xlsx/workbook-template').WorkbookTemplate
 export { importWorkbookXlsx, renderWorkbookReport, resolveWorkbook, workbookDictionarySources } from './xlsx/workbook-template'
 export { renderWorkbookForm, readWorkbookForm } from './xlsx/workbook-form'
-export { inspectWorkbookTemplate } from './xlsx/workbook-inspect'
-export type { WorkbookTemplateFinding } from './xlsx/workbook-inspect'
+export { inspectWorkbookTemplate } from './xlsx/workbook-template'
+export type { WorkbookTemplateFinding } from './xlsx/workbook-template'
 export { workbookChoiceRange } from './xlsx/workbook-choice-fields'
-export type { WorkbookFormIssue, WorkbookFormResult } from './form/workbook'
+export type { WorkbookFormIssue, WorkbookFormResult } from './xlsx/form-definition'

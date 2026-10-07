@@ -2,16 +2,19 @@
 
 This page is for changes to Sheetbind itself. For template behavior and file support, see [templates](./templates.md), [forms](./forms.md) and [Excel and limitations](./xlsx.md).
 
+Sheetbind targets XLSX. DOCX and other formats are outside its architectural requirements. The directories below group current library tasks; they do not define a universal document core with pluggable format implementations.
+
 ## Modules
 
 | Directory | Responsibility | Does not own |
 | --- | --- | --- |
-| `src/core/` | Data references, values, field rules and choices | Cells, XLSX and file I/O |
-| `src/grid/` | Workbook definitions, region contexts and repeats, placement and formula references | XLSX serialization and application state |
-| `src/form/` | Input fields, submitted records, choice decoding and validation | Reading or writing Excel cells |
-| `src/xlsx/` | Tag import, source XLSX content, file writing and form structure in the workbook | Application data loading or business workflows |
+| `src/core/` | Data paths, values, field rules and choice labels | Worksheet traversal and file I/O |
+| `src/grid/` | Workbook model, XLSX coordinates and limits, repeats, placement and formula references | Reading and writing package parts |
+| `src/xlsx/` | Template import, reports, form issuance and reading, native content preservation | Application data loading or business workflows |
 
-`src/index.ts` defines the public package API. An internal export does not become public automatically. ESLint enforces the main dependency boundaries: core is independent of grid, form and XLSX; grid and form do not import the XLSX adapter.
+`src/index.ts` defines the public package API. An internal export does not become public automatically. ESLint separates value rules and geometry from file reading and writing. Forms belong to XLSX and have no separate format-independent layer.
+
+Template import, storage and inspection live in `xlsx/workbook-template.ts`; form issuance and reading live in `xlsx/workbook-form.ts`. Field preparation is in `xlsx/form-definition.ts`, and record operations are in `xlsx/form-records.ts`. Collecting, saving and reading choice sources share `xlsx/workbook-choice-sources.ts`. Separate files for axes, formulas, markers and native XLSX parts correspond to distinct algorithms.
 
 ## Models and ownership
 
@@ -23,7 +26,6 @@ The library has three operations: rendering a report, issuing a form and reading
 | `WorkbookDefinition` | Template bindings, regions and geometry with source cell references | Data resolution, placement, form preparation and diagnostics |
 | `WorkbookData` | Values and repeat instances with concrete data paths | Axis planning and placement; exists only for the current call |
 | `WorkbookPlan` | Sheet plans containing the definition, placed cells, regions, axes and coordinate mapping | Formulas, form control rows and the XLSX writer |
-| `WorkbookFormSubmission` | Fields and records extracted from the returned file | Choice decoding, empty-row removal and validation |
 
 `WorkbookLayout`, returned by `resolveWorkbook`, is an independent public projection of placed cells. It is a consumer result rather than another editable template. The public entry into the current model is tagged XLSX import.
 
@@ -81,7 +83,7 @@ Original template + completed XLSX
           data and value issues
 ```
 
-The XLSX adapter checks the submitted structure and extracts field values with data paths and cell addresses. The submitted cell's format also determines numeric types and precision here, and native dates become ISO strings. Form processing works with this submission, without inspecting ExcelJS cells. It derives the current records from the returned file; it does not match them to original application records.
+Reading checks the submitted structure and extracts field values with data paths and cell addresses. The submitted cell's format determines numeric types and precision, and native dates become ISO strings. Extracted fields are private state within one read operation, not a contract between a form engine and a format adapter. The result is assembled in an object owned by that call without another copy. Current records come from the returned file; they are not matched to original application records.
 
 Markers build expanded region instances directly, together with the empty result structure. Reading does not resolve those empty values as application input or run issuance rules, dictionaries or formula rewriting. Shared placement then checks the expected boundaries and field positions, so copying only part of a record block is still rejected by the same geometry used for issuance.
 
@@ -102,4 +104,4 @@ Choice decoding, empty-row handling and field validation share the final data pa
 - **Form structure and values are separate.** Uploaded values cannot redefine a region. Validation runs on the completed submission; comparison with stored business records belongs to the application.
 - **Locations are added at the format boundary.** Core issues contain data paths and node IDs. The XLSX adapter adds authored addresses to template errors and returned-file addresses to form issues.
 
-The relevant entry points are `xlsx/workbook-template.ts`, `grid/workbook-data.ts`, `grid/workbook-layout.ts`, `xlsx/workbook-form.ts`, `form/workbook-read.ts` and `xlsx/workbook-source.ts`. Keep concrete regression cases in tests; use the [development checks](./development.md) to verify the affected boundary.
+The relevant entry points are `xlsx/workbook-template.ts`, `grid/workbook-data.ts`, `grid/workbook-layout.ts`, `xlsx/workbook-form.ts` and `xlsx/workbook-source.ts`. Keep concrete regression cases in tests; use the [development checks](./development.md) to verify the affected boundary.

@@ -1,4 +1,4 @@
-import { parseDataReference } from '../core/reference'
+import { parseDataReference } from '../core/template'
 import type { ValueExpression } from '../core/template'
 import { parseFieldRules } from '../core/field-rules'
 import type { FieldRules } from '../core/field-rules'

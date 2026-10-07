@@ -1,6 +1,6 @@
 import { isDataObject } from '../core/json'
 import { isBlank } from '../core/validation'
-import { compileDataPath } from '../core/reference'
+import { compileDataPath } from '../core/template'
 import { TemplateError } from '../core/template'
 import type { DataReference, FieldValue, Origin, TemplateIssue, TemplateValue } from '../core/template'
 import { validateList } from '../core/field-rules'

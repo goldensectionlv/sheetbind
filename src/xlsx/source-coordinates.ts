@@ -3,7 +3,7 @@ import type { WorkbookSheetPlan } from '../grid/workbook-layout'
 import { FormulaEdge } from '../grid/workbook-formula'
 import type { FormulaRows } from '../grid/workbook-formula'
 import { columnName, columnNumber } from '../grid/geometry'
-import { formatAddress, formatRange, parseAddress, parseRange } from './addresses'
+import { formatAddress, formatRange, parseAddress, parseRange } from '../grid/geometry'
 import type { GridAddress, GridRange } from '../grid/geometry'
 
 /** Source XLSX coordinates to final XLSX coordinates, including tag removal and form control rows. */

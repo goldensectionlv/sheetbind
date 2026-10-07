@@ -2,27 +2,28 @@ import ExcelJS from 'exceljs'
 import JSZip from 'jszip'
 import { assertInputData } from '../core/json'
 import { validateWorkbookDefinition } from '../grid/workbook-validate'
-import { collectWorkbookDictionarySources, workbookRegions, WORKBOOK_LIMITS } from '../grid/workbook'
+import { collectWorkbookDictionarySources, workbookRegions, WORKBOOK_LIMITS, mapWorkbookPrint, workbookCells } from '../grid/workbook'
 import type { GridRange } from '../grid/geometry'
 import { partitionWorkbookRange } from '../grid/workbook-coordinates'
 import { planWorkbook, resolveWorkbook as resolveDefinition } from '../grid/workbook-layout'
 import type { WorkbookLayout } from '../grid/workbook-layout'
-import type { WorkbookCell, WorkbookRegion, WorkbookRow, WorkbookSheet } from '../grid/workbook'
-import { formatAddress, parseRange } from './addresses'
+import type { WorkbookCell, WorkbookRegion, WorkbookRow, WorkbookSheet, WorkbookDefinition } from '../grid/workbook'
+import { formatAddress, parseRange } from '../grid/geometry'
 import { compileWorkbookSheet } from './workbook-tags'
 import { writeWorkbookPackage } from './workbook-source'
 import { parseDictionaries } from '../core/dictionaries'
 import type { Dictionaries } from '../core/dictionaries'
-import { WorkbookTemplate } from './template'
 import { readWorkbookPrint } from './workbook-print'
-import { mapWorkbookPrint } from '../grid/workbook-print'
-import { FormulaEdge, mapWorkbookFormulaRows } from '../grid/workbook-formula'
+import { FormulaEdge, mapWorkbookFormulaRows, copyWorkbookFormula, parseWorkbookFormula } from '../grid/workbook-formula'
 import type { FormulaRows } from '../grid/workbook-formula'
-import { readWorkbookFormula } from './workbook-formula'
 import { readSourceContent } from './source-metadata'
 import { TaggedXlsxError, withTemplateLocations } from './tagged-template'
 import { loadWorkbook } from './workbook-input'
 import { readWorkbookResources, workbookParts } from './workbook-resources'
+import type { WorkbookResourceSource } from './workbook-resources'
+import type { Cell } from 'exceljs'
+import { prepareFormatting } from '../core/formatters'
+import type { TaggedXlsxIssue } from './tagged-template'
 
 function unsupported(what: string): never {
   throw new RangeError(`${what} is outside the supported template model`)
@@ -191,4 +192,67 @@ export async function renderWorkbookReport(template: WorkbookTemplate, data: unk
   assertInputData(data)
   const plan = withTemplateLocations(definition, () => planWorkbook(definition, data, { dictionaries }))
   return writeWorkbookPackage({ source, plan, dictionaries, resources })
+}
+/** An imported XLSX and its compiled bindings, owned by the library. */
+export class WorkbookTemplate {
+  readonly #content: { readonly definition: WorkbookDefinition, readonly source: Uint8Array, readonly resources: WorkbookResourceSource }
+
+  constructor(definition: WorkbookDefinition, source: Uint8Array, resources: WorkbookResourceSource) {
+    this.#content = { definition, source: Uint8Array.from(source), resources }
+  }
+
+  static content(template: WorkbookTemplate) {
+    if (!(template instanceof WorkbookTemplate)) {
+      throw new TypeError('Load a tagged XLSX with importWorkbookXlsx first')
+    }
+    return template.#content
+  }
+}
+/** Materialize shared formulas using string-aware reference offsets. */
+function readWorkbookFormula(cell: Cell): string {
+  const value = cell.value
+  if (!value || typeof value !== 'object' || 'shareType' in value && value.shareType !== 'shared') {
+    throw new SyntaxError('Expected an ordinary or shared formula')
+  }
+  if ('formula' in value) {
+    return parseWorkbookFormula(value.formula)
+  }
+  if ('sharedFormula' in value && typeof value.sharedFormula === 'string') {
+    const master = cell.worksheet.getCell(value.sharedFormula)
+    const source = master.value
+    if (source && typeof source === 'object' && 'formula' in source) {
+      return copyWorkbookFormula(parseWorkbookFormula(source.formula), Number(cell.row) - Number(master.row), Number(cell.col) - Number(master.col))
+    }
+  }
+  throw new SyntaxError('Shared formula master is missing')
+}
+export interface WorkbookTemplateFinding extends TaggedXlsxIssue {
+  readonly severity: 'error' | 'warning'
+}
+
+/** Check render dependencies without data, formatter execution or value validation. */
+export function inspectWorkbookTemplate(template: WorkbookTemplate, options: { readonly dictionaries?: readonly string[] } = {}): readonly WorkbookTemplateFinding[] {
+  const findings: WorkbookTemplateFinding[] = []
+  const known = options.dictionaries && new Set(options.dictionaries)
+  for (const sheet of WorkbookTemplate.content(template).definition.sheets) {
+    for (const cell of workbookCells(sheet)) {
+      const location = { phase: 'template' as const, nodeId: cell.id, path: cell.xlsx?.address ?? cell.id, sheetName: sheet.name, address: cell.xlsx?.address }
+      if (cell.rules?.format) {
+        try {
+          prepareFormatting(cell.rules.format)
+        }
+        catch (error) {
+          findings.push({ ...location, code: 'invalid-format', severity: 'error', message: (error as Error).message })
+        }
+      }
+      const choice = cell.rules?.choice?.source
+      const dependencies = new Set([cell.rules?.list, choice && 'dictionary' in choice ? choice.dictionary : undefined])
+      for (const name of dependencies) {
+        if (name && known && !known.has(name)) {
+          findings.push({ ...location, code: 'unknown-dict', severity: 'warning', message: `Unknown dictionary: ${name}` })
+        }
+      }
+    }
+  }
+  return findings
 }

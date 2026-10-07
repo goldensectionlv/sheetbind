@@ -26,7 +26,7 @@ export class TaggedXlsxError extends TemplateError {
   }
 }
 
-/** Add authored locations at the XLSX boundary; execution keeps format-independent node identities. */
+/** Locate execution errors in the authored template using their cell and region IDs. */
 export function withTemplateLocations<T>(template: WorkbookDefinition, run: () => T): T {
   try {
     return run()

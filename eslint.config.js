@@ -54,18 +54,14 @@ export default defineConfig(
   },
   {
     files: ['src/core/**/*.ts'],
-    rules: { 'no-restricted-imports': ['error', { patterns: [{ regex: '^(?!\\./(?:template|json|reference|field-rules|validation|rule-syntax|dictionaries|choices|formatters)$)', message: 'Core semantics may depend only on core primitives.' }] }] },
+    rules: { 'no-restricted-imports': ['error', { patterns: [{ regex: '^(?!\\./[a-z-]+$)', message: 'Value rules should not depend on workbook processing or I/O.' }] }] },
   },
   {
     files: ['src/grid/workbook*.ts'],
     rules: { 'no-restricted-imports': ['error', { patterns: [{ regex: '^(?!\\./[a-z-]+$|\\.\\./core/[a-z-]+$)', message: 'Workbook layout depends on core and grid, not XLSX or UI.' }] }] },
   },
   {
-    files: ['src/form/**/*.ts'],
-    rules: { 'no-restricted-imports': ['error', { patterns: [{ regex: '^(?!\\./(?:records|workbook(?:-[a-z]+)*)$|\\.\\./(?:core|grid)/[a-z-]+$)', message: 'Form semantics must not depend on XLSX transport or UI.' }] }] },
-  },
-  {
     files: ['src/xlsx/**/*.ts'],
-    rules: { 'no-restricted-imports': ['error', { patterns: [{ regex: '^(?!\\./[a-z-]+$|\\.\\./(?:core|grid|form)/[a-z-]+$|(?:exceljs|jszip|node:crypto)$)', message: 'XLSX transport uses core/grid/form and explicit I/O dependencies.' }] }] },
+    rules: { 'no-restricted-imports': ['error', { patterns: [{ regex: '^(?!\\./[a-z-]+$|\\.\\./(?:core|grid)/[a-z-]+$|(?:exceljs|jszip)$)', message: 'Workbook processing uses value rules, geometry and explicit XLSX dependencies.' }] }] },
   },
 )

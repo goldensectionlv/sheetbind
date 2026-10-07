@@ -1,6 +1,6 @@
 import type JSZip from 'jszip'
 import type { GridRange } from '../grid/geometry'
-import { formatAddress, parseAddress, parseRange } from './addresses'
+import { formatAddress, parseAddress, parseRange } from '../grid/geometry'
 import { sourceFormula } from './source-coordinates'
 import type { SourceCoordinates } from './source-coordinates'
 import { decodeXml, encodeXml, resolvePart, setXmlAttributes, xmlAttributes, xmlElements } from './xml'

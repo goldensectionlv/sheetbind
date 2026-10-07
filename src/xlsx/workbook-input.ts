@@ -1,6 +1,6 @@
 import ExcelJS from 'exceljs'
 import JSZip from 'jszip'
-import { parseAddress, parseRange, XLSX_MAX_ROW } from './addresses'
+import { parseAddress, parseRange, XLSX_MAX_ROW } from '../grid/geometry'
 import { decodeXstring } from './report-text'
 import { workbookParts } from './workbook-resources'
 import { decodeXml, encodeXml, xmlAttributes, xmlElements } from './xml'

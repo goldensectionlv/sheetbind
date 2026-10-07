@@ -1,7 +1,7 @@
 import type { ChoiceRule } from '../core/choices'
 import { createChoiceResolver } from '../core/choices'
 import type { Dictionaries } from '../core/dictionaries'
-import { createWorkbookChoiceDisplay } from '../grid/workbook-choice-display'
+import { createWorkbookChoiceDisplay } from '../core/choices'
 import type { WorkbookResources } from './workbook-resources'
 import type { WriteWorkbookListColumn } from './workbook-lists'
 

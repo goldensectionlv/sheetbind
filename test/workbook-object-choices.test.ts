@@ -6,7 +6,7 @@ import { readWorkbookForm, renderWorkbookForm } from '../src/xlsx/workbook-form'
 import { workbookChoiceRange } from '../src/xlsx/workbook-choice-fields'
 import { createChoiceResolver } from '../src/core/choices'
 import { saveWorkbook, editExample, importAuthoredWorkbook } from './xlsx'
-import { parseRange } from '../src/xlsx/addresses'
+import { parseRange } from '../src/grid/geometry'
 
 async function load(bytes: Buffer) {
   const book = new ExcelJS.Workbook()

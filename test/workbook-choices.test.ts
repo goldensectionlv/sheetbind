@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest'
 import ExcelJS from 'exceljs'
 import { definition, data, declaredData, dictionaries } from '../examples/choices/definition'
-import { WorkbookTemplate } from '../src/xlsx/template'
+import { WorkbookTemplate } from '../src/xlsx/workbook-template'
 import { editExample, importAuthoredWorkbook } from './xlsx'
 import { workbookCells } from '../src/grid/workbook'
 import { workbookDictionarySources, resolveWorkbook, importWorkbookXlsx, renderWorkbookReport } from '../src/xlsx/workbook-template'

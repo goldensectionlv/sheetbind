@@ -2,7 +2,7 @@ import ExcelJS from 'exceljs'
 import JSZip from 'jszip'
 import { expect, it } from 'vitest'
 import { importWorkbookXlsx, renderWorkbookForm, renderWorkbookReport, readWorkbookForm } from '../src/index'
-import { formatAddress, parseRange } from '../src/xlsx/addresses'
+import { formatAddress, parseRange } from '../src/grid/geometry'
 import { xmlAttributes, xmlElements } from '../src/xlsx/xml'
 import { saveWorkbook } from './xlsx'
 

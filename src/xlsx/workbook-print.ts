@@ -1,7 +1,7 @@
 import type ExcelJS from 'exceljs'
 import type JSZip from 'jszip'
-import type { WorkbookPrint } from '../grid/workbook-print'
-import { formatAddress, parseRange } from './addresses'
+import type { WorkbookPrint } from '../grid/workbook'
+import { formatAddress, parseRange } from '../grid/geometry'
 import { decodeXml, encodeXml, xmlAttributes } from './xml'
 import { decodeXstring, protect } from './report-text'
 

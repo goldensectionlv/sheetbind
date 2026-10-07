@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import * as project from '../examples/regions/nested'
 import { workbookCells, workbookRegions, workbookRows } from '../src/grid/workbook'
-import { expandWorkbookScopes } from '../src/form/workbook'
+import { expandWorkbookScopes } from '../src/xlsx/form-definition'
 import type { WorkbookDefinition } from '../src/grid/workbook'
 import { resolveWorkbook as resolveDefinition } from '../src/grid/workbook-layout'
 import { resolveWorkbook, renderWorkbookReport } from '../src/xlsx/workbook-template'
-import { WorkbookTemplate } from '../src/xlsx/template'
+import { WorkbookTemplate } from '../src/xlsx/workbook-template'
 import { importAuthoredWorkbook, openWorkbook } from './xlsx'
 
 const definition = WorkbookTemplate.content(project.definition).definition

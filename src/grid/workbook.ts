@@ -1,8 +1,8 @@
+import { WORKBOOK_LIMITS } from './geometry'
 import { TemplateError } from '../core/template'
 import type { DataReference, ValueExpression } from '../core/template'
 import type { GridAddress, GridOffset, GridRange } from './geometry'
 import type { FieldRules } from '../core/field-rules'
-import type { WorkbookPrint } from './workbook-print'
 import type { WorkbookFormula } from './workbook-formula'
 
 export type WorkbookValue = ValueExpression | WorkbookFormula
@@ -48,8 +48,7 @@ export interface WorkbookSheet extends WorkbookBody {
 }
 /** Internal bindings and placement compiled from a workbook. */
 export interface WorkbookDefinition { readonly sheets: readonly WorkbookSheet[] }
-// Coordinates are bounded only by the XLSX format represented by this workbook.
-export const WORKBOOK_LIMITS = { rows: 1_048_576, columns: 16_384 } as const
+export { WORKBOOK_LIMITS } from './geometry'
 
 export function workbookIssue(code: string, nodeId: string, message: string, path = nodeId, phase: 'template' | 'data' = 'template'): never {
   throw new TemplateError([{ phase, code, nodeId, path, message }])
@@ -85,4 +84,27 @@ export function collectWorkbookDictionarySources(template: WorkbookDefinition): 
 export function intersects(a: Pick<WorkbookCell, 'at' | 'size'>, b: Pick<WorkbookCell, 'at' | 'size'>): boolean {
   return a.at.row < b.at.row + b.size.rows && b.at.row < a.at.row + a.size.rows
     && a.at.column < b.at.column + b.size.columns && b.at.column < a.at.column + a.size.columns
+}
+export interface WorkbookPrint {
+  readonly area?: GridRange
+  readonly repeatRows?: { readonly start: number, readonly end: number }
+}
+
+/** Print ranges follow the same placement as their worksheet contents. */
+export function mapWorkbookPrint(print: WorkbookPrint | undefined, coordinates: {
+  rowStart: (row: number) => number
+  rowEnd?: (row: number) => number
+  columnStart?: (column: number) => number
+  columnEnd?: (column: number) => number
+}): WorkbookPrint | undefined {
+  if (!print) {
+    return undefined
+  }
+  const { rowStart, rowEnd = rowStart, columnStart = column => column, columnEnd = columnStart } = coordinates
+  const area = print.area ? { start: { row: rowStart(print.area.start.row), column: columnStart(print.area.start.column) }, end: { row: rowEnd(print.area.end.row), column: columnEnd(print.area.end.column) } } : undefined
+  const repeatRows = print.repeatRows ? { start: rowStart(print.repeatRows.start), end: rowEnd(print.repeatRows.end) } : undefined
+  return {
+    ...(area && area.end.row >= area.start.row && area.end.column >= area.start.column ? { area } : {}),
+    ...(repeatRows && repeatRows.end >= repeatRows.start ? { repeatRows } : {}),
+  }
 }
