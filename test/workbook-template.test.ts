@@ -108,13 +108,25 @@ describe('imported XLSX ownership', () => {
 })
 
 describe('native XLSX preservation', () => {
-  it('renders a workbook without a style part and preserves form value types', async () => {
+  it.each(['missing part', 'empty part', 'missing cellXfs', 'empty cellXfs'])('renders a workbook with %s and preserves form value types', async styles => {
     const book = new ExcelJS.Workbook()
-    book.addWorksheet('Input').addRow(['{code}{@validate:string}', '{amount}', '{enabled}', '{status}{@list:Statuses}'])
+    const input = book.addWorksheet('Input')
+    input.addRow(['{code}{@validate:string}', '{amount}', '{enabled}', '{status}{@list:Statuses}'])
+    if (styles.endsWith('cellXfs')) {
+      input.addConditionalFormatting({ ref: 'B1', rules: [{ type: 'cellIs', operator: 'greaterThan', priority: 1, formulae: [0], style: { font: { bold: true } } }] })
+    }
     const zip = await JSZip.loadAsync(await saveWorkbook(book))
-    zip.remove('xl/styles.xml')
-    for (const path of ['xl/_rels/workbook.xml.rels', '[Content_Types].xml']) {
-      zip.file(path, (await zip.file(path)!.async('string')).replace(/<(?:Relationship|Override)\b[^>]*(?:\/styles"|\/styles.xml")[^>]*\/>/g, ''))
+    if (styles === 'missing part') {
+      zip.remove('xl/styles.xml')
+      for (const path of ['xl/_rels/workbook.xml.rels', '[Content_Types].xml']) {
+        zip.file(path, (await zip.file(path)!.async('string')).replace(/<(?:Relationship|Override)\b[^>]*(?:\/styles"|\/styles.xml")[^>]*\/>/g, ''))
+      }
+    }
+    else if (styles === 'empty part') {
+      zip.file('xl/styles.xml', '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"/>')
+    }
+    else {
+      zip.file('xl/styles.xml', (await zip.file('xl/styles.xml')!.async('string')).replace(/<cellXfs\b[^>]*>[\s\S]*?<\/cellXfs>/, styles === 'empty cellXfs' ? '<cellXfs count="0"/>' : ''))
     }
     const source = await zip.generateAsync({ type: 'nodebuffer' })
     const template = await importWorkbookXlsx(source)
@@ -123,12 +135,14 @@ describe('native XLSX preservation', () => {
       const bytes = await render(template, data, { dictionaries: { Statuses: ['Open'] } })
       const sheet = (await load(bytes)).getWorksheet('Input')!
       expect(['A1', 'B1', 'C1', 'D1'].map(address => sheet.getCell(address).value)).toEqual(Object.values(data))
+      if (styles.endsWith('cellXfs')) {
+        expect(sheet).toMatchObject({ conditionalFormattings: [{ ref: 'B1', rules: [{ type: 'cellIs', style: { font: { bold: true } } }] }] })
+      }
       if (render === renderWorkbookForm) {
         expect(sheet.getCell('A1').numFmt).toBe('@')
         expect(await readWorkbookForm(await importWorkbookXlsx(source), bytes)).toEqual({ success: true, data })
       }
     }
-    expect(zip.file('xl/styles.xml')).toBeNull()
   })
 
   it('preserves merged member formatting and blank styled cells', async () => {

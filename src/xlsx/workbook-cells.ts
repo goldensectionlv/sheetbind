@@ -20,7 +20,22 @@ const defaultStyles = '<styleSheet xmlns="http://schemas.openxmlformats.org/spre
 
 /** One writer owns shared strings and derived styles for all output cells. */
 export async function prepareWorkbookCells(zip: JSZip) {
-  const xml = await zip.file('xl/styles.xml')?.async('string') ?? defaultStyles
+  const source = await zip.file('xl/styles.xml')?.async('string')
+  let xml = source ?? defaultStyles
+  if (!xmlElements(xmlElements(xml, 'cellXfs')[0] ?? '', 'xf').length) {
+    // Excel needs base resources when the implicit default style becomes explicit.
+    xml = xml.replace(/(<styleSheet\b[^>]*?)\/>/, '$1></styleSheet>')
+    let next = /<(?:dxfs|tableStyles|colors|extLst)\b[^>]*>|<\/styleSheet>/.exec(xml)![0]
+    for (const [name, child] of [['cellStyles', 'cellStyle'], ['cellXfs', 'xf'], ['cellStyleXfs', 'xf'], ['borders', 'border'], ['fills', 'fill'], ['fonts', 'font']]) {
+      let table = xmlElements(xml, name)[0]
+      if (!table || !xmlElements(table, child).length) {
+        const fallback = xmlElements(defaultStyles, name)[0]
+        xml = table ? xml.replace(table, () => fallback) : xml.replace(next, () => fallback + next)
+        table = fallback
+      }
+      next = table
+    }
+  }
   const originals = xmlElements(xmlElements(xml, 'cellXfs')[0] ?? '', 'xf')
   const all = [...originals]
   const textStyles = new Map<number, number>()
@@ -75,7 +90,7 @@ export async function prepareWorkbookCells(zip: JSZip) {
   }
   return { content, style, textStyle,
     async save() {
-      if (all.length !== originals.length || !zip.file('xl/styles.xml')) {
+      if (all.length !== originals.length || xml !== source) {
         await writeCellPart(zip, 'styles', setXmlElement(xml, 'cellXfs', `<cellXfs count="${all.length}">${all.join('')}</cellXfs>`))
       }
       if (strings.length) {
