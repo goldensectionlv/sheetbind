@@ -139,7 +139,7 @@ export function sourceCoordinates(plan: WorkbookSheetPlan, carrier?: FormulaRows
 
 /** Excel formula syntax stays opaque; only local A1 references are relocated. */
 export function sourceFormula(value: string, current: SourceCoordinates, sheets: ReadonlyMap<string, SourceCoordinates>): string {
-  const reference = /(?<![\p{L}\p{N}_.!'])(?:(?:'((?:[^']|'')+)'|([\p{L}_][\p{L}\p{N}_.]*))!)?(\$?[A-Z]{1,3}\$?[1-9]\d*(?::\$?[A-Z]{1,3}\$?[1-9]\d*)?|\$?[A-Z]{1,3}:\$?[A-Z]{1,3}|\$?[1-9]\d*:\$?[1-9]\d*)(?![\p{L}\p{N}_(])/giu
+  const reference = /(?<![\p{L}\p{N}_.!\\'])(?:(?:'((?:[^']|'')+)'|([\p{L}_][\p{L}\p{N}_.]*))!)?(\$?[A-Z]{1,3}\$?[1-9]\d*(?::\$?[A-Z]{1,3}\$?[1-9]\d*)?|\$?[A-Z]{1,3}:\$?[A-Z]{1,3}|\$?[1-9]\d*:\$?[1-9]\d*)(?![\p{L}\p{N}_(\\])/giu
   return value.split(/("(?:[^"]|"")*"|\[[^\]]*\](?:[^\s!+*/^&<>=(),;]*![A-Z0-9$:]+)?)/gi).map((part, index) => {
     if (index % 2) {
       return part

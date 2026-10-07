@@ -110,6 +110,37 @@ it('duplicates native metadata along columns and removes it with an empty body',
   expect(empty.getCell('A1').note).toBeUndefined()
 })
 
+it.each(['rows', 'columns'])('preserves backslashes in native formula names during %s growth', async axis => {
+  const book = new ExcelJS.Workbook()
+  const sheet = book.addWorksheet('Names')
+  sheet.addRows([
+    [`{#items | axis=${axis}}`], ['{.n}', null, null, { formula: 'IFERROR(SUM($A:$A),0)+SUM(\\A1,A1\\Rate)' }], ['{/items}'],
+  ])
+  sheet.getCell('Z2').value = 10
+  book.definedNames.add('Names!$Z$2', '\\A1')
+  book.definedNames.add('Names!$Z$2', 'A1\\Rate')
+  const source = Buffer.from(await book.xlsx.writeBuffer())
+  const template = await importWorkbookXlsx(source)
+  for (const count of [0, 1, 3]) {
+    const data = { items: Array.from({ length: count }, (_, index) => ({ n: index + 1 })) }
+    for (const render of axis === 'rows' ? [renderWorkbookReport, renderWorkbookForm] : [renderWorkbookReport]) {
+      const bytes = await render(template, data)
+      const result = await open(bytes)
+      const formulas: string[] = []
+      result.worksheets[0].eachRow(row => row.eachCell(cell => {
+        if (cell.formula) {
+          formulas.push(cell.formula)
+        }
+      }))
+      expect(formulas).toHaveLength(1)
+      expect(formulas[0]).toContain('SUM(\\A1,A1\\Rate)')
+      if (render === renderWorkbookForm) {
+        expect(await readWorkbookForm(template, bytes)).toEqual({ success: true, data })
+      }
+    }
+  }
+})
+
 it('keeps a single active cell and viewport anchor as selected rows repeat or disappear', async () => {
   const book = new ExcelJS.Workbook()
   const sheet = book.addWorksheet('Rows', { views: [{ state: 'frozen', ySplit: 2, topLeftCell: 'A3', activeCell: 'B3', zoomScale: 85 }] })
