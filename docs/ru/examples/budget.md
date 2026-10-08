@@ -2,7 +2,7 @@
 
 Построим таблицу расходов: категории идут вниз, месяцы — вправо, формулы считают итоги по строкам и колонкам. Количество категорий и месяцев задаётся данными.
 
-Для запуска нужна [установка пакета](../getting-started.md). В папке приложения создайте отдельную папку для этого примера:
+Для запуска нужна [установка пакета](../getting-started.md#run-examples). В папке приложения создайте отдельную папку для этого примера:
 
 ```sh
 mkdir budget-example
@@ -49,7 +49,7 @@ cd budget-example
 <<< @/public/examples/walkthroughs/budget.ts
 
 ```sh
-pnpm exec tsx budget.ts
+npx tsx budget.ts
 ```
 
 Откройте `budget.xlsx` или скачайте [готовый результат](/examples/walkthroughs/budget.xlsx):

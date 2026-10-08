@@ -2,7 +2,7 @@
 
 Выдадим форму регистрации на мероприятие. В ней несколько групп, у каждой своё название, контакт и список участников. Пользователь выбирает тип билета, указывает число занятий и возвращает файл; приложение получает вложенный JSON.
 
-Сначала [установите пакет](../getting-started.md). В приложении создайте папку для примера:
+Сначала [установите пакет](../getting-started.md#run-examples). В приложении создайте папку для примера:
 
 ```sh
 mkdir registration-example
@@ -54,7 +54,7 @@ cd registration-example
 <<< @/public/examples/walkthroughs/registration-issue.ts
 
 ```sh
-pnpm exec tsx registration-issue.ts
+npx tsx registration-issue.ts
 ```
 
 Получится `registration-issued.xlsx`; можно скачать [готовую пустую форму](/examples/walkthroughs/registration-issued.xlsx):
@@ -91,7 +91,7 @@ pnpm exec tsx registration-issue.ts
 <<< @/public/examples/walkthroughs/registration-read.ts
 
 ```sh
-pnpm exec tsx registration-read.ts
+npx tsx registration-read.ts
 ```
 
 Приложение получит следующие данные; их можно [скачать как JSON](/examples/walkthroughs/registration-completed.json):

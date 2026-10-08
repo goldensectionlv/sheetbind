@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import { importWorkbookXlsx, readWorkbookForm } from 'sheetbind'
 
-try {
+async function main() {
   const template = await importWorkbookXlsx(await readFile('registration-template.xlsx'))
   const result = await readWorkbookForm(template, await readFile('registration-completed.xlsx'))
   if (result.success) {
@@ -12,7 +12,8 @@ try {
     process.exitCode = 1
   }
 }
-catch (error) {
+
+main().catch(error => {
   console.error('Cannot read the registration form:', error)
   process.exitCode = 1
-}
+})

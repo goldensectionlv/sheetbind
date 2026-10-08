@@ -2,7 +2,7 @@
 
 У человека несколько курсов, в каждом — свой список занятий. Выведем их одним документом с заголовками, примечаниями и итогом времени. У курсов будет ноль, одно и три занятия.
 
-После [установки пакета](../getting-started.md) создайте в приложении папку для примера:
+После [установки пакета](../getting-started.md#run-examples) создайте в приложении папку для примера:
 
 ```sh
 mkdir study-plan-example
@@ -50,7 +50,7 @@ cd study-plan-example
 Выполните из папки примера:
 
 ```sh
-pnpm exec tsx study-plan.ts
+npx tsx study-plan.ts
 ```
 
 Откройте `study-plan.xlsx` или скачайте [готовый отчёт](/examples/walkthroughs/study-plan.xlsx):

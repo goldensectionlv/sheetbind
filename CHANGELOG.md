@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Changed
+
+- ExcelJS is a regular dependency. Applications install only `sheetbind` and use their existing CommonJS, ESM or TypeScript setup.
+- Guide scripts run in CommonJS and ESM projects. Standalone TypeScript execution is optional; the installation guide no longer requires pnpm or a module-mode change.
+
 ### Fixed
 
 - Report and form rendering preserve workbook calculation settings when requesting recalculation on opening. Iterative calculations retain their starting values, using zero when no saved value exists.

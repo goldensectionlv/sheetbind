@@ -49,4 +49,4 @@ Each example includes a template, data, a runnable script and the expected resul
 - [Excel and limitations](./xlsx.md) — formatting, formulas and workbook features.
 - [Development](./development.md) and [Architecture](./architecture.md) — for changes to the library itself.
 
-Requires Node.js 22.13 or newer and ExcelJS 4.4.0. Licensed under MIT.
+Requires Node.js 22.13 or newer. Licensed under MIT.

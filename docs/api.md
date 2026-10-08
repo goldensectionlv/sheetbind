@@ -200,7 +200,7 @@ Rendering resolves values, formatting and placement to produce a valid XLSX. It 
 
 `ValidationExecutionError` exposes `rule`, `path` and `cause`. Predicates must return a synchronous boolean. Message functions must return a string; a failed message uses `failed validation: <rule>` and does not change the validation result. Unused per-read handlers and messages are ignored.
 
-`WorkbookFormIssue` contains `phase: 'structure' | 'value' | 'xlsx'`, `code`, `path`, `message` and optional `sheetName`, `address`, `nodeId`, `rule`, `args`, `index`. Its address belongs to the returned workbook; its data path uses indexes after empty rows are omitted. Some structural failures cannot identify a cell. The [form reader](./forms.md) shows both `try/catch` and `result.success` handling.
+`WorkbookFormIssue` contains `phase: 'structure' | 'value' | 'xlsx'`, `code`, `path`, `message` and optional `sheetName`, `address`, `nodeId`, `rule`, `args`, `index`. Its address belongs to the returned workbook; its data path uses indexes after empty rows are omitted. Some structural failures cannot identify a cell. The [form reader](./forms.md) shows exception handling and the `result.success` check.
 
 ## Registering handlers
 

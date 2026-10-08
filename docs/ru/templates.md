@@ -2,7 +2,7 @@
 
 Шаблон — это XLSX-файл с тегами в ячейках. Подготовим одну строку товара, передадим три записи и получим готовую таблицу с итогом.
 
-Для запуска нужна [установка из первого урока](./getting-started.md). Изображения ниже показывают файлы этого примера. Их можно открыть в полном размере; на узком экране таблицы прокручиваются по горизонтали.
+Для запуска нужна [установка из первого урока](./getting-started.md#run-examples). Изображения ниже показывают файлы этого примера. Их можно открыть в полном размере; на узком экране таблицы прокручиваются по горизонтали.
 
 ## Повтор строк и итог {#report-example}
 
@@ -77,12 +77,12 @@
 
 ### 4. Получите этот файл в своём приложении
 
-Сохраните [report.ts](/examples/tutorials/report.ts) в той же папке, где лежат `report-template.xlsx` и `report-3.json`. Выполняйте команды из этой папки; пакеты уже установлены по [первому уроку](./getting-started.md).
+Сохраните [report.ts](/examples/tutorials/report.ts) в той же папке, где лежат `report-template.xlsx` и `report-3.json`. Выполняйте команды из этой папки; пакеты уже установлены по [первому уроку](./getting-started.md#run-examples).
 
 <<< @/public/examples/tutorials/report.ts
 
 ```sh
-pnpm exec tsx report.ts
+npx tsx report.ts
 ```
 
 Откройте созданный `report.xlsx`. Его содержимое должно совпасть с результатом выше.
@@ -262,12 +262,19 @@ JSON-файлы примеров областей и сравнения соде
 import { readFile, writeFile } from 'node:fs/promises'
 import { importWorkbookXlsx, renderWorkbookReport } from 'sheetbind'
 
-const template = await importWorkbookXlsx(await readFile('template.xlsx'))
-const { data } = JSON.parse(await readFile('template.data.json', 'utf8'))
-await writeFile('report.xlsx', await renderWorkbookReport(template, data))
+async function main() {
+  const template = await importWorkbookXlsx(await readFile('template.xlsx'))
+  const { data } = JSON.parse(await readFile('template.data.json', 'utf8'))
+  await writeFile('report.xlsx', await renderWorkbookReport(template, data))
+}
+
+main().catch(error => {
+  console.error(error)
+  process.exitCode = 1
+})
 ```
 
-Выполните `pnpm exec tsx report.ts` и откройте `report.xlsx`. Во [вложенном примере](/examples/regions/nested.data.json) три площадки с 0, 1 и 3 работами. В [примере сравнения](/examples/comparison/template.data.json) три товара и три предложения; отсутствующая цена остаётся пустой.
+Выполните `npx tsx report.ts` и откройте `report.xlsx`. Во [вложенном примере](/examples/regions/nested.data.json) три площадки с 0, 1 и 3 работами. В [примере сравнения](/examples/comparison/template.data.json) три товара и три предложения; отсутствующая цена остаётся пустой.
 
 ## Следующий шаг
 

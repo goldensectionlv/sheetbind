@@ -1,6 +1,6 @@
 # Filling a form
 
-A form is an XLSX file that a user fills in and returns to the application. `renderWorkbookForm` creates it; `readWorkbookForm` reads it against the original template. First [install the package and set up TypeScript execution](./getting-started.md) to follow these examples.
+A form is an XLSX file that a user fills in and returns to the application. `renderWorkbookForm` creates it; `readWorkbookForm` reads it against the original template. To run the downloaded scripts separately, follow the optional [example setup](./getting-started.md#run-examples).
 
 ## Your first form
 
@@ -19,19 +19,12 @@ The field accepts nonempty text. Ordinary captions such as `Customer` are not in
 
 Save [first-form.ts](/examples/tutorials/first-form.ts) next to the template:
 
-```ts
-import { readFile, writeFile } from 'node:fs/promises'
-import { importWorkbookXlsx, renderWorkbookForm } from 'sheetbind'
-
-const template = await importWorkbookXlsx(await readFile('first-form-template.xlsx'))
-const data = { customer: { name: 'Sample customer' } }
-await writeFile('first-form-issued.xlsx', await renderWorkbookForm(template, data))
-```
+<<< @/public/examples/tutorials/first-form.ts
 
 Run from that directory:
 
 ```sh
-pnpm exec tsx first-form.ts
+npx tsx first-form.ts
 ```
 
 Open `first-form-issued.xlsx`. The field is in B1. The form preserves this address. Change the name to `Alex` and save a **separate file named `completed.xlsx`** next to the script. Keep the original template for reading.
@@ -40,29 +33,10 @@ Open `first-form-issued.xlsx`. The field is in B1. The form preserves this addre
 
 Save [read-first-form.ts](/examples/tutorials/read-first-form.ts) in the same directory:
 
-```ts
-import { readFile } from 'node:fs/promises'
-import { importWorkbookXlsx, readWorkbookForm } from 'sheetbind'
-
-try {
-  const template = await importWorkbookXlsx(await readFile('first-form-template.xlsx'))
-  const result = await readWorkbookForm(template, await readFile('completed.xlsx'))
-  if (result.success) {
-    console.log(JSON.stringify(result.data, null, 2))
-  }
-  else {
-    console.error(result.issues)
-    process.exitCode = 1
-  }
-}
-catch (error) {
-  console.error('Cannot process the form:', error)
-  process.exitCode = 1
-}
-```
+<<< @/public/examples/tutorials/read-first-form.ts
 
 ```sh
-pnpm exec tsx read-first-form.ts
+npx tsx read-first-form.ts
 ```
 
 Output:
@@ -75,7 +49,7 @@ Output:
 
 Clear B1 and save the file again to get `success: false`. The `issues` array contains a `required` issue with `sheetName: "Input"`, `address: "B1"`, and `path: "$data.customer.name"`. Parsed fields remain in `data` so they can be shown for correction; `success: false` means the data have not passed validation. Invalid file structure produces no `data`.
 
-`issues` describes problems with the returned file or entered values. Invalid application settings and file operations can throw exceptions, so use both `result.success` and `try/catch`. See the [API](./api.md) for details.
+`issues` describes problems with the returned file or entered values. Invalid application settings and file operations can throw exceptions, so check `result.success` and handle exceptions as well. See the [API](./api.md) for details.
 
 ## A table with 20 input rows
 
@@ -90,7 +64,7 @@ mkdir table-form
 cd table-form
 ```
 
-It uses the application's installed packages and module settings. Save the following files and run commands in `table-form`.
+It uses the application's installed packages. Save the following files and run commands in `table-form`.
 
 Create an `Input` sheet in `form-template.xlsx`, or download the [template](/examples/tutorials/form-template.xlsx):
 
@@ -109,25 +83,10 @@ The repeat covers row A3:C3. Style it and set B3 to number format `0.00`. C3 nee
 
 Save [issue-form.ts](/examples/tutorials/issue-form.ts) next to the template:
 
-```ts
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
-import { importWorkbookXlsx, renderWorkbookForm } from 'sheetbind'
-
-const source = await readFile('form-template.xlsx')
-const template = await importWorkbookXlsx(source)
-const dictionaries = {
-  Products: [{ id: '001', name: 'Paper' }, { id: '002', name: 'Paper' }],
-}
-const data = { items: Array.from({ length: 20 }, () => ({})) }
-const issued = await renderWorkbookForm(template, data, { dictionaries })
-
-await mkdir('saved-form', { recursive: true })
-await writeFile('saved-form/template.xlsx', source)
-await writeFile('saved-form/issued.xlsx', issued)
-```
+<<< @/public/examples/tutorials/issue-form.ts
 
 ```sh
-pnpm exec tsx issue-form.ts
+npx tsx issue-form.ts
 ```
 
 Twenty `{}` objects create twenty input rows. Required fields may be empty at issuance. The products have identical labels, so the dropdown shows `Paper [001]` and `Paper [002]`.
@@ -167,10 +126,10 @@ After filling two rows, the form looks like this:
 Save the file as `completed.xlsx` next to `issue-form.ts`, or download the [completed form](/examples/tutorials/completed.xlsx). Reading requires `saved-form/template.xlsx` from the previous step. Download [read-completed-form.ts](/examples/tutorials/read-completed-form.ts) next to `completed.xlsx` and run:
 
 ```sh
-pnpm exec tsx read-completed-form.ts
+npx tsx read-completed-form.ts
 ```
 
-This is a complete handler with `result.success` and `try/catch`, as in the first form. It loads `saved-form/template.xlsx` and `completed.xlsx` from the current directory.
+This is a complete handler with a `result.success` check and exception handling, as in the first form. It loads `saved-form/template.xlsx` and `completed.xlsx` from the current directory.
 
 The result is also available as a [JSON download](/examples/tutorials/completed.json):
 
@@ -221,7 +180,7 @@ In the issued form, the first record occupies entire rows **2:5**, and the secon
 After this single copy operation, save the workbook as `contacts-completed.xlsx` next to `contacts-template.xlsx`. Download [read-contacts.ts](/examples/tutorials/read-contacts.ts) into that directory and run:
 
 ```sh
-pnpm exec tsx read-contacts.ts
+npx tsx read-contacts.ts
 ```
 
 The result contains three records:

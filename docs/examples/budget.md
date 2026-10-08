@@ -2,7 +2,7 @@
 
 Build an expense table with categories down the rows, months across the columns, and formulas for both sets of totals. The data determines the number of categories and months.
 
-First [install the package](../getting-started.md). Create a separate directory inside your application for this example:
+First [install the package](../getting-started.md#run-examples). Create a separate directory inside your application for this example:
 
 ```sh
 mkdir budget-example
@@ -49,7 +49,7 @@ Download [budget.ts](/examples/walkthroughs/budget.ts) into the same directory:
 <<< @/public/examples/walkthroughs/budget.ts
 
 ```sh
-pnpm exec tsx budget.ts
+npx tsx budget.ts
 ```
 
 Open `budget.xlsx`, or download the [rendered report](/examples/walkthroughs/budget.xlsx):

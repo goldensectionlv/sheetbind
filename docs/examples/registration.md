@@ -2,7 +2,7 @@
 
 Issue an event registration form with several groups. Each group has a name, a contact and a participant list. Users select ticket types, enter session counts and return the file; the application receives nested JSON.
 
-First [install the package](../getting-started.md). Create a directory inside your application:
+First [install the package](../getting-started.md#run-examples). Create a directory inside your application:
 
 ```sh
 mkdir registration-example
@@ -54,7 +54,7 @@ Download [registration-issue.ts](/examples/walkthroughs/registration-issue.ts):
 <<< @/public/examples/walkthroughs/registration-issue.ts
 
 ```sh
-pnpm exec tsx registration-issue.ts
+npx tsx registration-issue.ts
 ```
 
 This creates `registration-issued.xlsx`; you can also download the [blank form](/examples/walkthroughs/registration-issued.xlsx):
@@ -91,7 +91,7 @@ Download [registration-read.ts](/examples/walkthroughs/registration-read.ts) int
 <<< @/public/examples/walkthroughs/registration-read.ts
 
 ```sh
-pnpm exec tsx registration-read.ts
+npx tsx registration-read.ts
 ```
 
 The application receives these data, also available as a [JSON download](/examples/walkthroughs/registration-completed.json):

@@ -56,7 +56,7 @@ The `/sheetbind/` base path is defined in `docs/.vitepress/config.ts`. Run `pnpm
 
 `example:tutorials` produces reports with zero, one and several records, a form with 20 blank rows, completed and invalid forms, and multirow contact records. Generated local output belongs in ignored `temp/`.
 
-`example:walkthroughs` checks all nine combinations of 0, 1 and 3 budget categories and months, learning plans with empty and nested lists, and a registration form with blank rows, a numeric zero and a validation error. Package verification also runs the downloadable scripts against an installed archive.
+`example:walkthroughs` checks all nine combinations of 0, 1 and 3 budget categories and months, learning plans with empty and nested lists, and a registration form with blank rows, a numeric zero and a validation error. The package check first installs only the archive and verifies JavaScript reports and forms through CommonJS and ESM. It then checks TypeScript declarations and runs the downloadable `.ts` scripts with `tsx` in a project without a module-type setting.
 
 XLSX fixtures are inputs to regression tests. Regenerate an affected fixture only when its authored definition is intentionally changing. A documentation edit does not call for rebuilding every fixture.
 

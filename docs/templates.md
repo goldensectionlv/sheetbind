@@ -2,7 +2,7 @@
 
 A template is an XLSX file with tags in its cells. Prepare one item row, pass three records and get a table with a total.
 
-To run the example, complete the [setup in First report](./getting-started.md). The images below show the files used in this example. Open an image for its full size; on narrow screens, scroll the tables horizontally.
+To run the example, complete the [setup in First report](./getting-started.md#run-examples). The images below show the files used in this example. Open an image for its full size; on narrow screens, scroll the tables horizontally.
 
 ## Repeated rows and a total {#report-example}
 
@@ -77,12 +77,12 @@ D3 now contains `=B3*C3`, D4 contains `=B4*C4`, and D5 contains `=B5*C5`. The to
 
 ### 4. Generate this file in your application
 
-Save [report.ts](/examples/tutorials/report.ts) beside `report-template.xlsx` and `report-3.json`. Run commands from this directory, with the packages installed as described in [First report](./getting-started.md).
+Save [report.ts](/examples/tutorials/report.ts) beside `report-template.xlsx` and `report-3.json`. Run commands from this directory, with the packages installed as described in [First report](./getting-started.md#run-examples).
 
 <<< @/public/examples/tutorials/report.ts
 
 ```sh
-pnpm exec tsx report.ts
+npx tsx report.ts
 ```
 
 Open the generated `report.xlsx`. Its contents should match the result above.
@@ -262,12 +262,19 @@ The JSON files for the region and comparison examples contain a `data` property.
 import { readFile, writeFile } from 'node:fs/promises'
 import { importWorkbookXlsx, renderWorkbookReport } from 'sheetbind'
 
-const template = await importWorkbookXlsx(await readFile('template.xlsx'))
-const { data } = JSON.parse(await readFile('template.data.json', 'utf8'))
-await writeFile('report.xlsx', await renderWorkbookReport(template, data))
+async function main() {
+  const template = await importWorkbookXlsx(await readFile('template.xlsx'))
+  const { data } = JSON.parse(await readFile('template.data.json', 'utf8'))
+  await writeFile('report.xlsx', await renderWorkbookReport(template, data))
+}
+
+main().catch(error => {
+  console.error(error)
+  process.exitCode = 1
+})
 ```
 
-Run `pnpm exec tsx report.ts` and open `report.xlsx`. The [nested example data](/examples/regions/nested.data.json) contains three sites with 0, 1 and 3 work records. The [comparison data](/examples/comparison/template.data.json) contains three items and three offers; a missing price stays blank.
+Run `npx tsx report.ts` and open `report.xlsx`. The [nested example data](/examples/regions/nested.data.json) contains three sites with 0, 1 and 3 work records. The [comparison data](/examples/comparison/template.data.json) contains three items and three offers; a missing price stays blank.
 
 ## Next step
 
