@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.3.0 — 2026-10-08
+
+Reissue existing forms with this version. Form reading requires the original template; the application owns document identity and version checks.
 
 ### Added
 
@@ -17,12 +19,11 @@
 - Rendering preserves values outside lists; list membership and field validation run only when reading a completed form. Missing report values leave blank cells with a warning, suppressed by optional bindings. Unavailable or failed formatting retains the original value before the pipeline.
 - Existing Excel validation is preserved when it conflicts with a generated dropdown; only the overlapping generated validation is skipped, with a warning.
 - Unused per-read validators and messages are ignored. Failed message formatting preserves the validation issue with a default message and a warning; predicate execution failures remain errors.
-- Runtime data and dictionaries accept undefined object properties at any depth as absent values. Saved choice-source snapshots omit those properties without changing caller data. Stored JSON definitions remain strict; undefined array items remain invalid.
+- Runtime data and dictionaries accept undefined object properties at any depth as absent values. Saved choice sources omit those properties without changing caller data. Undefined array items remain invalid.
 - Omitted and `null` repeat sources behave like empty arrays, including nested and column repeats. Forms retain the same blank input row as for an explicit empty array. Other non-array values and non-object items remain errors.
-- Forms no longer insert a first row or store a template hash. Reading checks actual record boundaries and merged fields against the supplied template; application code owns template identity/version checks. Reissue forms produced by earlier versions: the form carrier is now version 4.
 - Rendering and layout resolution no longer execute `@validate` or require its handlers. Supply `validationRules` and `validationMessages` only when reading a form.
 - Unknown validation rules stop reading with a template error, including fields in empty repeats. Rules retain their order and original indexes; invalid known arguments and handler failures remain errors.
-- Form reading uses the dictionaries embedded at issuance for lists, key choices and object choices. `readWorkbookForm` no longer accepts `dictionaries` or `context`; validation handlers and messages remain supported. Reissue older forms whose list or key sources were not embedded.
+- Form reading uses the dictionaries embedded at issuance for lists, key choices and object choices. `readWorkbookForm` no longer accepts `dictionaries` or `context`; validation handlers and messages remain supported.
 - Form reading respects submitted cell formats for text, numeric conversion and rounding. Formula inputs use the saved Excel result, including zero, false and empty text; missing results and Excel errors produce field issues.
 
 ### Fixed
@@ -30,7 +31,7 @@
 - Internal hyperlink targets follow workbook placement, and Excel names containing backslashes remain intact when formulas move.
 - Workbooks with missing or empty style tables render with valid default styles while retaining authored style resources.
 - Generated workbook relationships avoid collisions with existing IDs. Hidden choice-source sheets retain valid names when a completed form is saved with ExcelJS.
-- Form control columns are placed beyond all authored content, including empty repeats, so wide templates retain their input fields. Reissue older forms when previously issued control cells overlapped those fields.
+- Form control columns are placed beyond all authored content, including empty repeats, so wide templates retain their input fields.
 
 ## 0.2.0 — 2026-10-06
 

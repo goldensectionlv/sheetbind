@@ -1,6 +1,6 @@
 # Sheetbind
 
-These pages cover unreleased changes. Use the matching source build from the [installation guide](./getting-started.md) for the downloadable examples.
+This guide and its downloadable examples use Sheetbind 0.3.0. Start with the [installation guide](./getting-started.md).
 
 Sheetbind fills XLSX templates with data. You prepare and format the workbook in Excel; your application supplies the values. The result is a report or a form that users can fill in and return.
 

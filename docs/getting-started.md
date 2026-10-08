@@ -6,18 +6,11 @@ To install that pnpm version, run `npm install --global pnpm@11.5.2`.
 
 ## 1. Install the package
 
-These pages and their downloadable files describe unreleased changes. The published npm package `0.2.0` does not match them. Build an archive from the same Sheetbind checkout as the documentation. From the repository root:
-
-```sh
-pnpm install --frozen-lockfile
-pnpm pack --out ./temp/sheetbind.tgz
-```
-
-Create a `sheetbind-example` directory outside the Sheetbind checkout and copy `temp/sheetbind.tgz` into it. From that new directory, install the archive, ExcelJS and a TypeScript runner:
+Create a `sheetbind-example` directory for your application. From that directory, install Sheetbind 0.3.0, ExcelJS and a TypeScript runner:
 
 ```sh
 pnpm init --init-type module
-pnpm add ./sheetbind.tgz exceljs@4.4.0
+pnpm add sheetbind@0.3.0 exceljs@4.4.0
 pnpm add -D tsx
 ```
 

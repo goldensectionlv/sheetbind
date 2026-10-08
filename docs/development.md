@@ -30,7 +30,7 @@ The code is organized as described in [architecture](./architecture.md). Public 
 | `pnpm example:tutorials` | Create and check the tutorial workbooks in `temp/tutorials/` |
 | `pnpm example:walkthroughs` | Create and check the examples in `temp/walkthroughs/` |
 
-The docs commands `dev`, `check` and `build` run `docs:prepare` first. It prepares downloadable examples in `docs/public/examples/`; edit their sources in `examples/`, not the generated copies.
+The docs commands `dev`, `check` and `build` run `docs:prepare` first. It generates examples in `temp/documentation-examples/` and copies only the files referenced by the guide into `docs/public/examples/`. Edit the sources in `examples/`, not the generated copies.
 
 ## Publishing the documentation
 

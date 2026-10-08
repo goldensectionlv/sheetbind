@@ -1,6 +1,6 @@
 {
   "name": "sheetbind",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Workbook templates for XLSX reports and editable forms in TypeScript.",
   "engines": {
     "node": ">=22.13.0"

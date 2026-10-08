@@ -6,18 +6,11 @@
 
 ## 1. Установите пакет
 
-Эти страницы и скачиваемые файлы описывают ещё не опубликованные изменения. Пакет `0.2.0` из npm им не соответствует. Соберите архив из той же рабочей копии Sheetbind, что и документацию. Из корня репозитория:
-
-```sh
-pnpm install --frozen-lockfile
-pnpm pack --out ./temp/sheetbind.tgz
-```
-
-Создайте папку `sheetbind-example` вне рабочей копии Sheetbind и скопируйте в неё `temp/sheetbind.tgz`. Из этой новой папки установите архив, ExcelJS и средство запуска TypeScript:
+Создайте папку `sheetbind-example` для приложения. Из этой папки установите Sheetbind 0.3.0, ExcelJS и средство запуска TypeScript:
 
 ```sh
 pnpm init --init-type module
-pnpm add ./sheetbind.tgz exceljs@4.4.0
+pnpm add sheetbind@0.3.0 exceljs@4.4.0
 pnpm add -D tsx
 ```
 

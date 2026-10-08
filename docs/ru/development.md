@@ -30,7 +30,7 @@ pnpm test
 | `pnpm example:tutorials` | Создать и проверить книги руководства в `temp/tutorials/` |
 | `pnpm example:walkthroughs` | Создать и проверить примеры в `temp/walkthroughs/` |
 
-Команды документации `dev`, `check` и `build` сначала выполняют `docs:prepare`. Он подготавливает файлы для скачивания в `docs/public/examples/`; редактируйте исходники в `examples/`, а не сгенерированные копии.
+Команды документации `dev`, `check` и `build` сначала выполняют `docs:prepare`. Он создаёт примеры в `temp/documentation-examples/` и копирует в `docs/public/examples/` только файлы, на которые ссылается руководство. Редактируйте исходники в `examples/`, а не сгенерированные копии.
 
 ## Публикация документации
 
