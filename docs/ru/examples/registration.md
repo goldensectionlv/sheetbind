@@ -47,7 +47,7 @@ cd registration-example
 
 <<< @/public/examples/walkthroughs/registration-dictionaries.json
 
-Этот справочник общий для всех участников обеих групп. Храните исходный шаблон и **эту же версию справочника** для обратного чтения.
+Этот справочник общий для всех участников обеих групп. Он сохраняется в выданной форме. Для чтения храните исходный шаблон; JSON справочника нужен только при выдаче.
 
 Скачайте [registration-issue.ts](/examples/walkthroughs/registration-issue.ts):
 
@@ -61,7 +61,7 @@ pnpm exec tsx registration-issue.ts
 
 <div class="workbook-preview workbook-preview-wide" tabindex="0" role="region" aria-label="Форма регистрации с двумя группами и четырьмя пустыми строками">
 
-[![У Friends строки участников 8–10, у Family строка 18. Между ними находятся контакт и скрытые границы групп.](/images/example-registration-issued.png)](/images/example-registration-issued.png)
+[![У Friends строки участников 7–9, у Family строка 17. Между ними находятся контакт и скрытые границы групп.](/images/example-registration-issued.png)](/images/example-registration-issued.png)
 
 </div>
 
@@ -73,16 +73,16 @@ pnpm exec tsx registration-issue.ts
 
 | Строка | Participant | Ticket — выбрать из списка | Sessions | Note |
 | --- | --- | --- | --- | --- |
-| 8 | `Alex` | `Standard` | Число `2` | Оставить пустым |
-| 9 | Оставить всю строку пустой | | | |
-| 10 | `Sam` | `Student` | Число `0` | `First visit` |
-| 18 | `Taylor` | `Standard` | Число `1` | Оставить пустым |
+| 7 | `Alex` | `Standard` | Число `2` | Оставить пустым |
+| 8 | Оставить всю строку пустой | | | |
+| 9 | `Sam` | `Student` | Число `0` | `First visit` |
+| 17 | `Taylor` | `Standard` | Число `1` | Оставить пустым |
 
 Названия групп оставьте как есть, контакты — пустыми. Сохраните отдельный файл **`registration-completed.xlsx`** рядом со скриптом или скачайте [заполненный пример](/examples/walkthroughs/registration-completed.xlsx):
 
 <div class="workbook-preview workbook-preview-wide" tabindex="0" role="region" aria-label="Заполненная регистрация с тремя участниками">
 
-[![Alex и Sam относятся к Friends, Taylor — к Family. Строка 9 пустая, у Sam число занятий равно нулю.](/images/example-registration-completed.png)](/images/example-registration-completed.png)
+[![Alex и Sam относятся к Friends, Taylor — к Family. Строка 8 пустая, у Sam число занятий равно нулю.](/images/example-registration-completed.png)](/images/example-registration-completed.png)
 
 </div>
 
@@ -98,19 +98,19 @@ pnpm exec tsx registration-read.ts
 
 <<< @/public/examples/walkthroughs/registration-completed.json
 
-Пустая строка 9 пропущена внутри `Friends`, а `0` у `Sam` сохранился. Билеты вернулись как `standard` и `student`; необязательные пустые поля — как `null`. Полностью пустой список участников читается как `[]`, сама группа с названием остаётся.
+Пустая строка 8 пропущена внутри `Friends`, а `0` у `Sam` сохранился. Билеты вернулись как `standard` и `student`; необязательные пустые поля — как `null`. Полностью пустой список участников читается как `[]`, сама группа с названием остаётся.
 
 ## 4. Проверьте ошибку и добавление участника
 
-В исходном заполненном примере замените C10 на число `-1`, сохраните и повторите чтение. Оно завершится ошибкой `min`: адрес **C10**, путь **`$data.groups[0].participants[1].sessions`**. Индекс `1` учитывает пропущенную пустую строку. Готовый [ошибочный файл](/examples/walkthroughs/registration-invalid.xlsx) и [полный результат API](/examples/walkthroughs/registration-invalid.json) доступны для скачивания. Верните C10 значение `0` и сохраните файл.
+В исходном заполненном примере замените C9 на число `-1`, сохраните и повторите чтение. Оно завершится ошибкой `min`: адрес **C9**, путь **`$data.groups[0].participants[1].sessions`**. Индекс `1` учитывает пропущенную пустую строку. Готовый [ошибочный файл](/examples/walkthroughs/registration-invalid.xlsx) и [полный результат API](/examples/walkthroughs/registration-invalid.json) доступны для скачивания. Верните C9 значение `0` и сохраните файл.
 
 Чтобы добавить участника в `Friends`, в заполненном файле:
 
-1. Выделите и скопируйте целую строку 8.
-2. Выделите строку 9 и выполните «Вставить скопированные ячейки» целыми строками.
-3. В новой строке 9 измените A9 на `Morgan`, C9 — на число `1`. Билет останется `Standard`.
+1. Выделите и скопируйте целую строку 7.
+2. Выделите строку 8 и выполните «Вставить скопированные ячейки» целыми строками.
+3. В новой строке 8 измените A8 на `Morgan`, C8 — на число `1`. Билет останется `Standard`.
 4. Сохраните файл и запустите чтение снова.
 
-В `groups[0].participants` будут `Alex`, `Morgan`, `Sam`; в `groups[1].participants` останется `Taylor`. После вставки последующие строки сдвигаются: прежняя C10 теперь C11.
+В `groups[0].participants` будут `Alex`, `Morgan`, `Sam`; в `groups[1].participants` останется `Taylor`. После вставки последующие строки сдвигаются: прежняя C9 теперь C10.
 
 Копирование целой группы требует её скрытых границ и вложенного списка; порядок описан в [инструкции для многострочных записей](../forms.md#многострочные-записи). Проверки правил и чтение выполняйте на сервере приложения независимо от подсказок Excel.

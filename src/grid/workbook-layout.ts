@@ -1,21 +1,19 @@
-import { instantiate, TemplateError } from '../core/template'
-import type { Fragment, Origin, ResolvedFragment, TemplateValue } from '../core/template'
-import type { Dictionaries } from '../core/dictionaries'
-import type { ValidationOptions } from '../core/validation'
+import { resolveWorkbookData } from './workbook-data'
+import type { WorkbookData, WorkbookDataOptions } from './workbook-data'
+import type { Origin, TemplateValue } from '../core/template'
 import type { FieldRules } from '../core/field-rules'
 import type { GridAddress, GridOffset } from './geometry'
-import { createWorkbookChoiceDisplay } from './workbook-choice-display'
-import type { WorkbookChoice } from './workbook-choice-display'
-import { workbookCells, workbookRegions, workbookRows, workbookIssue, WorkbookAxis, WORKBOOK_LIMITS } from './workbook'
-import type { WorkbookBody, WorkbookCell, WorkbookSheet, WorkbookDefinition, WorkbookRow, WorkbookColumn } from './workbook'
-import { mapWorkbookPrint } from './workbook-print'
-import type { WorkbookPrint } from './workbook-print'
+import type { WorkbookChoice } from '../core/choices'
+import { workbookRegions, workbookIssue, WORKBOOK_LIMITS } from './workbook'
+import type { WorkbookCell, WorkbookSheet, WorkbookDefinition, WorkbookRow, WorkbookColumn, WorkbookRegion } from './workbook'
+import { mapWorkbookPrint } from './workbook'
+import type { WorkbookPrint } from './workbook'
 import type { WorkbookFormula } from './workbook-formula'
 import { resolveWorkbookFormulas } from './workbook-formulas'
 import { axisPositions, mapAxis, planWorkbookAxes } from './workbook-axis'
 import type { AxisPlan, WorkbookAxes } from './workbook-axis'
 import { FormulaEdge } from './workbook-formula'
-import { placeWorkbookPoint, workbookCoordinates } from './workbook-coordinates'
+import { placeWorkbookPoint, placeWorkbookRegion, workbookCoordinates } from './workbook-coordinates'
 import type { WorkbookCoordinates, WorkbookIndexes } from './workbook-coordinates'
 
 /** Public resolved cell; source-package details stay in the internal placement. */
@@ -43,183 +41,82 @@ export interface WorkbookLayout {
 }
 
 /** Internal placement retains the source references needed by the XLSX writer. */
-export interface WorkbookPlacedCell extends WorkbookCellInstance { readonly xlsx?: WorkbookCell['xlsx'] }
-export interface WorkbookPlacement { readonly sheets: readonly (Omit<WorkbookSheet, 'cells' | 'regions'> & { readonly cells: readonly WorkbookPlacedCell[] })[] }
+export interface WorkbookPlacedCell extends WorkbookCellInstance { readonly xlsx: WorkbookCell['xlsx'] }
+export interface WorkbookPlacedSheet extends Pick<WorkbookSheet, 'id' | 'name' | 'state' | 'rows' | 'columns' | 'print'> { readonly cells: readonly WorkbookPlacedCell[] }
 
-/** Placement provenance for consumers that need the boundaries of expanded bodies. */
-export interface WorkbookRegionLayout {
-  readonly definitionId: string
-  readonly dataPath: string
-  readonly type: 'scope' | 'repeat'
-  readonly row: number
-  readonly height: number
-  readonly column?: number
-  readonly width?: number
-  readonly instances: readonly { readonly row: number, readonly height: number, readonly regions: readonly WorkbookRegionLayout[] }[]
+/** A sheet and its geometry travel together through every placement stage. */
+export interface WorkbookSheetPlan {
+  readonly definition: WorkbookSheet
+  readonly data: WorkbookData
+  readonly sheet: WorkbookPlacedSheet
+  readonly axes: WorkbookAxes
+  readonly coordinates: WorkbookCoordinates
+  readonly extent: { readonly rows: number, readonly columns: number }
+  readonly authored: ReadonlyMap<string, GridAddress>
+  readonly regions: ReadonlyMap<string, WorkbookRegion>
 }
-export interface WorkbookPlan {
-  readonly layout: WorkbookPlacement
-  readonly regions: readonly (readonly WorkbookRegionLayout[])[]
-  readonly axes: readonly WorkbookAxes[]
-  readonly coordinates: readonly WorkbookCoordinates[]
-  readonly extents: readonly { readonly rows: number, readonly columns: number }[]
-}
-
-interface WorkbookExecution {
-  readonly groups: readonly ResolvedFragment<null>[]
-  readonly origin: (value: Origin) => Origin
-}
-type WorkbookExecutionOptions = ValidationOptions & { readonly dictionaries?: Dictionaries, readonly checkValues?: boolean }
-function executionKey(kind: string, id: string): string {
-  return JSON.stringify([kind, id])
-}
-
-/** Expose independent resolved cells without changing the compiled definition. */
-export function resolveWorkbook(config: WorkbookDefinition, data: unknown, options: ValidationOptions & { dictionaries?: Dictionaries } = {}): WorkbookLayout {
-  const { layout } = planWorkbook(config, data, { ...options, checkValues: true })
-  return { sheets: layout.sheets.map(sheet => ({
-    ...structuredClone({ id: sheet.id, name: sheet.name, state: sheet.state, rows: sheet.rows, columns: sheet.columns, print: sheet.print }),
-    cells: sheet.cells.map(cell => structuredClone({
-      id: cell.id, definitionId: cell.definitionId, at: cell.at, size: cell.size, rules: cell.rules,
-      origin: cell.origin, contextPath: cell.contextPath, choice: cell.choice, value: cell.value,
-    })),
-  })) }
-}
+export interface WorkbookPlan { readonly sheets: readonly WorkbookSheetPlan[] }
 
 /** Accept a normalized definition. Placement never reparses or modifies the input. */
-export function planWorkbook(config: WorkbookDefinition, data: unknown, options: WorkbookExecutionOptions = {}): WorkbookPlan {
-  const { plan, sources } = placeWorkbook(config, data, options)
-  return { ...plan, layout: resolveWorkbookFormulas(plan.layout, sources) }
+export function planWorkbook(config: WorkbookDefinition, data: unknown, options: WorkbookDataOptions = {}): WorkbookPlan {
+  return resolveWorkbookFormulas(placeWorkbook(config, data, options))
 }
 
 /** Keep authored formulas until all placement transforms are known. */
-export function placeWorkbook(config: WorkbookDefinition, data: unknown, options: WorkbookExecutionOptions = {}) {
-  const execution = executeWorkbook(config, data, options)
-  const placed = config.sheets.map((sheet, index) => placeWorkbookSheet(sheet, execution.groups[index], execution.origin))
-  const sources = new Map(placed.map(value => [value.sheet.name.toLowerCase(), { axes: value.axes, authored: value.authored }]))
-  const plan: WorkbookPlan = { layout: { sheets: placed.map(value => value.sheet) }, regions: placed.map(value => value.regions), axes: placed.map(value => value.axes), coordinates: placed.map(value => value.coordinates), extents: placed.map(value => value.extent) }
-  return { plan, sources }
+export function placeWorkbook(config: WorkbookDefinition, data: unknown, options: WorkbookDataOptions = {}): WorkbookPlan {
+  const execution = resolveWorkbookData(config, data, options)
+  return { sheets: config.sheets.map((sheet, index) => placeWorkbookSheet(sheet, execution[index])) }
 }
 
-function executeWorkbook(config: WorkbookDefinition, data: unknown, options: WorkbookExecutionOptions): WorkbookExecution {
-  const identities = new Map<string, string>()
-  function key(kind: string, id: string): string {
-    const key = executionKey(kind, id)
-    identities.set(key, id)
-    return key
-  }
-  function children(body: WorkbookBody): Fragment<null>[] {
-    return [
-      ...body.cells.map(cell => ({ type: 'value' as const, id: key('cell', cell.id), value: 'formula' in cell.value ? { literal: null } : cell.value, rules: cell.rules })),
-      ...(body.regions ?? []).map(region => ({ type: region.type, id: key('region', region.id), source: region.source,
-        body: { type: 'group' as const, id: key('body', region.id), content: null, children: children(region) } })),
-    ]
-  }
-  const template: Fragment<null> = { type: 'group', id: key('workbook', '$template'), content: null, children: config.sheets.map(sheet => ({
-    type: 'group', id: key('sheet', sheet.id), content: null, children: children(sheet),
-  })) }
-  let resolved: ResolvedFragment<null>
-  try {
-    resolved = instantiate(template, data, options)
-  }
-  catch (error) {
-    if (error instanceof TemplateError) {
-      throw new TemplateError(error.issues.map(issue => ({ ...issue, nodeId: identities.get(issue.nodeId) ?? issue.nodeId })))
-    }
-    throw error
-  }
-  if (resolved.type !== 'group') {
-    throw new Error('Expected workbook group')
-  }
-  const iterations = new WeakMap<Origin['iterations'], Origin['iterations']>()
-  function origin(value: Origin): Origin {
-    let mapped = iterations.get(value.iterations)
-    if (!mapped) {
-      mapped = value.iterations.map(item => ({ ...item, nodeId: identities.get(item.nodeId)! }))
-      iterations.set(value.iterations, mapped)
-    }
-    return { ...value, nodeId: identities.get(value.nodeId)!, iterations: mapped }
-  }
-  return { groups: resolved.children, origin }
-}
-
-function placeWorkbookSheet(sheet: WorkbookSheet, group: ResolvedFragment<null>, origin: (value: Origin) => Origin) {
-  if (group.type !== 'group') {
-    throw new Error('Expected sheet group')
-  }
-  const { regions, cells: definitions, ...settings } = sheet
+export function placeWorkbookSheet(sheet: WorkbookSheet, group: WorkbookData): WorkbookSheetPlan {
   const cells: WorkbookPlacedCell[] = []
-  const axes = planWorkbookAxes(sheet, group, id => executionKey('region', id))
+  const axes = planWorkbookAxes(group)
   const extent = { rows: 0, columns: 0 }
-  const authored = new Map(workbookCells(sheet).map(cell => [cell.id, cell]))
-  const views = new Map(workbookRegions(sheet).map(region => [region.id, region]))
-  const displayChoice = createWorkbookChoiceDisplay()
-  const contexts = new WeakMap<Origin['iterations'], { indexes: ReadonlyMap<string, number>, suffix: string }>()
-  const instances = new Map<string, WorkbookIndexes[]>()
-  function context(value: Origin) {
-    let found = contexts.get(value.iterations)
-    if (!found) {
-      found = { indexes: new Map(value.iterations.map(item => [item.nodeId, item.index])), suffix: JSON.stringify(value.iterations) + ']' }
-      contexts.set(value.iterations, found)
+  const regions = workbookRegions(sheet)
+  const views = new Map(regions.map(region => [region.id, region]))
+  const authored = new Map<string, GridAddress>(sheet.cells.map(cell => [cell.id, cell.at]))
+  for (const region of regions) {
+    for (const cell of region.cells) {
+      authored.set(cell.id, { row: region.row + cell.at.row - 1, column: (region.column ?? 1) + cell.at.column - 1 })
     }
-    return found
   }
-  const ids = new Map(workbookCells(sheet).map(cell => [cell.id, '[' + JSON.stringify(cell.id) + ',']))
-  const nodeKeys = new Map([...authored.keys()].map(id => [id, executionKey('cell', id)]))
-  function placeCells(definitions: readonly WorkbookCell[], nodes: readonly ResolvedFragment<null>[], contextPath: string): WorkbookPlacedCell[] {
-    const byId = new Map(nodes.filter(node => node.type === 'value').map(node => [node.origin.nodeId, node]))
-    return definitions.map(cell => {
-      const value = byId.get(nodeKeys.get(cell.id)!)!
-      const source = origin(value.origin)
-      const position = authored.get(cell.id)!.at
-      const { indexes, suffix } = context(source)
+  const instances = new Map<string, WorkbookIndexes[]>()
+  function placeCells(body: WorkbookData, indexes: WorkbookIndexes): WorkbookPlacedCell[] {
+    const suffix = JSON.stringify(body.iterations) + ']'
+    return body.cells.map(value => {
+      const cell = value.definition
+      const origin = { nodeId: cell.id, dataPath: value.dataPath, iterations: body.iterations }
+      const position = authored.get(cell.id)!
       const at = placeWorkbookPoint(axes, position, indexes)
       if (!at) {
-        workbookIssue('growth-crosses-cell', cell.id, 'A fixed cell occupies a removed band; put it inside the repeat or outside its band', source.dataPath, 'data')
+        workbookIssue('growth-crosses-cell', cell.id, 'A fixed cell occupies a removed band; put it inside the repeat or outside its band', value.dataPath, 'data')
       }
       const end = { row: cell.size.rows === 1 ? at.row : mapAxis(axes.rows, position.row + cell.size.rows - 1, FormulaEdge.End, indexes)!,
         column: cell.size.columns === 1 ? at.column : mapAxis(axes.columns, position.column + cell.size.columns - 1, FormulaEdge.End, indexes)! }
       if (at.row === undefined || at.column === undefined || end.row === undefined || end.column === undefined) {
-        workbookIssue('growth-crosses-cell', cell.id, 'A fixed cell occupies a removed band; put it inside the repeat or outside its band', source.dataPath, 'data')
+        workbookIssue('growth-crosses-cell', cell.id, 'A fixed cell occupies a removed band; put it inside the repeat or outside its band', value.dataPath, 'data')
       }
       const rows = end.row - at.row + 1
       const columns = end.column - at.column + 1
       const size = rows === cell.size.rows && columns === cell.size.columns ? cell.size : { rows, columns }
       if (end.row > WORKBOOK_LIMITS.rows) {
-        workbookIssue('row-limit', cell.id, 'Rendered content exceeds the XLSX row limit', source.dataPath, 'data')
+        workbookIssue('row-limit', cell.id, 'Rendered content exceeds the XLSX row limit', value.dataPath, 'data')
       }
       if (end.column > WORKBOOK_LIMITS.columns) {
-        workbookIssue('column-limit', cell.id, 'Rendered content exceeds the XLSX column limit', source.dataPath, 'data')
+        workbookIssue('column-limit', cell.id, 'Rendered content exceeds the XLSX column limit', value.dataPath, 'data')
       }
       extent.rows = Math.max(extent.rows, end.row)
       extent.columns = Math.max(extent.columns, end.column)
-      let choice: WorkbookChoice | undefined
-      try {
-        choice = value.choice ? displayChoice(value.choice) : undefined
-      }
-      catch (error) {
-        workbookIssue('choice-display', cell.id, (error as Error).message, source.dataPath, 'data')
-      }
-      const literal = value.value !== null && typeof value.value === 'object' ? choice!.text : value.value
-      return { id: ids.get(cell.id)! + suffix, definitionId: cell.id, at, size,
-        value: 'path' in cell.value ? { literal } : cell.value, rules: cell.rules, xlsx: cell.xlsx, origin: source, contextPath, choice }
+      return { id: '[' + JSON.stringify(cell.id) + ',' + suffix, definitionId: cell.id, at, size,
+        value: 'path' in cell.value ? { literal: value.value } : cell.value, rules: cell.rules, xlsx: cell.xlsx, origin, contextPath: body.path, choice: value.choice }
     })
   }
-  function bounds(id: string, value: Origin) {
-    const region = views.get(id)!
-    const indexes = new Map(origin(value).iterations.map(item => [item.nodeId, item.index]))
-    const row = mapAxis(axes.rows, region.row, FormulaEdge.Start, indexes)!
-    const column = mapAxis(axes.columns, region.column ?? 1, FormulaEdge.Start, indexes)!
-    return { row, column, height: mapAxis(axes.rows, region.row + region.height - 1, FormulaEdge.End, indexes)! - row + 1,
-      width: mapAxis(axes.columns, (region.column ?? 1) + (region.width ?? WORKBOOK_LIMITS.columns) - 1, FormulaEdge.End, indexes)! - column + 1 }
-  }
-  function layout(definition: WorkbookBody, body: ResolvedFragment<null>, id?: string): WorkbookRegionLayout[] {
-    if (body.type !== 'group') {
-      throw new Error('Expected region body')
-    }
+  function layout(body: WorkbookData, id?: string): void {
+    const definition = body.definition
+    const indexes = new Map(body.iterations.map(item => [item.nodeId, item.index]))
     if (id) {
       const copies = instances.get(id) ?? []
-      copies.push(context(origin(body.origin)).indexes)
+      copies.push(indexes)
       instances.set(id, copies)
     }
     const owner = id ? views.get(id) : undefined
@@ -227,35 +124,24 @@ function placeWorkbookSheet(sheet: WorkbookSheet, group: ResolvedFragment<null>,
       const end = placeWorkbookPoint(axes, {
         row: range.end.row + (owner?.row ?? 1) - 1,
         column: range.end.column + (owner?.column ?? 1) - 1,
-      }, context(origin(body.origin)).indexes)!
+      }, indexes)!
       extent.rows = Math.max(extent.rows, end.row)
       extent.columns = Math.max(extent.columns, end.column)
     }
-    const nodes = new Map(body.children.map(node => [node.origin.nodeId, node]))
-    const placedRegions: WorkbookRegionLayout[] = []
-    for (const region of [...definition.regions ?? []].sort((a, b) => a.row - b.row)) {
-      const node = nodes.get(executionKey('region', region.id))!
-      const instances = node.type === 'repeat' ? node.instances : node.type === 'scope' ? [node.body] : []
-      const placed = bounds(region.id, node.origin)
+    for (const node of [...body.regions].sort((a, b) => a.definition.row - b.definition.row)) {
+      const region = node.definition
+      const placed = placeWorkbookRegion(axes, views.get(region.id)!, indexes)
       if (placed.row + placed.height - 1 > WORKBOOK_LIMITS.rows) {
-        workbookIssue('row-limit', region.id, 'Repeated rows exceed the XLSX row limit', node.origin.dataPath, 'data')
+        workbookIssue('row-limit', region.id, 'Repeated rows exceed the XLSX row limit', node.path, 'data')
       }
       if (region.width !== undefined && placed.column + placed.width - 1 > WORKBOOK_LIMITS.columns) {
-        workbookIssue('column-limit', region.id, 'Repeated columns exceed the XLSX column limit', node.origin.dataPath, 'data')
+        workbookIssue('column-limit', region.id, 'Repeated columns exceed the XLSX column limit', node.path, 'data')
       }
-      const placedInstances = instances.map(instance => ({ ...bounds(region.id, instance.origin), regions: layout(region, instance, region.id) }))
-      const last = placedInstances.at(-1)
-      const extent = region.type !== 'repeat'
-        ? {}
-        : region.axis === WorkbookAxis.Columns
-          ? { width: last ? last.column + last.width - placed.column : 0 }
-          : { height: last ? last.row + last.height - placed.row : 0 }
-      placedRegions.push({ definitionId: region.id, dataPath: node.origin.dataPath, type: region.type, ...placed, ...extent, instances: placedInstances })
+      node.instances.forEach(instance => layout(instance, region.id))
     }
-    cells.push(...placeCells(definition.cells, body.children, body.origin.dataPath))
-    return placedRegions
+    cells.push(...placeCells(body, indexes))
   }
-  const placedRegions = layout({ cells: definitions, regions, occupied: sheet.occupied }, group)
+  layout(group)
   const print = mapWorkbookPrint(sheet.print, {
     rowStart: row => mapAxis(axes.rows, row, FormulaEdge.Start)!, rowEnd: row => mapAxis(axes.rows, row, FormulaEdge.End)!,
     columnStart: column => mapAxis(axes.columns, column, FormulaEdge.Start)!, columnEnd: column => mapAxis(axes.columns, column, FormulaEdge.End)!,
@@ -263,7 +149,8 @@ function placeWorkbookSheet(sheet: WorkbookSheet, group: ResolvedFragment<null>,
   if (print?.area && (print.area.end.row > WORKBOOK_LIMITS.rows || print.area.end.column > WORKBOOK_LIMITS.columns) || print?.repeatRows && print.repeatRows.end > WORKBOOK_LIMITS.rows) {
     workbookIssue('print-limit', sheet.id, 'Rendered print range exceeds the XLSX grid', `$template.${sheet.id}.print`, 'data')
   }
-  const rows = placeSettings(workbookRows(sheet), axes.rows, WORKBOOK_LIMITS.rows)
+  const rowSettings = [...sheet.rows ?? [], ...regions.flatMap(region => (region.rows ?? []).map(row => ({ ...row, index: region.row + row.index - 1 })))]
+  const rows = placeSettings(rowSettings, axes.rows, WORKBOOK_LIMITS.rows)
   const columns = placeSettings(sheet.columns ?? [], axes.columns, WORKBOOK_LIMITS.columns)
   const occupied = new Set<number>()
   for (const cell of cells) {
@@ -277,8 +164,8 @@ function placeWorkbookSheet(sheet: WorkbookSheet, group: ResolvedFragment<null>,
       }
     }
   }
-  const placed = { ...structuredClone(settings), ...(print ? { print } : {}), rows, columns, cells: cells.sort((a, b) => a.at.row - b.at.row || a.at.column - b.at.column) }
-  return { sheet: placed, regions: placedRegions, axes, coordinates: workbookCoordinates(sheet, axes, instances), authored, extent }
+  const placed = { id: sheet.id, name: sheet.name, state: sheet.state, ...(print ? { print } : {}), rows, columns, cells: cells.sort((a, b) => a.at.row - b.at.row || a.at.column - b.at.column) }
+  return { definition: sheet, data: group, sheet: placed, axes, coordinates: workbookCoordinates(regions, axes, instances), authored, regions: views, extent }
 }
 
 function placeSettings<T extends { readonly index: number }>(settings: readonly T[], axis: AxisPlan, limit: number): T[] {

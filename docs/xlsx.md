@@ -6,23 +6,32 @@ Sheetbind reads unencrypted `.xlsx` templates and returns `.xlsx` files. Edit th
 
 Fonts, fills, borders, alignment, number formats, themes, row heights and column widths come from the template. A repeated region copies its formatting, including styled empty cells. Empty cells with notes, validation, conditional formatting or drawing anchors also participate in placement.
 
+A workbook with a missing or empty cell style table is supported. Rendering adds the default styles needed for its output cells and form input formats, preserving authored style resources such as conditional formatting.
+
 Content beside a repeat keeps the rows or columns it occupies. This can leave space between blocks of different sizes. A blank-looking cell or a gap does not by itself create a submitted record; form records follow the rules in [form reading](./forms.md).
 
 Merged cells inside a repeat follow their copy. A merge outside it can stretch across inserted rows or columns. Keep structural tags outside merged cells and follow the [region layout rules](./templates.md).
 
 ## Input formats and value types
 
-Excel's display format does not convert a value for Sheetbind. The string `"12"` does not satisfy `number`, and the number `12` does not satisfy `string`.
+Form reading uses the format of the submitted cell before running validation. A numeric format converts numeric text to a number and rounds it to the declared decimal precision. Text format (`@`) preserves text and converts numeric values to strings.
 
 | Input | Recommended format | Read result |
 | --- | --- | --- |
-| Quantity or amount | A numeric format such as `0.00` | A number; the format does not round the stored value |
+| Quantity or amount | A numeric format such as `0.00` | A number: stored `10.075` becomes `10.08` |
 | Identifier with leading zeroes | Text (`@`), with `string` validation | A string such as `"001"` |
-| Date | Text (`@`), entered as `2026-01-15` | A string; add a custom calendar-date rule if needed |
+| Date as text | Text (`@`), entered as `2026-01-15` | A string; add a custom calendar-date rule if needed |
+| Native Excel date | A date format such as `dd.mm.yyyy` | An ISO string, for example `2026-01-15T00:00:00.000Z` |
 
-For form fields with `string` validation or a choice, issuance changes the `General` number format to text. Explicit formats authored in the template take precedence, so set dates and identifiers to text yourself.
+For form fields with `string` validation or an active choice list, issuance changes `General` to text. An empty or unavailable choice source leaves the format unchanged. Explicit formats in the template take precedence.
 
-There is no built-in date type. A native Excel date in an input field produces a `non-scalar` issue; an ordinary numeric serial without a date format is read as a number. Formulas entered into input fields produce a `formula` issue. Formula cells outside input fields are not returned as data.
+`General` keeps numeric precision. It accepts numeric text with a decimal point or comma, while text with leading zeroes such as `"006"` remains text. Use `@` to make an identifier's type explicit. Fixed and optional decimal places, percent, scientific notation, scaling commas and numeric format sections determine rounding. Percent values stay fractional numbers: `0.123456` with `0.00%` reads as `0.1235`. Fraction and elapsed-time formats do not round the stored number. Reading does not change the workbook. Trailing zeroes are display information: the JSON number `12.30` is represented as `12.3`.
+
+Native Excel dates become ISO strings; Sheetbind does not infer a timezone from the workbook. An ordinary numeric serial without a date format remains a number. A formula in an input field uses the result saved by Excel and the cell's format, including `0`, `false` and an empty string. Recalculate and save the workbook before reading: Sheetbind cannot verify that the result is current. A missing result or an Excel error produces a `formula` issue. Formula cells outside input fields are not returned as data.
+
+Engineering notation accounts for the number of integer positions: `12345.67` with `##0.0E+0` displays as `12.3E+3` and reads as `12300`.
+
+List labels are matched using the original text: `"2026"` stays a list option, and selected objects or keys follow the `@choice` return setting. Numeric conversion applies to free input, including fields without available choice options.
 
 Use strings for long identifiers: Excel numeric precision can lose digits. Cell text is limited to 32,767 UTF-16 code units, and characters that XML cannot represent are rejected. Standard XLSX row and column limits also apply.
 
@@ -59,6 +68,7 @@ Sheetbind returns an XLSX; Excel determines pagination and printing. Check print
 | Content | How it follows the output |
 | --- | --- |
 | Notes and hyperlinks | Their cell addresses move or repeat with the owning region |
+| Internal hyperlink targets | Local A1 targets follow placement, including other sheets; a repeated target uses its first copy, and a removed target becomes `#REF!` |
 | Pictures | Drawing anchors move or repeat with their region; both bounds move together |
 | Native validation and conditional formatting | Their ranges follow the actual target cells, including otherwise empty cells |
 | Filters and sort settings | Their enclosing range follows placement; a setting is removed when its whole target disappears |
@@ -72,7 +82,7 @@ A picture's position and a chart's data references are different concerns. Retai
 
 Sheetbind creates Excel dropdowns for [lists and choices](./fields.md). If a source cell has only an input prompt, that prompt is retained when adding the dropdown.
 
-If the same output cell already has a full Excel validation rule, rendering rejects the conflict with `RangeError`. Remove the native rule or the Sheetbind list/choice for that field. A cell's native rule is not silently combined with a second validation rule.
+If the same output cell already has a full Excel validation rule, rendering preserves it, warns and omits the generated dropdown on the overlapping cells. Other generated dropdowns remain. The field's declared list or choice is still checked by `readWorkbookForm`; authored Excel rules are not executed by the reader.
 
 Excel's validation UI does not replace form reading. Pasted values can still need checking; `readWorkbookForm` resolves the choice and runs the declared field rules.
 

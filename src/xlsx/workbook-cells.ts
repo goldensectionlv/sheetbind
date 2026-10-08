@@ -1,33 +1,85 @@
 import type JSZip from 'jszip'
 import { columnName } from '../grid/geometry'
-import { formatRange, parseAddress, parseRange } from './addresses'
-import type { WorkbookOutputCell, WorkbookOutputSheet } from './workbook-output'
-import { protect } from './report-text'
-import { appendXmlChildren, encodeXml, setXmlAttributes, xmlAttributes, xmlElements } from './xml'
+import type { TemplateValue } from '../core/template'
+import type { WorkbookFormula } from '../grid/workbook-formula'
+import { formatRange } from '../grid/geometry'
+import type { WorkbookPlacedCell, WorkbookPlacedSheet } from '../grid/workbook-layout'
+import { assertXlsxText, protect } from './report-text'
+import { workbookRelationshipId } from './workbook-resources'
+import { appendXmlChildren, encodeXml, setXmlAttributes, setXmlElement, xmlAttributes, xmlElements } from './xml'
 
 export type WorkbookCells = Awaited<ReturnType<typeof prepareWorkbookCells>>
 
-/** Serialize resolved values into the final workbook string table. */
-export async function prepareWorkbookCells(zip: JSZip, inheritedStrings: readonly string[] = []) {
+const defaultStyles = '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+  + '<fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts>'
+  + '<fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>'
+  + '<borders count="1"><border/></borders>'
+  + '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'
+  + '<cellXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/></cellXfs>'
+  + '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>'
+
+/** One writer owns shared strings and derived styles for all output cells. */
+export async function prepareWorkbookCells(zip: JSZip) {
+  const source = await zip.file('xl/styles.xml')?.async('string')
+  let xml = source ?? defaultStyles
+  if (!xmlElements(xmlElements(xml, 'cellXfs')[0] ?? '', 'xf').length) {
+    // Excel needs base resources when the implicit default style becomes explicit.
+    xml = xml.replace(/(<styleSheet\b[^>]*?)\/>/, '$1></styleSheet>')
+    let next = /<(?:dxfs|tableStyles|colors|extLst)\b[^>]*>|<\/styleSheet>/.exec(xml)![0]
+    for (const [name, child] of [['cellStyles', 'cellStyle'], ['cellXfs', 'xf'], ['cellStyleXfs', 'xf'], ['borders', 'border'], ['fills', 'fill'], ['fonts', 'font']]) {
+      let table = xmlElements(xml, name)[0]
+      if (!table || !xmlElements(table, child).length) {
+        const fallback = xmlElements(defaultStyles, name)[0]
+        xml = table ? xml.replace(table, () => fallback) : xml.replace(next, () => fallback + next)
+        table = fallback
+      }
+      next = table
+    }
+  }
+  const originals = xmlElements(xmlElements(xml, 'cellXfs')[0] ?? '', 'xf')
+  const all = [...originals]
+  const textStyles = new Map<number, number>()
+  let normal: number | undefined
+  function textStyle(original = 0): number {
+    const cached = textStyles.get(original)
+    if (cached !== undefined) {
+      return cached
+    }
+    const id = all.length
+    all.push(setXmlAttributes(originals[original] ?? originals[0], { numFmtId: 49, applyNumberFormat: 1 }))
+    textStyles.set(original, id)
+    return id
+  }
+  function style(original: number, text = false): number {
+    if (text && Number(xmlAttributes(originals[original] ?? originals[0]).numFmtId ?? 0) === 0) {
+      return textStyle(original)
+    }
+    // A nonzero ID prevents a moved General cell from inheriting its new row/column format.
+    if (!original && normal === undefined) {
+      normal = all.length
+      all.push(originals[0])
+    }
+    return original || normal!
+  }
   const prior = await zip.file('xl/sharedStrings.xml')?.async('string')
-  const strings = [...inheritedStrings, ...xmlElements(prior ?? '', 'si')]
+  const strings = xmlElements(prior ?? '', 'si')
   const values = new Map<string, number>()
   function text(value: string): number {
     let index = values.get(value)
     if (index !== undefined) {
       return index
     }
+    assertXlsxText(value)
     index = strings.length
     values.set(value, index)
     strings.push(`<si><t xml:space="preserve">${encodeXml(protect(value))}</t></si>`)
     return index
   }
-  function content(cell: WorkbookOutputCell): { style: number, type?: string, body: string } {
+  function content(value: TemplateValue | WorkbookFormula): { style: number, type?: string, body: string } {
     const style = 0
-    if ('formula' in cell.value) {
-      return { style, body: `<f>${encodeXml(cell.value.formula)}</f>` }
+    if (value !== null && typeof value === 'object') {
+      return { style, body: `<f>${encodeXml(value.formula)}</f>` }
     }
-    const value = cell.choice ? cell.choice.text : cell.value.literal
     if (typeof value === 'string') {
       return { style, type: 's', body: `<v>${text(value)}</v>` }
     }
@@ -36,23 +88,30 @@ export async function prepareWorkbookCells(zip: JSZip, inheritedStrings: readonl
     }
     return { style, body: value === null ? '' : `<v>${value}</v>` }
   }
-  return { content, strings: strings as readonly string[], stringOffset: inheritedStrings.length }
+  return { content, style, textStyle,
+    async save() {
+      if (all.length !== originals.length || xml !== source) {
+        await writeCellPart(zip, 'styles', setXmlElement(xml, 'cellXfs', `<cellXfs count="${all.length}">${all.join('')}</cellXfs>`))
+      }
+      if (strings.length) {
+        await writeCellPart(zip, 'sharedStrings', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" uniqueCount="${strings.length}">${strings.join('')}</sst>`)
+      }
+    } }
 }
 
-/** Cells share one string table for the final package; no intermediate ZIP round-trip. */
-export async function writeWorkbookStrings(zip: JSZip, strings: readonly string[]): Promise<void> {
-  if (!strings.length) {
-    return
-  }
-  const present = zip.file('xl/sharedStrings.xml') !== null
-  zip.file('xl/sharedStrings.xml', new TextEncoder().encode(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" uniqueCount="${strings.length}">${strings.join('')}</sst>`))
+/** Style and string tables are optional in the source package. */
+async function writeCellPart(zip: JSZip, part: 'styles' | 'sharedStrings', xml: string): Promise<void> {
+  const path = `xl/${part}.xml`
+  const present = zip.file(path) !== null
+  zip.file(path, new TextEncoder().encode(xml))
   if (present) {
     return
   }
   const relations = await zip.file('xl/_rels/workbook.xml.rels')!.async('string')
   const types = await zip.file('[Content_Types].xml')!.async('string')
-  zip.file('xl/_rels/workbook.xml.rels', appendXmlChildren(relations, 'Relationships', ['<Relationship Id="sheetbindStrings" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings" Target="sharedStrings.xml"/>']))
-  zip.file('[Content_Types].xml', appendXmlChildren(types, 'Types', ['<Override PartName="/xl/sharedStrings.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"/>']))
+  const id = workbookRelationshipId(relations, part === 'styles' ? 'sheetbindStyles' : 'sheetbindStrings')
+  zip.file('xl/_rels/workbook.xml.rels', appendXmlChildren(relations, 'Relationships', [`<Relationship Id="${id}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/${part}" Target="${part}.xml"/>`]))
+  zip.file('[Content_Types].xml', appendXmlChildren(types, 'Types', [`<Override PartName="/${path}" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.${part}+xml"/>`]))
 }
 
 export function cellXml(address: string, content: ReturnType<WorkbookCells['content']>): string {
@@ -60,16 +119,14 @@ export function cellXml(address: string, content: ReturnType<WorkbookCells['cont
 }
 
 /** Emit each row once, retaining carrier cells, merged edges and unowned source cells. */
-export function worksheetCells(xml: string, sheet: WorkbookOutputSheet, render: (cell: WorkbookOutputCell, address: string) => string,
-  source?: { rows: ReadonlyMap<number, string>, cells: ReadonlyMap<number, ReadonlyMap<number, string>> }) {
-  const generated = new Map(xmlElements(xmlElements(xml, 'sheetData')[0] ?? '', 'row').map(row => [Number(xmlAttributes(row.slice(0, row.indexOf('>') + 1)).r), row]))
-  const definitions = new Map<number, WorkbookOutputCell[]>()
+export function worksheetCells(sheet: WorkbookPlacedSheet, render: (cell: WorkbookPlacedCell, address: string) => string,
+  source: { rows: ReadonlyMap<number, string>, cells: ReadonlyMap<number, ReadonlyMap<number, string>> }) {
+  const settings = new Map((sheet.rows ?? []).map(row => [row.index, row]))
+  const definitions = new Map<number, WorkbookPlacedCell[]>()
   const columns = new Map<number, string>()
-  const dimension = xmlElements(xml, 'dimension')[0]
-  const initial = dimension ? parseRange(xmlAttributes(dimension).ref) : { start: { row: 1, column: 1 }, end: { row: 1, column: 1 } }
-  const bounds = { start: { ...initial.start }, end: { ...initial.end } }
+  const bounds = { start: { row: 1, column: 1 }, end: { row: 1, column: 1 } }
   let currentRow = 0
-  let currentCells: WorkbookOutputCell[] = []
+  let currentCells: WorkbookPlacedCell[] = []
   for (const cell of sheet.cells) {
     if (currentRow !== cell.at.row) {
       currentRow = cell.at.row
@@ -82,20 +139,16 @@ export function worksheetCells(xml: string, sheet: WorkbookOutputSheet, render: 
     bounds.end.row = Math.max(bounds.end.row, cell.at.row + cell.size.rows - 1)
     bounds.end.column = Math.max(bounds.end.column, cell.at.column + cell.size.columns - 1)
   }
-  const rows = [...new Set([...generated.keys(), ...definitions.keys(), ...source?.rows.keys() ?? [], ...source?.cells.keys() ?? []])].sort((a, b) => a - b).map(index => {
-    const row = generated.get(index) ?? ''
-    const original = source?.rows.get(index)
-    let head = original ?? (row ? row.slice(0, row.indexOf('>') + 1) : `<row r="${index}"/>`)
-    if (row && original) {
-      const attributes = xmlAttributes(row.slice(0, row.indexOf('>') + 1))
-      head = setXmlAttributes(head, { ht: attributes.ht, customHeight: attributes.customHeight, hidden: attributes.hidden })
+  const rows = [...new Set([...settings.keys(), ...definitions.keys(), ...source.rows.keys(), ...source.cells.keys()])].sort((a, b) => a - b).map(index => {
+    let head = source.rows.get(index) ?? `<row r="${index}"/>`
+    const setting = settings.get(index)
+    if (setting) {
+      head = setXmlAttributes(head, { ht: setting.height, customHeight: setting.height === undefined ? undefined : 1, hidden: setting.hidden ? 1 : undefined })
     }
     head = setXmlAttributes(head, { spans: undefined }).replace(/\/>$/, '>')
-    const cells = new Map(xmlElements(row, 'c').map(cell => [parseAddress(xmlAttributes(cell.slice(0, cell.indexOf('>') + 1)).r).column, cell]))
-    for (const [column, cell] of source?.cells.get(index) ?? []) {
-      cells.set(column, cell)
-    }
-    const extra = [...cells].sort(([a], [b]) => a - b)
+    const extra = [...source.cells.get(index) ?? []].sort(([a], [b]) => a - b)
+    bounds.end.row = Math.max(bounds.end.row, index)
+    bounds.end.column = Math.max(bounds.end.column, extra.at(-1)?.[0] ?? 1)
     const values: string[] = []
     let cursor = 0
     for (const cell of (definitions.get(index) ?? []).sort((a, b) => a.at.column - b.at.column)) {

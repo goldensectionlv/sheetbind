@@ -1,42 +1,41 @@
-import { createWorkbookOutput } from './workbook-output'
 import ExcelJS from 'exceljs'
 import JSZip from 'jszip'
-import { assertInputData } from '../core/json'
-import { validateWorkbookDefinition } from '../grid/workbook-validate'
-import { collectWorkbookDictionarySources, workbookRegions, WORKBOOK_LIMITS } from '../grid/workbook'
+import { assertInputData, jsonSnapshot } from '../core/json'
+import { validateWorkbookDefinition, collectWorkbookDictionarySources, workbookRegions, WORKBOOK_LIMITS, mapWorkbookPrint, workbookCells } from '../grid/workbook'
 import type { GridRange } from '../grid/geometry'
 import { partitionWorkbookRange } from '../grid/workbook-coordinates'
-import { planWorkbook, resolveWorkbook as resolveDefinition } from '../grid/workbook-layout'
+import { planWorkbook } from '../grid/workbook-layout'
 import type { WorkbookLayout } from '../grid/workbook-layout'
-import type { WorkbookCell, WorkbookRegion, WorkbookRow, WorkbookSheet } from '../grid/workbook'
-import { formatAddress, parseRange } from './addresses'
-import { workbookParts } from './workbook-source'
+import type { WorkbookCell, WorkbookRegion, WorkbookRow, WorkbookSheet, WorkbookDefinition } from '../grid/workbook'
+import { formatAddress, parseRange } from '../grid/geometry'
 import { compileWorkbookSheet } from './workbook-tags'
-import { writeWorkbookPackage } from './workbook-package'
+import { writeWorkbookPackage } from './workbook-source'
 import { parseDictionaries } from '../core/dictionaries'
-import type { ValidationOptions } from '../core/validation'
 import type { Dictionaries } from '../core/dictionaries'
-import { WorkbookTemplate } from './template'
 import { readWorkbookPrint } from './workbook-print'
-import { mapWorkbookPrint } from '../grid/workbook-print'
-import { FormulaEdge, mapWorkbookFormulaRows } from '../grid/workbook-formula'
+import { FormulaEdge, mapWorkbookFormulaRows, copyWorkbookFormula, parseWorkbookFormula } from '../grid/workbook-formula'
 import type { FormulaRows } from '../grid/workbook-formula'
-import { readWorkbookFormula } from './workbook-formula'
 import { readSourceContent } from './source-metadata'
 import { TaggedXlsxError, withTemplateLocations } from './tagged-template'
+import { loadWorkbook } from './workbook-input'
+import { readWorkbookResources, workbookParts } from './workbook-resources'
+import type { WorkbookResourceSource } from './workbook-resources'
+import type { Cell } from 'exceljs'
+import { prepareFormatting } from '../core/formatters'
+import type { TaggedXlsxIssue } from './tagged-template'
 
 function unsupported(what: string): never {
   throw new RangeError(`${what} is outside the supported template model`)
 }
 /** Import a tagged workbook into the execution document. */
 export async function importWorkbookXlsx(bytes: Uint8Array): Promise<WorkbookTemplate> {
-  const book = new ExcelJS.Workbook()
+  let book: ExcelJS.Workbook
   let zip: JSZip
   let parts: Awaited<ReturnType<typeof workbookParts>>
   try {
     zip = await JSZip.loadAsync(bytes)
     parts = await workbookParts(zip)
-    await book.xlsx.load(Uint8Array.from(bytes).buffer)
+    book = await loadWorkbook(bytes, zip)
   }
   catch (error) {
     throw new TaggedXlsxError([{ phase: 'template', code: 'invalid-workbook', path: '$workbook', message: 'cannot read a supported unencrypted XLSX template' }], { cause: error })
@@ -107,7 +106,7 @@ export async function importWorkbookXlsx(bytes: Uint8Array): Promise<WorkbookTem
       const value = field?.expression ?? (formula === undefined ? { literal } : { formula })
       target.push({ id: createId('cell'), at: { row: owner ? index - owner.row + 1 : index, column: column - (owner ? owner.node.column - 1 : 0) },
         size: { rows: range ? compiled.authoredRow(range.end.row, FormulaEdge.End)! - index + 1 : 1, columns: range ? range.end.column - range.start.column + 1 : 1 },
-        value, xlsx: { part, address: cell.address, value: field && 'literal' in field.expression ? { literal: scalar } : value },
+        value, xlsx: { address: cell.address, value: field && 'literal' in field.expression ? { literal: scalar } : value },
         ...(field?.rules ? { rules: field.rules } : {}) })
       sourceCells.push(cell.address)
     }
@@ -147,7 +146,7 @@ export async function importWorkbookXlsx(bytes: Uint8Array): Promise<WorkbookTem
     return { id: createId('sheet'), name: sheet.name, state: sheet.state, xlsx: { part, markers: [...markers], cells: sourceCells }, ...(print ? { print } : {}),
       rows, columns, cells, ...(occupied.length ? { occupied } : {}), ...(regions.length ? { regions } : {}) }
   }
-  return new WorkbookTemplate(validateWorkbookDefinition({ sheets: book.worksheets.map(importSheet) }), bytes)
+  return new WorkbookTemplate(validateWorkbookDefinition({ sheets: book.worksheets.map(importSheet) }), bytes, await readWorkbookResources(zip))
 }
 
 type ImportedRegion = Omit<WorkbookRegion, 'cells' | 'rows' | 'regions' | 'occupied'> & { cells: WorkbookCell[], rows: WorkbookRow[], occupied: GridRange[], regions?: ImportedRegion[] }
@@ -175,10 +174,18 @@ function importRegions(compiled: ReturnType<typeof compileWorkbookSheet>, create
 }
 
 /** Resolve values and placement without exposing the imported definition. */
-export function resolveWorkbook(template: WorkbookTemplate, data: unknown, options: ValidationOptions & { readonly dictionaries?: Dictionaries } = {}): WorkbookLayout {
+export function resolveWorkbook(template: WorkbookTemplate, data: unknown, options: { readonly dictionaries?: Dictionaries } = {}): WorkbookLayout {
   const { definition } = WorkbookTemplate.content(template)
   assertInputData(data)
-  return withTemplateLocations(definition, () => resolveDefinition(definition, data, options))
+  const plan = withTemplateLocations(definition, () => planWorkbook(definition, data, { dictionaries: parseDictionaries(options.dictionaries, collectWorkbookDictionarySources(definition)) }))
+  return { sheets: plan.sheets.map(({ sheet }) => ({
+    ...structuredClone({ id: sheet.id, name: sheet.name, state: sheet.state, rows: sheet.rows, columns: sheet.columns, print: sheet.print }),
+    cells: sheet.cells.map(cell => ({
+      ...structuredClone({ id: cell.id, definitionId: cell.definitionId, at: cell.at, size: cell.size, rules: cell.rules,
+        origin: cell.origin, contextPath: cell.contextPath, value: cell.value }),
+      choice: cell.choice && { ...cell.choice, items: cell.choice.items.map(item => ({ ...item, value: jsonSnapshot(item.value) as Record<string, unknown> })) },
+    })),
+  })) }
 }
 
 export function workbookDictionarySources(template: WorkbookTemplate): string[] {
@@ -186,11 +193,73 @@ export function workbookDictionarySources(template: WorkbookTemplate): string[] 
 }
 
 /** Render data into the imported workbook while preserving its native content. */
-export async function renderWorkbookReport(template: WorkbookTemplate, data: unknown, options: ValidationOptions & { readonly dictionaries?: Dictionaries } = {}): Promise<Buffer> {
-  const { definition, source } = WorkbookTemplate.content(template)
-  const dictionaries = parseDictionaries(options.dictionaries ?? {})
+export async function renderWorkbookReport(template: WorkbookTemplate, data: unknown, options: { readonly dictionaries?: Dictionaries } = {}): Promise<Buffer> {
+  const { definition, source, resources } = WorkbookTemplate.content(template)
+  const dictionaries = parseDictionaries(options.dictionaries, collectWorkbookDictionarySources(definition))
   assertInputData(data)
-  const plan = withTemplateLocations(definition, () => planWorkbook(definition, data, { ...options, dictionaries, checkValues: true }))
-  const output = createWorkbookOutput(plan.layout.sheets, dictionaries)
-  return writeWorkbookPackage(output, { source, template: definition, sheets: plan.layout.sheets, axes: plan.axes, coordinates: plan.coordinates })
+  const plan = withTemplateLocations(definition, () => planWorkbook(definition, data, { dictionaries }))
+  return writeWorkbookPackage({ source, plan, dictionaries, resources })
+}
+/** An imported XLSX and its compiled bindings, owned by the library. */
+export class WorkbookTemplate {
+  readonly #content: { readonly definition: WorkbookDefinition, readonly source: Uint8Array, readonly resources: WorkbookResourceSource }
+
+  constructor(definition: WorkbookDefinition, source: Uint8Array, resources: WorkbookResourceSource) {
+    this.#content = { definition, source: Uint8Array.from(source), resources }
+  }
+
+  static content(template: WorkbookTemplate) {
+    if (!(template instanceof WorkbookTemplate)) {
+      throw new TypeError('Load a tagged XLSX with importWorkbookXlsx first')
+    }
+    return template.#content
+  }
+}
+/** Materialize shared formulas using string-aware reference offsets. */
+function readWorkbookFormula(cell: Cell): string {
+  const value = cell.value
+  if (!value || typeof value !== 'object' || 'shareType' in value && value.shareType !== 'shared') {
+    throw new SyntaxError('Expected an ordinary or shared formula')
+  }
+  if ('formula' in value) {
+    return parseWorkbookFormula(value.formula)
+  }
+  if ('sharedFormula' in value && typeof value.sharedFormula === 'string') {
+    const master = cell.worksheet.getCell(value.sharedFormula)
+    const source = master.value
+    if (source && typeof source === 'object' && 'formula' in source) {
+      return copyWorkbookFormula(parseWorkbookFormula(source.formula), Number(cell.row) - Number(master.row), Number(cell.col) - Number(master.col))
+    }
+  }
+  throw new SyntaxError('Shared formula master is missing')
+}
+export interface WorkbookTemplateFinding extends TaggedXlsxIssue {
+  readonly severity: 'error' | 'warning'
+}
+
+/** Check render dependencies without data, formatter execution or value validation. */
+export function inspectWorkbookTemplate(template: WorkbookTemplate, options: { readonly dictionaries?: readonly string[] } = {}): readonly WorkbookTemplateFinding[] {
+  const findings: WorkbookTemplateFinding[] = []
+  const known = options.dictionaries && new Set(options.dictionaries)
+  for (const sheet of WorkbookTemplate.content(template).definition.sheets) {
+    for (const cell of workbookCells(sheet)) {
+      const location = { phase: 'template' as const, nodeId: cell.id, path: cell.xlsx.address, sheetName: sheet.name, address: cell.xlsx.address }
+      if (cell.rules?.format) {
+        try {
+          prepareFormatting(cell.rules.format)
+        }
+        catch (error) {
+          findings.push({ ...location, code: 'invalid-format', severity: 'warning', message: (error as Error).message })
+        }
+      }
+      const choice = cell.rules?.choice?.source
+      const dependencies = new Set([cell.rules?.list, choice && 'dictionary' in choice ? choice.dictionary : undefined])
+      for (const name of dependencies) {
+        if (name && known && !known.has(name)) {
+          findings.push({ ...location, code: 'unknown-dict', severity: 'warning', message: `Unknown dictionary: ${name}` })
+        }
+      }
+    }
+  }
+  return findings
 }

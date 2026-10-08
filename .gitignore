@@ -2,7 +2,6 @@
 dist
 docs/.vitepress/cache
 docs/.vitepress/dist
-docs/public/fixtures
 docs/public/examples
 
 # dependencies

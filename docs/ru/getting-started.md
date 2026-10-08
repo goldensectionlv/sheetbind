@@ -6,19 +6,17 @@
 
 ## 1. Установите пакет
 
-Создайте приложение и установите Sheetbind из npm, ExcelJS и средство запуска TypeScript:
+Создайте папку `sheetbind-example` для приложения. Из этой папки установите Sheetbind 0.3.0, ExcelJS и средство запуска TypeScript:
 
 ```sh
-mkdir sheetbind-example
-cd sheetbind-example
 pnpm init --init-type module
-pnpm add sheetbind@0.2.0 exceljs@4.4.0
+pnpm add sheetbind@0.3.0 exceljs@4.4.0
 pnpm add -D tsx
 ```
 
 `--init-type module` добавляет `"type": "module"` в `package.json`: примеры используют `import` и `await` на верхнем уровне. Для существующего приложения установите зависимости в нём и используйте его настройки модулей. ExcelJS — peer dependency: его нужно установить рядом с Sheetbind.
 
-Дальнейшие команды выполняйте из `sheetbind-example`.
+Дальнейшие команды выполняйте из `sheetbind-example`. Используйте одну сборку пакета для выдачи и чтения форм.
 
 ## 2. Создайте шаблон
 
@@ -52,7 +50,7 @@ pnpm exec tsx report.ts
 
 Откройте `report.xlsx` в той же папке. В A1 остаётся `Customer`, в B1 появляется `Sample customer`.
 
-Если при рендере получили `missing-source` для `$data.customer.name`, проверьте структуру данных. Объект `{ name: 'Sample customer' }` не соответствует тегу `{customer.name}`: в примере выше есть нужный объект `customer`.
+Если рендер предупреждает об отсутствии `$data.customer.name`, проверьте структуру данных. Объект `{ name: 'Sample customer' }` не соответствует тегу `{customer.name}`; рендер оставляет эту ячейку пустой. В примере выше передан нужный объект `customer`.
 
 Храните размеченный файл как шаблон. После изменения тегов или оформления сохраните его и снова вызовите `importWorkbookXlsx`.
 

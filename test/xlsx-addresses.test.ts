@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest'
-import { assertXlsxAddress, formatAddress, formatRange, parseAddress, parseRange, XLSX_MAX_COLUMN, XLSX_MAX_ROW } from '../src/xlsx/addresses'
+import { assertXlsxAddress, formatAddress, formatRange, parseAddress, parseRange, XLSX_MAX_COLUMN, XLSX_MAX_ROW } from '../src/grid/geometry'
 
 it('reads absolute A1 references and formats addresses through the XLSX boundary', () => {
   for (const [ref, row, column] of [['A1', 1, 1], ['Z9', 9, 26], ['AA10', 10, 27], ['XFD1048576', XLSX_MAX_ROW, XLSX_MAX_COLUMN]] as const) {

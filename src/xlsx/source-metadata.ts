@@ -1,6 +1,6 @@
 import type JSZip from 'jszip'
 import type { GridRange } from '../grid/geometry'
-import { formatAddress, parseAddress, parseRange } from './addresses'
+import { formatAddress, parseAddress, parseRange } from '../grid/geometry'
 import { sourceFormula } from './source-coordinates'
 import type { SourceCoordinates } from './source-coordinates'
 import { decodeXml, encodeXml, resolvePart, setXmlAttributes, xmlAttributes, xmlElements } from './xml'
@@ -98,13 +98,11 @@ export async function readSourceContent(zip: JSZip, part: string): Promise<GridR
 export async function relocateSourceMetadata(zip: JSZip, maps: ReadonlyMap<string, SourceCoordinates>): Promise<void> {
   const visited = new Set<string>()
   for (const map of maps.values()) {
-    if (map.part) {
-      await visitSourceParts(zip, map.part, (part, xml) => {
-        if (part !== map.part) {
-          zip.file(part, relocateMetadata(xml, map, maps))
-        }
-      }, visited)
-    }
+    await visitSourceParts(zip, map.part, (part, xml) => {
+      if (part !== map.part) {
+        zip.file(part, relocateMetadata(xml, map, maps))
+      }
+    }, visited)
   }
 }
 

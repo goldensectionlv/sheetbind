@@ -1,4 +1,4 @@
-import type { ResolvedFragment } from '../core/template'
+import type { WorkbookData } from './workbook-data'
 import { WorkbookAxis, workbookIssue, WORKBOOK_LIMITS } from './workbook'
 import type { WorkbookBody } from './workbook'
 import { FormulaEdge } from './workbook-formula'
@@ -36,20 +36,17 @@ function retainFixedSpan(plan: AxisDraft, start: number, end: number): void {
   }
 }
 
-/** Each axis shares geometric bands across the other axis. Data remains in core. */
-export function planWorkbookAxes(body: WorkbookBody, resolved: ResolvedFragment<null>, key: (id: string) => string): WorkbookAxes {
+/** Each axis shares geometric bands across the other axis. */
+export function planWorkbookAxes(resolved: WorkbookData): WorkbookAxes {
   function planAxis(axis: WorkbookAxis): AxisPlan {
     const root = emptyAxis()
     const shape = workbookAxes[axis]
     const fixed: { plan: AxisDraft, definition: WorkbookBody, offset: number }[] = []
-    function collect(plan: AxisDraft, definition: WorkbookBody, node: ResolvedFragment<null>, offset: number): void {
-      if (node.type !== 'group') {
-        throw new Error('Expected a workbook body')
-      }
-      const nodes = new Map(node.children.map(child => [child.origin.nodeId, child]))
-      for (const region of definition.regions ?? []) {
-        const child = nodes.get(key(region.id))!
-        const instances = child.type === 'repeat' ? child.instances : child.type === 'scope' ? [child.body] : []
+    function collect(plan: AxisDraft, node: WorkbookData, offset: number): void {
+      const definition = node.definition
+      for (const child of node.regions) {
+        const region = child.definition
+        const instances = child.instances
         const start = offset + (region[shape.position] ?? 1)
         const length = region[shape.length] ?? WORKBOOK_LIMITS[axis]
         if (region.type === 'repeat' && (region.axis ?? WorkbookAxis.Rows) === axis) {
@@ -58,25 +55,25 @@ export function planWorkbookAxes(body: WorkbookBody, resolved: ResolvedFragment<
             if (plan.segments.some(value => start < value.start + value.length && value.start < start + length)) {
               workbookIssue('growth-band-overlap', region.id, `Overlapping ${axis} repeats must reserve the same band`, region.id)
             }
-            segment = { start, length, ids: [], path: child.origin.dataPath, instances: [] }
+            segment = { start, length, ids: [], path: child.path, instances: [] }
             plan.segments.push(segment)
           }
           if (!segment.ids.includes(region.id)) {
             segment.ids.push(region.id)
           }
           for (const [index, instance] of instances.entries()) {
-            collect(segment.instances[index] ??= emptyAxis(length), region, instance, 0)
+            collect(segment.instances[index] ??= emptyAxis(length), instance, 0)
           }
         }
         else {
           for (const instance of instances) {
-            collect(plan, region, instance, start - 1)
+            collect(plan, instance, start - 1)
           }
         }
       }
       fixed.push({ plan, definition, offset })
     }
-    collect(root, body, resolved, 0)
+    collect(root, resolved, 0)
     for (const { plan, definition, offset } of fixed) {
       if (!plan.segments.length) {
         continue

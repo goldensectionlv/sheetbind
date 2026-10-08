@@ -6,19 +6,17 @@ To install that pnpm version, run `npm install --global pnpm@11.5.2`.
 
 ## 1. Install the package
 
-Create an application and install Sheetbind from npm, ExcelJS and a TypeScript runner:
+Create a `sheetbind-example` directory for your application. From that directory, install Sheetbind 0.3.0, ExcelJS and a TypeScript runner:
 
 ```sh
-mkdir sheetbind-example
-cd sheetbind-example
 pnpm init --init-type module
-pnpm add sheetbind@0.2.0 exceljs@4.4.0
+pnpm add sheetbind@0.3.0 exceljs@4.4.0
 pnpm add -D tsx
 ```
 
 `--init-type module` adds `"type": "module"` to `package.json`; the examples use `import` and top-level `await`. For an existing application, install the dependencies there and use its module setup. ExcelJS is a peer dependency and must be installed alongside Sheetbind.
 
-Run the rest of this guide from `sheetbind-example`.
+Run the rest of this guide from `sheetbind-example`. Keep form issuance and reading on the same package build.
 
 ## 2. Create the template
 
@@ -52,7 +50,7 @@ pnpm exec tsx report.ts
 
 Open `report.xlsx` in the same directory. A1 still contains `Customer`; B1 now contains `Sample customer`.
 
-If rendering reports `missing-source` for `$data.customer.name`, check the data structure. `{ name: 'Sample customer' }` does not match `{customer.name}`; the code above provides the required `customer` object.
+If rendering warns that `$data.customer.name` is missing, check the data structure. `{ name: 'Sample customer' }` does not match `{customer.name}`; rendering leaves that cell blank. The example above supplies the required `customer` object.
 
 Keep the tagged file as your template. After changing its tags or formatting, save it and call `importWorkbookXlsx` again.
 

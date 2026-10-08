@@ -1,10 +1,64 @@
-import { assertInputData } from '../core/json'
+import { isDataObject, assertInputData } from '../core/json'
 import { isBlank } from '../core/validation'
+import type { DataReference } from '../core/template'
 import type { WorkbookBody, WorkbookDefinition, WorkbookRegion } from '../grid/workbook'
-import { createDataDraft, dataPath, readData, writeData } from './records'
-import type { DataPath } from './records'
-import { referencePath } from './workbook'
 
+export type DataPath = readonly (string | number)[]
+
+export function referencePath(reference: DataReference, context: DataPath): DataPath {
+  return [...(reference.from === 'root' ? [] : context), ...reference.path.split('.')]
+}
+
+export function readData(data: unknown, path: DataPath): unknown {
+  let value = data
+  for (const part of path) {
+    value = (isDataObject(value) || Array.isArray(value)) && Object.hasOwn(value, part) ? Reflect.get(value, part) : undefined
+  }
+  return value
+}
+
+/** Paths come from the template; constructed containers belong to the current operation. */
+export function writeData(data: Record<string, unknown>, path: DataPath, value: unknown, create = false): void {
+  let container: Record<string, unknown> | unknown[] = data
+  for (const part of path.slice(0, -1)) {
+    if (create && !Object.hasOwn(container, part) && !Reflect.set(container, part, {})) {
+      throw new TypeError('Field container must be writable')
+    }
+    const child: unknown = Reflect.get(container, part)
+    if (!isDataObject(child) && !Array.isArray(child)) {
+      throw new Error('Field container must be an object')
+    }
+    container = child
+  }
+  if (!Reflect.set(container, path[path.length - 1], value)) {
+    throw new TypeError('Field container must be writable')
+  }
+}
+
+/** An issuance owns changed containers; unchanged records remain read-only and shared. */
+function createDataDraft(input: Record<string, unknown>) {
+  const data = { ...input }
+  const owned = new WeakSet<object>([data])
+  function replace(path: DataPath, value: unknown): void {
+    let container: Record<string, unknown> | unknown[] = data
+    for (const part of path.slice(0, -1)) {
+      const child: unknown = Reflect.get(container, part) ?? {}
+      if (!isDataObject(child) && !Array.isArray(child)) {
+        throw new Error('Field container must be an object')
+      }
+      const copy = owned.has(child) ? child : Array.isArray(child) ? [...child] : { ...child }
+      owned.add(copy)
+      Reflect.set(container, part, copy)
+      container = copy
+    }
+    Reflect.set(container, path[path.length - 1], value)
+  }
+  return { data, replace }
+}
+
+export function dataPath(path: DataPath): string {
+  return '$data' + path.map(part => typeof part === 'number' ? `[${part}]` : `.${part}`).join('')
+}
 export interface WorkbookFormRows { readonly path: DataPath, readonly fields: readonly DataPath[] }
 
 export function isWorkbookFormRow(region: WorkbookRegion): boolean {
@@ -23,7 +77,7 @@ export function issueWorkbookFormData(template: WorkbookDefinition, input: unkno
   const visit = (body: WorkbookBody, context: DataPath): void => {
     for (const region of body.regions ?? []) {
       const path = referencePath(region.source, context)
-      const items = readData(data, path)
+      const items = readData(data, path) ?? []
       if (!Array.isArray(items)) {
         continue
       }
@@ -33,12 +87,6 @@ export function issueWorkbookFormData(template: WorkbookDefinition, input: unkno
         const blank = blanks.get(name) ?? { path, value: {} }
         for (const field of fields) {
           writeData(blank.value, field, null, true)
-        }
-        for (const cell of region.cells) {
-          const source = cell.rules?.choice?.source
-          if (source && 'path' in source && source.from !== 'root') {
-            writeData(blank.value, source.path.split('.'), [], true)
-          }
         }
         blanks.set(name, blank)
       }
@@ -52,9 +100,8 @@ export function issueWorkbookFormData(template: WorkbookDefinition, input: unkno
   return data
 }
 
-/** Only empty input lines are omitted; zero, false and partially filled records remain submitted. */
-export function readWorkbookRows(input: Readonly<Record<string, unknown>>, rows: readonly WorkbookFormRows[], invalid: readonly DataPath[] = []) {
-  const data = structuredClone(input) as Record<string, unknown>
+/** Compact privately owned decoded data; zero, false and partially filled records remain. */
+export function readWorkbookRows(data: Record<string, unknown>, rows: readonly WorkbookFormRows[], invalid: readonly DataPath[] = []) {
   const entered = new Set(invalid.flatMap(path => path.flatMap((part, index) => typeof part === 'number' ? [dataPath(path.slice(0, index + 1))] : [])))
   const collections = new Map<string, { path: DataPath, fields: DataPath[] }>()
   for (const row of rows) {

@@ -1,15 +1,9 @@
 import ExcelJS from 'exceljs'
 import { describe, expect, it } from 'vitest'
 import * as project from '../examples/regions/template'
-import { TemplateError } from '../src/core/template'
-import { expandWorkbookScopes } from '../src/grid/workbook'
-import type { WorkbookCell, WorkbookDefinition } from '../src/grid/workbook'
-import { resolveWorkbook as resolveDefinition } from '../src/grid/workbook-layout'
-import { WorkbookTemplate } from '../src/xlsx/template'
-import { resolveWorkbook, renderWorkbookReport, importWorkbookXlsx } from '../src/xlsx/workbook-template'
+import { TemplateError, resolveWorkbook, renderWorkbookReport, importWorkbookXlsx, renderWorkbookForm, readWorkbookForm } from '../src/index'
 import { importAuthoredWorkbook, openWorkbook } from './xlsx'
 
-const cell = (id: string, row: number, column = 1): WorkbookCell => ({ id, at: { row, column }, size: { rows: 1, columns: 1 }, value: { literal: id } })
 async function load(bytes: Uint8Array) {
   return (await openWorkbook(bytes)).worksheets[0]
 }
@@ -23,16 +17,16 @@ describe('scope and repeat placement', () => {
       sheet.getCell('D5').value = '{/items}'
       sheet.getCell('F3').value = 'Fixed neighbour'
       sheet.getCell('B6').value = 'Footer'
+      sheet.getCell('D4').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFFCC' } }
       sheet.getRow(3).height = 27
     })
-    const region = WorkbookTemplate.content(template).definition.sheets[0].regions![0]
-    expect(region).toMatchObject({ column: 2, width: 3, height: 2 })
     const report = await load(await renderWorkbookReport(template, { items: Array.from({ length: count }, (_, index) => ({ name: `Item ${index}` })) }))
     expect(report.getCell('F2').value).toBe('Fixed neighbour')
     expect(report.getCell(Math.max(1, count) * 2 + 2, 2).value).toBe('Footer')
     for (let index = 0; index < count; index++) {
       expect(report.getCell(index * 2 + 2, 2).value).toBe(`Item ${index}`)
       expect(report.getRow(index * 2 + 2).height).toBe(27)
+      expect(report.getCell(index * 2 + 3, 4).fill).toMatchObject({ fgColor: { argb: 'FFFFFFCC' } })
     }
   })
 
@@ -72,7 +66,7 @@ describe('scope and repeat placement', () => {
     })).rejects.toThrow()
   })
 
-  it('flattens scopes into paths while preserving XLSX geometry and source formatting', async () => {
+  it('preserves scoped fields, XLSX geometry and source formatting in reports and forms', async () => {
     const template = await importAuthoredWorkbook(book => {
       const sheet = book.addWorksheet('Scoped')
       sheet.addRows([
@@ -86,20 +80,20 @@ describe('scope and repeat placement', () => {
       sheet.getRow(6).height = 9
       sheet.getRow(6).hidden = true
     })
-    const definition = WorkbookTemplate.content(template).definition
-    const expanded = expandWorkbookScopes(definition)
-    expect(expanded.sheets[0].regions!.map(region => region.type)).toEqual(['repeat'])
-    expect(expandWorkbookScopes(expanded)).toEqual(expanded)
     for (const count of [0, 1, 3]) {
       const data = { name: 'Root name', company: { provider: { name: '0007' } }, items: Array.from({ length: count }, (_, index) => ({ name: index })) }
-      const values = (cells: readonly WorkbookCell[]) => cells.map(cell => ({ at: cell.at, size: cell.size, value: cell.value }))
-      expect(values(resolveDefinition(expanded, data).sheets[0].cells)).toEqual(values(resolveWorkbook(template, data).sheets[0].cells))
-      const output = await load(await renderWorkbookReport(template, data))
-      expect(output.getCell('A3').value).toBe('0007')
-      expect(output.getCell('A4').value).toBe('Root name')
-      expect(output.getCell('A3').font.bold).toBe(true)
-      expect(output.model.merges).toContain('A3:C3')
-      expect(output.getRow(5).hidden).toBe(true)
+      const issued = await renderWorkbookForm(template, data)
+      for (const bytes of [await renderWorkbookReport(template, data), issued]) {
+        const output = await load(bytes)
+        expect(output.getCell('A3').value).toBe('0007')
+        expect(output.getCell('A4').value).toBe('Root name')
+        expect(output.getCell('A3').font.bold).toBe(true)
+        expect(output.model.merges).toContain('A3:C3')
+        expect(output.getRow(5).hidden).toBe(true)
+      }
+      expect(await readWorkbookForm(template, issued)).toEqual({ success: true, data: {
+        ...data, company: { provider: { name: '0007', address: { city: null } } },
+      } })
     }
   })
 
@@ -153,23 +147,29 @@ describe('scope and repeat placement', () => {
     expect(report.getCell('A10').value).toBe('Footer')
     expect(report.getRow(11).hidden).toBe(true)
   })
-  it('accumulates growth and shrinkage of independent repeats once', () => {
-    const config: WorkbookDefinition = { sheets: [{ id: 's', name: 'Two', cells: [cell('footer', 12)], regions: [
-      { id: 'a', type: 'repeat', row: 2, height: 2, source: { path: 'a' }, cells: [cell('a-cell', 1)] },
-      { id: 'b', type: 'repeat', row: 6, height: 3, source: { path: 'b' }, cells: [cell('b-cell', 2)], rows: [{ index: 3, hidden: true }] },
-    ] }] }
+  it('accumulates growth and shrinkage of independent repeats once', async () => {
+    const template = await importAuthoredWorkbook(book => {
+      const sheet = book.addWorksheet('Two')
+      sheet.getCell('A2').value = '{#a}'
+      sheet.getCell('A3').value = 'A'
+      sheet.getCell('A5').value = '{/a}'
+      sheet.getCell('A8').value = '{#b}'
+      sheet.getCell('A10').value = 'B'
+      sheet.getRow(11).hidden = true
+      sheet.getCell('A12').value = '{/b}'
+      sheet.getCell('A16').value = 'Footer'
+    })
     for (const [a, b, footer] of [[0, 0, 7], [2, 0, 11], [0, 2, 13], [2, 2, 17]]) {
-      const result = resolveDefinition(config, { a: Array.from({ length: a }, () => ({})), b: Array.from({ length: b }, () => ({})) }).sheets[0]
-      expect(result.cells.find(cell => cell.definitionId === 'footer')!.at.row).toBe(footer)
+      const data = { a: Array.from({ length: a }, () => ({})), b: Array.from({ length: b }, () => ({})) }
+      const result = resolveWorkbook(template, data).sheets[0]
+      expect(result.cells.find(cell => 'literal' in cell.value && cell.value.literal === 'Footer')!.at.row).toBe(footer)
+      expect((await load(await renderWorkbookReport(template, data))).getCell(footer, 1).value).toBe('Footer')
     }
   })
 
   it.each([
-    [Object.fromEntries(Object.entries(project.data).filter(([key]) => key !== 'work')), 'missing-source', '$data.work'],
-    [{ ...project.data, provider: [] }, 'missing-source', '$data.provider.name'],
     [{ ...project.data, work: {} }, 'invalid-collection', '$data.work'],
     [{ ...project.data, work: [0] }, 'invalid-item', '$data.work[0]'],
-    [{ ...project.data, work: [{}] }, 'missing-source', '$data.work[0].code'],
   ])('reports concrete data paths for invalid sources', (data, code, path) => {
     try {
       resolveWorkbook(project.definition, data)

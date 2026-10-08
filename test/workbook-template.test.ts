@@ -1,12 +1,12 @@
 import ExcelJS from 'exceljs'
 import JSZip from 'jszip'
 import { describe, expect, it, vi } from 'vitest'
-import { importWorkbookXlsx, renderWorkbookReport, renderWorkbookForm, resolveWorkbook, TaggedXlsxError, TemplateError } from '../src/index'
+import { importWorkbookXlsx, renderWorkbookReport, renderWorkbookForm, readWorkbookForm, resolveWorkbook, TaggedXlsxError, TemplateError } from '../src/index'
 import type { WorkbookTemplate } from '../src/index'
 import { openWorkbook as load, saveWorkbook } from './xlsx'
 
 describe('imported XLSX ownership', () => {
-  it('rejects non-JSON execution data before evaluating accessors across public entry points', async () => {
+  it('rejects unsupported execution values before evaluating accessors across public entry points', async () => {
     const book = new ExcelJS.Workbook()
     book.addWorksheet('Data').getCell('A1').value = '{name}'
     const template = await importWorkbookXlsx(await saveWorkbook(book))
@@ -15,7 +15,7 @@ describe('imported XLSX ownership', () => {
     circular.self = circular
     const invalid = [
       { name: 'Desk', unused: new Date() },
-      { name: 'Desk', unused: undefined },
+      { name: 'Desk', unused: [undefined] },
       { name: 'Desk', unused: () => 'unused' },
       { name: 'Desk', unused: Number.NaN },
       { name: 'Desk', unused: new Array(1) },
@@ -36,11 +36,11 @@ describe('imported XLSX ownership', () => {
     })
   })
 
-  it('locates missing repeat sources and nested fields in the authored workbook', async () => {
+  it('locates invalid repeat sources in the authored workbook', async () => {
     const book = new ExcelJS.Workbook()
     book.addWorksheet('Items').addRows([['{#items}'], ['{.name}'], ['{/items}']])
     const template = await importWorkbookXlsx(await saveWorkbook(book))
-    for (const [data, path, address] of [[{}, '$data.items', 'A1'], [{ items: [{}] }, '$data.items[0].name', 'A2']] as const) {
+    for (const [data, code, path, address] of [[{ items: {} }, 'invalid-collection', '$data.items', 'A1'], [{ items: [0] }, 'invalid-item', '$data.items[0]', 'A1']] as const) {
       for (const run of [() => resolveWorkbook(template, data), () => renderWorkbookReport(template, data)]) {
         try {
           await run()
@@ -49,11 +49,11 @@ describe('imported XLSX ownership', () => {
         catch (error) {
           expect(error).toBeInstanceOf(TemplateError)
           expect(error).toBeInstanceOf(TaggedXlsxError)
-          expect((error as TaggedXlsxError).issues).toMatchObject([{ code: 'missing-source', path, sheetName: 'Items', address }])
+          expect((error as TaggedXlsxError).issues).toMatchObject([{ code, path, sheetName: 'Items', address }])
         }
       }
     }
-    await expect(renderWorkbookForm(template, {})).rejects.toMatchObject({ issues: [{ code: 'missing-source', sheetName: 'Items', address: 'A1' }] })
+    await expect(renderWorkbookForm(template, { items: {} })).rejects.toMatchObject({ issues: [{ code: 'invalid-collection', sheetName: 'Items', address: 'A1' }] })
   })
 
   it('accepts only imported handles and owns its source bytes', async () => {
@@ -82,7 +82,7 @@ describe('imported XLSX ownership', () => {
     sheet.pageSetup.printArea = 'A1:B3'
     const template = await importWorkbookXlsx(await saveWorkbook(book))
     const data = { items: [{ status: 'planned' }, { status: 'planned' }] }
-    const options = { dictionaries: { statuses: [{ id: 'planned', name: 'Planned' }] } }
+    const options = { dictionaries: { statuses: [{ id: 'planned', name: 'Planned', details: { rank: 0 } }] } }
     const layout = resolveWorkbook(template, data, options)
     const expected = structuredClone(layout)
     const [first, second] = layout.sheets[0].cells
@@ -95,6 +95,7 @@ describe('imported XLSX ownership', () => {
     Object.assign(first.size, { rows: 99 })
     Object.assign(first.rules!, { validation: 'number' })
     Object.assign(first.choice!.items[0], { text: 'Changed label' })
+    Object.assign(first.choice!.items[0].value.details!, { rank: 99 })
     Object.assign(first.origin.iterations[0], { index: 99 })
     Object.assign(layout.sheets[0].rows![0], { height: 99 })
     Object.assign(layout.sheets[0].columns![0], { width: 99 })
@@ -102,11 +103,48 @@ describe('imported XLSX ownership', () => {
     expect(second).toEqual(expected.sheets[0].cells[1])
     expect(resolveWorkbook(template, data, options)).toEqual(expected)
     expect(data.items).toEqual([{ status: 'planned' }, { status: 'planned' }])
-    expect(options.dictionaries.statuses).toEqual([{ id: 'planned', name: 'Planned' }])
+    expect(options.dictionaries.statuses).toEqual([{ id: 'planned', name: 'Planned', details: { rank: 0 } }])
   })
 })
 
 describe('native XLSX preservation', () => {
+  it.each(['missing part', 'empty part', 'missing cellXfs', 'empty cellXfs'])('renders a workbook with %s and preserves form value types', async styles => {
+    const book = new ExcelJS.Workbook()
+    const input = book.addWorksheet('Input')
+    input.addRow(['{code}{@validate:string}', '{amount}', '{enabled}', '{status}{@list:Statuses}'])
+    if (styles.endsWith('cellXfs')) {
+      input.addConditionalFormatting({ ref: 'B1', rules: [{ type: 'cellIs', operator: 'greaterThan', priority: 1, formulae: [0], style: { font: { bold: true } } }] })
+    }
+    const zip = await JSZip.loadAsync(await saveWorkbook(book))
+    if (styles === 'missing part') {
+      zip.remove('xl/styles.xml')
+      for (const path of ['xl/_rels/workbook.xml.rels', '[Content_Types].xml']) {
+        zip.file(path, (await zip.file(path)!.async('string')).replace(/<(?:Relationship|Override)\b[^>]*(?:\/styles"|\/styles.xml")[^>]*\/>/g, ''))
+      }
+    }
+    else if (styles === 'empty part') {
+      zip.file('xl/styles.xml', '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"/>')
+    }
+    else {
+      zip.file('xl/styles.xml', (await zip.file('xl/styles.xml')!.async('string')).replace(/<cellXfs\b[^>]*>[\s\S]*?<\/cellXfs>/, styles === 'empty cellXfs' ? '<cellXfs count="0"/>' : ''))
+    }
+    const source = await zip.generateAsync({ type: 'nodebuffer' })
+    const template = await importWorkbookXlsx(source)
+    const data = { code: '0007', amount: 12.5, enabled: false, status: 'Open' }
+    for (const render of [renderWorkbookReport, renderWorkbookForm]) {
+      const bytes = await render(template, data, { dictionaries: { Statuses: ['Open'] } })
+      const sheet = (await load(bytes)).getWorksheet('Input')!
+      expect(['A1', 'B1', 'C1', 'D1'].map(address => sheet.getCell(address).value)).toEqual(Object.values(data))
+      if (styles.endsWith('cellXfs')) {
+        expect(sheet).toMatchObject({ conditionalFormattings: [{ ref: 'B1', rules: [{ type: 'cellIs', style: { font: { bold: true } } }] }] })
+      }
+      if (render === renderWorkbookForm) {
+        expect(sheet.getCell('A1').numFmt).toBe('@')
+        expect(await readWorkbookForm(await importWorkbookXlsx(source), bytes)).toEqual({ success: true, data })
+      }
+    }
+  })
+
   it('preserves merged member formatting and blank styled cells', async () => {
     const book = new ExcelJS.Workbook()
     const sheet = book.addWorksheet('Merged')

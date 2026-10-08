@@ -109,7 +109,7 @@ The same template handles arrays of different lengths. To try them with your scr
 
 The total follows the table: D4 for one item, D3 for an empty array. `SUM` includes the header and ignores its text, so the empty report keeps the valid formula `=SUM(D2:D2)`.
 
-Omitting `items` is an error; a repeat expects an array of objects. For **blank rows that a user will fill in**, use a [form](./forms.md#a-table-with-20-input-rows).
+Omitting `items` or passing `items: null` has the same effect as `items: []`: the report contains no item rows. This also applies to nested repeats and repeats across columns; you do not need to add empty arrays to the data. A supplied nonempty array must contain objects. A number, string or object in place of the array remains an error. For **blank rows that a user will fill in**, use a [form](./forms.md#a-table-with-20-input-rows).
 
 ## Repeat boundaries
 
@@ -144,7 +144,7 @@ For example, `{customer.name}` and `{?customer.note}` accept:
 }
 ```
 
-The name cell contains `Sample customer`; the note cell is blank. Without `?`, a missing property causes `missing-source`. `null` produces a blank cell; `0` and `false` keep their values. Ordinary fields accept strings, finite numbers, booleans and `null`. To display an object, select one of its properties or use an [object choice](./fields.md).
+The name cell contains `Sample customer`; the note cell is blank. A missing property without `?` emits a warning and leaves the cell blank. `null` is blank; `0` and `false` retain their values. Ordinary fields accept strings, finite numbers, booleans and `null`. To display an object, select a property or use an [object choice](./fields.md).
 
 Paths use property names separated by dots. Tags do not run JavaScript: expressions such as `{price * quantity}` or `{items[0].name}` are unsupported. Calculate values in your application or use an Excel formula.
 

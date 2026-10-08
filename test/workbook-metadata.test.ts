@@ -2,11 +2,54 @@ import ExcelJS from 'exceljs'
 import JSZip from 'jszip'
 import { expect, it } from 'vitest'
 import { importWorkbookXlsx, renderWorkbookForm, renderWorkbookReport, readWorkbookForm } from '../src/index'
-import { formatAddress, parseRange } from '../src/xlsx/addresses'
+import { formatAddress, parseRange } from '../src/grid/geometry'
 import { xmlAttributes, xmlElements } from '../src/xlsx/xml'
 import { saveWorkbook } from './xlsx'
 
 const pixel = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII='
+
+it('keeps each sheet with its own growth and native metadata regardless of sheet order', async () => {
+  for (const names of [['Rows', 'Columns'], ['Columns', 'Rows']]) {
+    const book = new ExcelJS.Workbook()
+    for (const name of names) {
+      const sheet = book.addWorksheet(name)
+      sheet.getCell('A1').value = `{#${name.toLowerCase()} | axis=${name.toLowerCase()}}`
+      sheet.getCell('A2').value = '{.value}'
+      sheet.getCell('B3').value = `{/${name.toLowerCase()}}`
+      sheet.getCell('D4').value = name + ' footer'
+      decorate(book, sheet, 'B2', 'comment')
+      decorate(book, sheet, 'B2', 'validation')
+    }
+    const template = await importWorkbookXlsx(await saveWorkbook(book))
+    for (const [rows, columns] of [[0, 3], [1, 1], [3, 2]]) {
+      const data = { rows: Array.from({ length: rows }, (_, index) => ({ value: index + 1 })), columns: Array.from({ length: columns }, (_, index) => ({ value: (index + 1) * 10 })) }
+      const bytes = await renderWorkbookReport(template, data)
+      const saved = new ExcelJS.Workbook()
+      await saved.xlsx.load(Uint8Array.from(bytes).buffer)
+      const zip = await JSZip.loadAsync(bytes)
+      expect(saved.worksheets.map(sheet => sheet.name)).toEqual(names)
+      for (const name of names) {
+        const sheet = saved.getWorksheet(name)!
+        const vertical = name === 'Rows'
+        const values = data[vertical ? 'rows' : 'columns']
+        const comments = await zip.file(`xl/comments${names.indexOf(name) + 1}.xml`)!.async('string')
+        const notes = xmlElements(comments, 'comment').map(node => xmlAttributes(node.split('>')[0]).ref)
+        expect(notes).toEqual(values.map((_item, index) => formatAddress({ row: vertical ? index + 1 : 1, column: vertical ? 2 : index * 2 + 2 })))
+        for (const [index, item] of values.entries()) {
+          const row = vertical ? index + 1 : 1
+          const column = vertical ? 1 : index * 2 + 1
+          expect(sheet.getCell(row, column).value).toBe(item.value)
+          expect(sheet.getCell(row, column + 1).dataValidation).toMatchObject({ type: 'list', formulae: ['"One,Two"'] })
+        }
+        expect(sheet.getCell(vertical ? rows + 1 : 2, vertical ? 4 : columns * 2 + 2).value).toBe(name + ' footer')
+        if (!values.length) {
+          expect(sheet.getCell('B1').dataValidation).toBeUndefined()
+        }
+      }
+    }
+  }
+})
+
 type Feature = 'validation' | 'comment' | 'conditional' | 'image'
 function decorate(book: ExcelJS.Workbook, sheet: ExcelJS.Worksheet, address: string, feature: Feature) {
   const cell = sheet.getCell(address)
@@ -77,7 +120,7 @@ it.each(['validation', 'comment', 'conditional', 'image'] as const)('places empt
       for (const render of axis === 'rows' ? [renderWorkbookReport, renderWorkbookForm] : [renderWorkbookReport]) {
         const form = render === renderWorkbookForm
         const copies = form ? Math.max(1, count) : count
-        const offset = form ? 2 : 0
+        const offset = form ? 1 : 0
         const expected = axis === 'rows'
           ? [...Array.from({ length: copies }, (_, index) => `B${index + 1 + offset}`), `D${1 + offset}`, `B${Math.max(1, copies) + 1 + offset + Number(form)}`]
           : [...Array.from({ length: copies }, (_, index) => `${String.fromCharCode(66 + index * 2)}1`), `${String.fromCharCode(68 + Math.max(0, copies - 1) * 2)}1`, 'B2']
@@ -200,7 +243,7 @@ it('retains native-only geometry when scopes are flattened for a form', async ()
   const template = await importWorkbookXlsx(await saveWorkbook(book))
   const data = { info: { items: [{ name: 'One' }, { name: 'Two' }] } }
   const form = await renderWorkbookForm(template, data)
-  expect(await locations(form, 'validation')).toEqual(['D3'])
+  expect(await locations(form, 'validation')).toEqual(['D2'])
   expect(await readWorkbookForm(template, form)).toEqual({ success: true, data })
 })
 

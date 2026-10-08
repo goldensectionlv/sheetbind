@@ -70,9 +70,9 @@ it('maps filters around form control rows without attaching them to empty record
     const bytes = await renderWorkbookForm(template, data(count))
     const zip = await JSZip.loadAsync(bytes)
     const xml = await zip.file('xl/worksheets/sheet1.xml')!.async('string')
-    expect(attributes(xml, 'autoFilter')).toEqual(count ? [{ ref: `A5:B${count * 5 + 1}` }] : [])
-    expect(attributes(xml, 'sortState')).toEqual(count ? [{ ref: `A6:B${count * 5 + 1}` }] : [])
-    expect(attributes(xml, 'sortCondition')).toEqual(count ? [{ ref: count === 1 ? 'B6' : 'B6:B16', descending: '1' }] : [])
+    expect(attributes(xml, 'autoFilter')).toEqual(count ? [{ ref: `A4:B${count * 5}` }] : [])
+    expect(attributes(xml, 'sortState')).toEqual(count ? [{ ref: `A5:B${count * 5}` }] : [])
+    expect(attributes(xml, 'sortCondition')).toEqual(count ? [{ ref: count === 1 ? 'B5' : 'B5:B15', descending: '1' }] : [])
     expect(await readWorkbookForm(template, bytes)).toEqual({ success: true, data: data(count) })
   }
 })

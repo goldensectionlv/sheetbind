@@ -1,27 +1,22 @@
 import { describe, expect, it } from 'vitest'
 import * as project from '../examples/regions/nested'
-import { expandWorkbookScopes, workbookCells, workbookRegions, workbookRows } from '../src/grid/workbook'
-import type { WorkbookDefinition } from '../src/grid/workbook'
-import { resolveWorkbook as resolveDefinition } from '../src/grid/workbook-layout'
-import { resolveWorkbook, renderWorkbookReport } from '../src/xlsx/workbook-template'
-import { WorkbookTemplate } from '../src/xlsx/template'
+import { resolveWorkbook, renderWorkbookReport, renderWorkbookForm, readWorkbookForm } from '../src/index'
 import { importAuthoredWorkbook, openWorkbook } from './xlsx'
 
-const definition = WorkbookTemplate.content(project.definition).definition
-const plain = (config: WorkbookDefinition, data: unknown) => resolveDefinition(config, data).sheets[0].cells.map(cell => ({ at: cell.at, size: cell.size, value: cell.value }))
-
 describe('nested row placement', () => {
-  it('keeps local ownership, absolute projections and every iteration of the data origin', () => {
-    const regions = workbookRegions(definition.sheets[0])
-    expect(regions.map(region => [region.source.path, region.row, region.depth])).toEqual([['sites', 4, 0], ['work', 6, 1]])
-    const code = workbookCells(definition.sheets[0]).find(cell => 'path' in cell.value && cell.value.path === 'code')!
-    expect(code.at).toEqual({ row: 6, column: 1 })
-    expect(workbookRows(definition.sheets[0])).toContainEqual({ index: 6, height: 26 })
+  it('keeps nested field positions, row settings and every iteration of the data origin', () => {
     const result = resolveWorkbook(project.definition, project.data).sheets[0]
+    const site = result.cells.find(cell => cell.origin.dataPath === '$data.sites[1].name')!
+    const code = result.cells.find(cell => cell.origin.dataPath === '$data.sites[1].work[0].code')!
     expect(result.cells.filter(cell => /^\$data.sites\[\d+\].name$/.test(cell.origin.dataPath)).map(cell => cell.at.row)).toEqual([4, 9, 16])
     expect(result.cells.filter(cell => /^\$data.sites\[\d+\].note$/.test(cell.origin.dataPath)).map(cell => cell.at.row)).toEqual([6, 13, 24])
     expect(result.cells.find(cell => 'literal' in cell.value && cell.value.literal === 'Prepared by')!.at.row).toBe(28)
-    expect(result.cells.find(cell => cell.definitionId === code.id)!.origin).toEqual({ nodeId: code.id, dataPath: '$data.sites[1].work[0].code', iterations: [{ nodeId: regions[0].id, index: 1 }, { nodeId: regions[1].id, index: 0 }] })
+    expect(code).toMatchObject({ at: { row: 11, column: 1 },
+      origin: { nodeId: code.definitionId, iterations: [site.origin.iterations[0], { nodeId: expect.any(String), index: 0 }] },
+    })
+    expect(site.origin.iterations).toEqual([{ nodeId: expect.any(String), index: 1 }])
+    expect(new Set(code.origin.iterations.map(item => item.nodeId)).size).toBe(2)
+    expect(result.rows).toContainEqual({ index: 11, height: 26 })
     expect(new Set(result.cells.map(cell => cell.id)).size).toBe(result.cells.length)
   })
 
@@ -37,19 +32,17 @@ describe('nested row placement', () => {
     }
   })
 
-  it('retains nested definitions when flattening object scopes', () => {
-    expect(expandWorkbookScopes(definition)).toEqual(definition)
-    const config: WorkbookDefinition = { sheets: [{ id: 's', name: 'Scopes', cells: [], regions: [{
-      id: 'outer', type: 'repeat', row: 1, height: 2, source: { path: 'items' }, cells: [], regions: [{
-        id: 'object', type: 'scope', row: 1, height: 2, source: { path: 'detail' }, cells: [{ id: 'name', at: { row: 1, column: 1 }, size: { rows: 1, columns: 1 }, value: { path: 'name', optional: true } }], regions: [{
-          id: 'inner', type: 'repeat', row: 2, height: 1, source: { path: 'work' }, cells: [{ id: 'code', at: { row: 1, column: 1 }, size: { rows: 1, columns: 1 }, value: { path: 'code' } }],
-        }],
-      }],
-    }] }] }
-    const expanded = expandWorkbookScopes(config)
-    const data = { items: [{ detail: { work: [{ code: '0007' }] } }, { detail: { name: 'Second', work: [] } }] }
-    expect(plain(expanded, data)).toEqual(plain(config, data))
-    expect(workbookRegions(expanded.sheets[0]).map(region => region.source)).toEqual([{ path: 'items' }, { path: 'detail.work', from: 'current' }])
+  it('reads nested form records through object scopes and explicit root bindings', async () => {
+    const template = await importAuthoredWorkbook(book => book.addWorksheet('Scopes').addRows([
+      ['{#items}'], ['{#with .detail}'], ['{?.name}', '{$root.title}'],
+      ['{#work}'], ['{.code}'], ['{/work}'], [null, '{/with}'], [null, '{/items}'],
+    ]))
+    const title = '_x000a_ = SUM(A1)\nText'
+    const data = { title, items: [{ detail: { work: [{ code: '0007' }] } }, { detail: { name: 'Second', work: [] } }] }
+    const issued = await renderWorkbookForm(template, data)
+    expect(await readWorkbookForm(template, issued)).toEqual({ success: true, data: {
+      title, items: [{ detail: { name: null, work: [{ code: '0007' }] } }, { detail: { name: 'Second', work: [] } }],
+    } })
   })
 
   it('collapses coincident empty boundaries at three nested levels', async () => {

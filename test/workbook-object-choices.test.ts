@@ -1,20 +1,10 @@
 import { expect, it } from 'vitest'
 import ExcelJS from 'exceljs'
 import { objectDefinition, objectData, objectResult, dictionaries } from '../examples/choices/definition'
-import { resolveWorkbook, renderWorkbookReport } from '../src/xlsx/workbook-template'
-import { readWorkbookForm, renderWorkbookForm } from '../src/xlsx/workbook-form'
-import { workbookChoiceRange } from '../src/xlsx/workbook-choice-fields'
-import { createChoiceResolver } from '../src/core/choices'
-import { instantiate } from '../src/core/template'
-import { saveWorkbook, editExample, importAuthoredWorkbook } from './xlsx'
-import { parseRange } from '../src/xlsx/addresses'
+import { resolveWorkbook, renderWorkbookReport, readWorkbookForm, renderWorkbookForm, workbookChoiceRange } from '../src/index'
+import { parseRange } from '../src/grid/geometry'
+import { openWorkbook as load, saveWorkbook, editExample, importAuthoredWorkbook } from './xlsx'
 
-async function load(bytes: Buffer) {
-  const book = new ExcelJS.Workbook()
-  await book.xlsx.load(Uint8Array.from(bytes).buffer)
-  return book
-}
-const bytes = saveWorkbook
 function find(sheet: ExcelJS.Worksheet, value: unknown) {
   let found: ExcelJS.Cell | undefined
   sheet.eachRow(row => row.eachCell(cell => {
@@ -45,27 +35,19 @@ it('round-trips selected objects through tagged XLSX without application lookup 
   expect(await readWorkbookForm(objectDefinition, form)).toEqual({ success: true, data: objectResult })
   const book = await load(form)
   find(book.worksheets[0], 'Service [0007]').value = 'Service [0008]'
-  const result = await readWorkbookForm(objectDefinition, await bytes(book))
+  const result = await readWorkbookForm(objectDefinition, await saveWorkbook(book))
   expect(result).toEqual({ success: true, data: { ...objectResult, items: [{ ...objectResult.items[0], product: dictionaries.products[1] }, objectResult.items[1]] } })
   find(book.worksheets[0], 'Service [0008]').value = 'Service'
-  expect(codes(await readWorkbookForm(objectDefinition, await bytes(book)))).toContain('choice')
-})
-
-it('reads objects from shared sources after sorting', async () => {
-  const book = await load(await renderWorkbookForm(objectDefinition, objectData, { dictionaries }))
-  const sheet = book.worksheets[0]
-  const row = Number(find(sheet, 'line-a').row)
-  const first = sheet.getRow(row).values
-  sheet.getRow(row).values = sheet.getRow(row + 1).values
-  sheet.getRow(row + 1).values = first
-  const result = await readWorkbookForm(objectDefinition, await bytes(book))
-  expect(result).toEqual({ success: true, data: { category: objectResult.category, items: [objectResult.items[1], objectResult.items[0]] } })
+  expect(codes(await readWorkbookForm(objectDefinition, await saveWorkbook(book)))).toContain('choice')
 })
 
 it('names Excel fields independently of key order and includes keys absent from the first option', async () => {
   const rule = { source: { dictionary: 'products' }, key: 'id', label: 'name', return: 'object' as const }
   const config = await editExample('choices/object-template.xlsx', book => {
     book.worksheets[0].getCell('B4').value = '{.product}{@validate:required|object}{@choice:products; key=id; label=name; return=object}'
+    for (const [index, field] of ['rate', 'code', 'active', 'details'].entries()) {
+      book.worksheets[0].getCell(1, index + 6).value = { formula: `INDEX(${workbookChoiceRange(rule, field)},MATCH(B4,${workbookChoiceRange(rule)},0))` }
+    }
   })
   const products = dictionaries.products
   const sources = { ...dictionaries, products }
@@ -80,22 +62,6 @@ it('names Excel fields independently of key order and includes keys absent from 
   const names = (book: ExcelJS.Workbook) => book.definedNames.model.map(entry => entry.name).filter(name => name.startsWith('_sb_ref_')).sort()
   expect(names(other)).toEqual(names(base))
   expect(rangeValues(other, workbookChoiceRange(rule, 'rate'))).toEqual([null, 22, null])
-})
-
-it('reads object choices in new unkeyed rows from a shared source', async () => {
-  const config = await importAuthoredWorkbook(book => {
-    book.addWorksheet('Order').addRows([
-      ['{#items}'], ['{.product}{@validate:required|object}{@choice:products; key=id; label=name}', '{.quantity}{@validate:number}'], [null, '{/items}'],
-    ])
-  })
-  const products = dictionaries.products.slice(0, 2)
-  const book = await load(await renderWorkbookForm(config, { items: [{ product: products[0], quantity: 1 }] }, { dictionaries: { products } }))
-  const sheet = book.worksheets[0]
-  const row = Number(find(sheet, 'Service [0007]').row)
-  sheet.spliceRows(row + 1, 0, ['Service [0008]', 0])
-  expect(await readWorkbookForm(config, await bytes(book))).toEqual({ success: true, data: { items: [
-    { product: products[0], quantity: 1 }, { product: products[1], quantity: 0 },
-  ] } })
 })
 
 it.each(['products', '$root.products'])('reads sorted, inserted and deleted records without identity fields using %s', async source => {
@@ -114,12 +80,12 @@ it.each(['products', '$root.products'])('reads sorted, inserted and deleted reco
   sheet.getRow(first + 1).values = values
   sheet.spliceRows(first + 1, 0, ['Service [0008]', 0])
   sheet.spliceRows(first + 2, 1)
-  expect(await readWorkbookForm(config, await bytes(book))).toEqual({ success: true, data: { items: [
+  expect(await readWorkbookForm(config, await saveWorkbook(book))).toEqual({ success: true, data: { items: [
     { product: products[2], quantity: 3 }, { product: products[1], quantity: 0 },
   ] } })
 })
 
-it.each(['object', 'key'])('keeps per-record choice sources for reports and rejects them in forms (%s)', async result => {
+it.each(['object', 'key'])('keeps per-record choice sources in reports and self-contained forms (%s)', async result => {
   const config = await importAuthoredWorkbook(book => {
     book.addWorksheet('Report').addRows([
       ['{#items}'], ['{.product}{@choice:.available; key=id; label=name; return=' + result + '}'], ['{/items}'],
@@ -132,32 +98,50 @@ it.each(['object', 'key'])('keeps per-record choice sources for reports and reje
   expect(report.worksheets[0].getCell('A1').value).toBe('First')
   expect(report.worksheets[0].getCell('A2').value).toBe('Second')
   for (const data of [input, { items: [] }]) {
-    await expect(renderWorkbookForm(config, data)).rejects.toMatchObject({ issues: [{ code: 'contextual-form-choice' }] })
+    expect(await readWorkbookForm(config, await renderWorkbookForm(config, data))).toEqual({ success: true,
+      data: { items: data.items.map(item => ({ product: item.product })) } })
   }
 })
 
-it('requires valid embedded source data and does not fall back to guessing by label', async () => {
-  const book = await load(await renderWorkbookForm(objectDefinition, objectData, { dictionaries }))
-  const range = book.definedNames.getRanges('_sb_object_sources').ranges[0]
-  const address = range.slice(range.lastIndexOf('!') + 1).split(':')[0].replace(/\$/g, '')
-  book.worksheets[1].getCell(address).value = 'unsupported'
-  expect(codes(await readWorkbookForm(objectDefinition, await bytes(book)))).toContain('choice-source')
-})
-
-it('keeps numeric transport precision out of core and rejects ambiguous or malformed object rules', async () => {
-  const rule = { source: { dictionary: 'options' }, key: 'id', label: 'name' }
+it('preserves long numeric choice keys through forms and rejects undeclared objects', async () => {
   const value = { id: 1234567890123456, name: 'Long key' }
-  const resolved = instantiate({ type: 'value', id: 'choice', value: { path: 'selected' }, rules: { validation: [{ rule: 'object' }], choice: rule } }, { selected: value }, { dictionaries: { options: [value] } })
-  expect(resolved).toMatchObject({ value })
   const config = await importAuthoredWorkbook(book => {
     book.addWorksheet('Choice').getCell('A1').value = '{category}{@validate:object}{@choice:options; key=id; label=name}'
   })
-  await expect(renderWorkbookForm(config, { category: value }, { dictionaries: { options: [value] } })).rejects.toThrow('Excel precision')
+  const issued = await renderWorkbookForm(config, { category: value }, { dictionaries: { options: [value] } })
+  expect(await readWorkbookForm(config, issued)).toEqual({ success: true, data: { category: value } })
   const noChoice = await importAuthoredWorkbook(book => {
     book.addWorksheet('Choice').getCell('A1').value = '{category}{@validate:object}'
   })
   expect(() => resolveWorkbook(noChoice, { category: value })).toThrow('declared object choice')
-  expect(() => createChoiceResolver()(rule, {}, {}, { options: [{ id: '1', name: 'Same' }, { id: '1', name: 'Other' }] })).toThrow('unique')
+})
+
+it.each(['key', 'object'] as const)('keeps unused JSON properties out of formula ranges (%s)', async mode => {
+  const template = await importAuthoredWorkbook(book => book.addWorksheet('Input').getCell('A1').value = `{selected}{@choice:Options; key=id; label=name; return=${mode}}`)
+  const option = { id: 1234567890123456, name: 'Allowed', rate: 1 / 3, sum: 0.1 + 0.2, notes: 'x'.repeat(33000), ['x'.repeat(300)]: { nested: true } }
+  const selected = mode === 'key' ? option.id : option
+  const options = { dictionaries: { Options: [option] } }
+  const issued = await renderWorkbookForm(template, { selected }, options)
+  expect(await readWorkbookForm(template, issued)).toEqual({ success: true, data: { selected } })
+  for (const content of [issued, await renderWorkbookReport(template, { selected }, options)]) {
+    expect((await load(content)).definedNames.model.some(entry => entry.name.startsWith('_sb_ref_') || entry.name.startsWith('_sb_context_'))).toBe(false)
+  }
+})
+
+it.each(['key', 'object'] as const)('creates only formula-referenced properties independently of return mode (%s)', async mode => {
+  const rule = { source: { dictionary: 'Options' }, key: 'id', label: 'name', return: mode }
+  const template = await importAuthoredWorkbook(book => {
+    const sheet = book.addWorksheet('Input')
+    sheet.getCell('A1').value = `{selected}{@choice:Options; key=id; label=name; return=${mode}}`
+    sheet.getCell('B1').value = { formula: `INDEX(${workbookChoiceRange(rule, 'rate')},MATCH(A1,${workbookChoiceRange(rule)},0))` }
+  })
+  const option = { id: 'a', name: 'Allowed', rate: 1 / 3, notes: 'x'.repeat(33000) }
+  const selected = mode === 'key' ? option.id : option
+  const issued = await renderWorkbookForm(template, { selected }, { dictionaries: { Options: [option] } })
+  const book = await load(issued)
+  expect(rangeValues(book, workbookChoiceRange(rule, 'rate'))).toEqual([option.rate])
+  expect(book.definedNames.getRanges(workbookChoiceRange(rule, 'notes')).ranges).toEqual([])
+  expect(await readWorkbookForm(template, issued)).toEqual({ success: true, data: { selected } })
 })
 
 it('escapes field names without collisions in Excel case-insensitive identifiers', () => {
@@ -185,7 +169,7 @@ it('reads shared choices in nested records after whole-row insertion', async () 
   const sheet = book.worksheets[0]
   const start = Number(find(sheet, 'Service [0007]').row)
   sheet.spliceRows(start, 0, ['line-a', 'Service [0008]', 'Remote supplier', 4])
-  expect(await readWorkbookForm(config, await bytes(book))).toMatchObject({ success: true, data: { sites: [
+  expect(await readWorkbookForm(config, await saveWorkbook(book))).toMatchObject({ success: true, data: { sites: [
     { id: 'north', items: [{ id: 'line-a', product: dictionaries.products[1], supplier: dictionaries.suppliers[1], hours: 4 }, ...objectResult.items] },
     { id: 'south', items: [{ ...objectResult.items[0], product: southOption }] },
   ] } })
@@ -200,24 +184,23 @@ it('reads a form whose only object choices are inside an empty repeat', async ()
   expect(await readWorkbookForm(config, form)).toEqual({ success: true, data: { items: [] } })
 })
 
-it('leaves repeated labels unchanged in core without imposing workbook display constraints', () => {
-  const choice = { source: { dictionary: 'options' }, key: 'id', label: 'name' }
-  const options = [{ id: 'a', name: 'One' }, { id: 'b', name: 'One' }, { id: 'c', name: 'One [a]' }]
-  const result = instantiate({ type: 'value', id: 'selected', value: { path: 'selected' }, rules: { choice } }, { selected: options[0] }, { dictionaries: { options } })
-  expect(result).toMatchObject({ value: options[0], choice: { key: 'a', items: [{ label: 'One' }, { label: 'One' }, { label: 'One [a]' }] } })
-})
-
 it('shares sources when two sheets show different fields of the same records', async () => {
   const config = await importAuthoredWorkbook(book => {
     book.addWorksheet('First').addRows([
       ['{#items}'], ['{.id}', '{.product}{@choice:products; key=id; label=name}'], [null, '{/items}'],
     ])
     book.addWorksheet('Second').addRows([
-      ['{#items}'], ['{.other}{@choice:$root.otherOptions; key=id; label=name}'], ['{/items}'],
+      ['{#items}'], ['{.other}{@choice:$root.otherOptions; key=id; label=name}', '{.product}{@choice:products; key=id; label=name}'], [null, '{/items}'],
     ])
   })
   const other = { id: 'extra', name: 'Extra', count: 2 }
   const input = { ...objectData, otherOptions: [other], items: objectData.items.map(item => ({ ...item, other })) }
+  const layout = resolveWorkbook(config, input, { dictionaries })
+  for (const sheet of layout.sheets) {
+    const product = sheet.cells.find(cell => cell.origin.dataPath === '$data.items[0].product')!
+    expect(product.value).toEqual({ literal: 'Service [0007]' })
+    expect(product.choice?.text).toBe('Service [0007]')
+  }
   const form = await renderWorkbookForm(config, input, { dictionaries })
   expect(await readWorkbookForm(config, form)).toEqual({ success: true, data: { items: objectData.items.map(item => ({ id: item.id, product: item.product, other })) } })
 })

@@ -8,10 +8,10 @@ Requires Node.js 22.13 or newer and ExcelJS 4.4.0. Licensed under MIT.
 
 [Read the documentation](https://goldensectionlv.github.io/sheetbind/) for illustrated examples and downloadable workbooks.
 
-Install Sheetbind and its ExcelJS peer dependency:
+The documentation and downloadable examples use Sheetbind 0.3.0. Install it with the ExcelJS peer dependency:
 
 ```sh
-npm install sheetbind exceljs@4.4.0
+npm install sheetbind@0.3.0 exceljs@4.4.0
 ```
 
 The [installation guide](https://goldensectionlv.github.io/sheetbind/getting-started) walks through creating an application and running a report.

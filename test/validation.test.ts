@@ -1,19 +1,11 @@
-import { expect, it } from 'vitest'
+import { expect, it, vi } from 'vitest'
 import ExcelJS from 'exceljs'
 import { definition, data, options } from '../examples/validation/definition'
-import { createValidation, parseValidation, ValidationExecutionError } from '../src/core/validation'
-import type { ValidationRule } from '../src/core/validation'
-import { parseFieldTag } from '../src/xlsx/field-tag'
-import { importAuthoredWorkbook, saveWorkbook } from './xlsx'
-import { WorkbookTemplate } from '../src/xlsx/template'
-import { resolveWorkbook, importWorkbookXlsx, renderWorkbookReport } from '../src/xlsx/workbook-template'
-import { readWorkbookForm, renderWorkbookForm } from '../src/xlsx/workbook-form'
+import { createValidation } from '../src/core/validation'
+import type { ValidationRule } from '../src/index'
+import { parseValidation, registerValidationRule, ValidationExecutionError, resolveWorkbook, importWorkbookXlsx, renderWorkbookReport, readWorkbookForm, renderWorkbookForm } from '../src/index'
+import { openWorkbook as load, importAuthoredWorkbook, saveWorkbook } from './xlsx'
 
-async function load(bytes: Buffer) {
-  const book = new ExcelJS.Workbook()
-  await book.xlsx.load(Uint8Array.from(bytes).buffer)
-  return book
-}
 const context = { root: {}, current: {}, path: '$data.amount' }
 
 it('carries ordered repeated rules and escaped JSON arguments/messages through field tags and XLSX', async () => {
@@ -22,13 +14,12 @@ it('carries ordered repeated rules and escaped JSON arguments/messages through f
   expect(validation[1].args).toEqual(['001', [1, true], { text: 'a|b:c,=;{d}' }])
   const rules = { validation: validation.map((use, index) => ({ ...use, ...(index === 1 ? { message: 'Ошибка "x" | : = ; {a}\nnext' } : {}) })), validationMessages: { probe: 'Fallback: "x"' } }
   const tag = '{amount}{@validate:required}{@validate:probe:"001",[1,true],{"text":"a|b:c,=;{d}"}; message=' + JSON.stringify(rules.validation[1].message) + '}{@validate:probe:false}{@validationMessage:probe:' + JSON.stringify(rules.validationMessages.probe) + '}'
-  expect(parseFieldTag(tag).rules).toEqual(rules)
   const book = new ExcelJS.Workbook()
   book.addWorksheet('Data').getCell('A1').value = tag
   const restored = await importWorkbookXlsx(await saveWorkbook(book))
-  expect(WorkbookTemplate.content(restored).definition.sheets[0].cells[0].rules).toEqual(rules)
+  expect(resolveWorkbook(restored, { amount: 10 }).sheets[0].cells[0].rules).toEqual(rules)
   for (const invalid of ['{x}{y}', '{x}{@unknown:a}', '{x}{@validate:a|b; message="ambiguous"}', '{x}{@validationMessage:a:"unclosed}', '{x}{@choice:Items; key=id; key=other; label=name}']) {
-    expect(() => parseFieldTag(invalid)).toThrow()
+    await expect(importAuthoredWorkbook(book => book.addWorksheet('Invalid').getCell('A1').value = invalid)).rejects.toThrow()
   }
 })
 
@@ -47,11 +38,65 @@ it('uses occurrence, field, runtime and handler messages without aliases for rep
   expect(createValidation({ validationRules: { limit } })(uses)(10, context)?.message).toBe('default 5')
 })
 
-it('prepares rules in empty repeats and blank forms, and keeps handler failures separate from value issues', async () => {
-  expect(() => resolveWorkbook(definition, { ceiling: 10, items: [] })).toThrow('Unknown validation rule: decimalPlaces')
-  await expect(renderWorkbookForm(definition, { ceiling: null, items: [] })).rejects.toThrow('Unknown validation rule')
-  await expect(renderWorkbookForm(definition, { ceiling: null, items: [] }, options)).resolves.toBeInstanceOf(Buffer)
-  expect(() => createValidation({ validationRules: { required: { validate: () => true } } })).toThrow('reserved')
+it('renders values and empty repeats without looking up or executing validation handlers', async () => {
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+  const validate = vi.fn(() => false)
+  const validateArgs = vi.fn(() => false)
+  registerValidationRule('testRenderOnly', { validate, validateArgs })
+  try {
+    const config = await importAuthoredWorkbook(book => {
+      book.addWorksheet('Data').addRows([
+        ['{v}{@validate:required|number|min:1|testRenderOnly:2}'],
+        ['{blank}{@validate:required}'],
+      ])
+    })
+    const input = { v: 'not a number', blank: null }
+    expect(resolveWorkbook(config, input).sheets[0].cells[0].value).toEqual({ literal: input.v })
+    for (const render of [renderWorkbookReport, renderWorkbookForm]) {
+      const bytes = await render(config, input)
+      expect((await load(bytes)).worksheets[0].getColumn('A').values).toContain(input.v)
+      await expect(render(definition, { ceiling: null, items: [] })).resolves.toBeInstanceOf(Buffer)
+    }
+    expect(validateArgs).not.toHaveBeenCalled()
+    expect(validate).not.toHaveBeenCalled()
+    expect(warn).not.toHaveBeenCalled()
+  }
+  finally {
+    warn.mockRestore()
+  }
+})
+
+it('rejects unknown rules before reading, including empty repeats, and preserves occurrence indexes', async () => {
+  const config = await importAuthoredWorkbook(book => book.addWorksheet('Data').addRows([
+    ['Heading', { formula: '1+1' }], ['{#items}'], ['{.label}'],
+    ['{.value}{@validate:external:{"key":1}|number|external|required|min:1}'], ['{/items}'],
+  ]))
+  for (const items of [[], [{ value: 0 }, { value: 2 }]]) {
+    const bytes = await renderWorkbookForm(config, { items })
+    await expect(readWorkbookForm(config, bytes)).rejects.toMatchObject({ issues: [{
+      phase: 'template', code: 'invalid-rules', sheetName: 'Data', address: 'A4', message: 'Unknown validation rule: external',
+    }] })
+  }
+  const bytes = await renderWorkbookForm(config, { items: [{ value: 0 }, { value: 2 }] })
+  const handler = { validateArgs: () => true, validate: () => true }
+  expect(await readWorkbookForm(config, bytes, { validationRules: { external: handler } })).toMatchObject({ success: false,
+    issues: [{ rule: 'min', index: 4, path: '$data.items[0].value' }],
+  })
+  const runtime = { validationRules: { external: { ...handler, validate: () => false, message: 'Domain check failed' } } }
+  expect(await readWorkbookForm(config, bytes, runtime)).toMatchObject({ success: false, issues: [
+    { rule: 'external', index: 0, message: 'Domain check failed' },
+    { rule: 'external', index: 0, message: 'Domain check failed' },
+  ] })
+})
+
+it('rejects a misspelled required rule instead of accepting a blank field', async () => {
+  const config = await importAuthoredWorkbook(book => book.addWorksheet('Input').getCell('A1').value = '{amount}{@validate:requred|number}')
+  const bytes = await renderWorkbookForm(config, { amount: null })
+  await expect(readWorkbookForm(config, bytes)).rejects.toThrow('Unknown validation rule: requred')
+})
+
+it('keeps malformed handlers, known arguments and execution failures separate from value issues', async () => {
+  expect(() => createValidation({ validationRules: { required: { validate: () => true } } })('required')).toThrow('reserved')
   expect(() => createValidation(options)('decimalPlaces:bad')).toThrow('Invalid arguments')
   const config = await importAuthoredWorkbook(book => {
     book.addWorksheet('Data').getCell('A1').value = '{v}{@validate:broken}'
@@ -60,14 +105,39 @@ it('prepares rules in empty repeats and blank forms, and keeps handler failures 
     throw new RangeError('handler bug')
   }, () => Promise.resolve(true)]) {
     const runtime = { validationRules: { broken: { validate: validate as unknown as ValidationRule['validate'] } } }
-    const form = await renderWorkbookForm(config, { v: 1 }, runtime)
+    const form = await renderWorkbookForm(config, { v: 1 })
     await expect(readWorkbookForm(config, form, runtime)).rejects.toBeInstanceOf(ValidationExecutionError)
-    await expect(renderWorkbookReport(config, { v: 1 }, runtime)).rejects.toThrow('$data.v: validation rule broken')
+  }
+})
+
+it('ignores unused runtime options and keeps validation failures when message formatting fails', async () => {
+  const config = await importAuthoredWorkbook(book => book.addWorksheet('Input').getCell('A1').value = '{amount}{@validate:required}')
+  const custom = await importAuthoredWorkbook(book => book.addWorksheet('Input').getCell('A1').value = '{amount}{@validate:custom}')
+  const bytes = await renderWorkbookForm(config, { amount: null })
+  const warning = vi.spyOn(console, 'warn').mockImplementation(() => {})
+  try {
+    const unused = { validationRules: { unused: {} as ValidationRule }, validationMessages: { unused: 42 as unknown as string } }
+    expect(await readWorkbookForm(config, bytes, unused)).toMatchObject({ success: false, data: { amount: null }, issues: [{ rule: 'required', message: 'a value is required' }] })
+    expect(warning).not.toHaveBeenCalled()
+    for (const message of [42 as unknown as string, () => {
+      throw new Error('message failed')
+    }]) {
+      expect(await readWorkbookForm(config, bytes, { validationMessages: { required: message } })).toMatchObject({ success: false,
+        data: { amount: null }, issues: [{ rule: 'required', message: 'failed validation: required' }],
+      })
+      expect(await readWorkbookForm(custom, bytes, { validationRules: { custom: { validate: () => false, skipEmpty: false, message } } })).toMatchObject({ success: false,
+        data: { amount: null }, issues: [{ rule: 'custom', message: 'failed validation: custom' }],
+      })
+    }
+    expect(warning).toHaveBeenCalledTimes(4)
+  }
+  finally {
+    warning.mockRestore()
   }
 })
 
 it('validates complete submitted records after sorting and blank-row removal, keeping actual cell addresses', async () => {
-  const book = await load(await renderWorkbookForm(definition, data, options))
+  const book = await load(await renderWorkbookForm(definition, data))
   const sheet = book.worksheets[0]
   let row = 0
   sheet.eachRow(current => {
@@ -93,15 +163,58 @@ it('validates complete submitted records after sorting and blank-row removal, ke
   expect(await readWorkbookForm(definition, Buffer.from(await book.xlsx.writeBuffer()), options)).toMatchObject({ success: true, data: { ceiling: 10, items: [data.items[1], data.items[0]] } })
 })
 
-it('signs validation semantics independently of directive layout and messages', async () => {
+it('uses current field paths, validation and messages when reading an already issued form', async () => {
   const book = new ExcelJS.Workbook()
   const field = book.addWorksheet('Data').getCell('A1')
   field.value = '{v}{@validate:required|number|min:1}'
   const config = await importWorkbookXlsx(await saveWorkbook(book))
   const bytes = await renderWorkbookForm(config, { v: 2 })
-  field.value = '{v}{@validate:required}{@validate:number}{@validate:min:1; message="New message"}{@validationMessage:min:"Fallback message"}'
+  field.value = '{current}{@validate:required}{@validate:number}{@validate:min:1; message="New message"}{@validationMessage:min:"Fallback message"}'
   const changed = await importWorkbookXlsx(await saveWorkbook(book))
-  expect(await readWorkbookForm(changed, bytes)).toEqual({ success: true, data: { v: 2 } })
-  field.value = '{v}{@validate:required|number|min:3}'
-  expect(await readWorkbookForm(await importWorkbookXlsx(await saveWorkbook(book)), bytes)).toMatchObject({ success: false, issues: [{ phase: 'structure' }] })
+  expect(await readWorkbookForm(changed, bytes)).toEqual({ success: true, data: { current: 2 } })
+  field.value = '{current}{@validate:required|number}{@validate:min:3; message="New message"}{@validationMessage:min:"Fallback message"}'
+  expect(await readWorkbookForm(await importWorkbookXlsx(await saveWorkbook(book)), bytes)).toMatchObject({ success: false, issues: [{ phase: 'value', path: '$data.current', code: 'min', args: [3], message: 'New message' }] })
+})
+
+it('checks builtin predicates without converting present zero, false or numeric text', () => {
+  const prepare = createValidation()
+  expect(prepare('required|number|min:0')(0, context)).toBeUndefined()
+  expect(prepare('required|boolean')(false, context)).toBeUndefined()
+  expect(prepare('number')('', context)).toBeUndefined()
+  expect(prepare('required')('   ', context)?.code).toBe('required')
+  expect(prepare('number')('0', context)?.code).toBe('number')
+  expect(prepare('number|max:24')(25, context)?.code).toBe('max')
+  expect(prepare('string|maxLength:0')('a', context)?.code).toBe('maxLength')
+  expect(() => prepare('max:bad')).toThrow('Invalid arguments')
+})
+
+it('renders invalid input and reports nested field errors only when reading the completed form', async () => {
+  const template = await importAuthoredWorkbook(book => book.addWorksheet('Input').addRows([
+    ['{#groups}'], ['{.name}{@validate:required|string|maxLength:12}'], ['{#.items}'],
+    ['{?.hours}{@validate:required|number|min:0|max:24}', '{.approved}{@validate:required|boolean}', '{.code}{@validate:string|maxLength:5}'],
+    [null, null, '{/.items}'], [null, null, '{/groups}'],
+  ]))
+  const data = { groups: [{ name: 'Main', items: [{ hours: -1, approved: 'false', code: 'too-long' }, { approved: false, code: '' }] }] }
+  expect(() => resolveWorkbook(template, data)).not.toThrow()
+  await expect(renderWorkbookReport(template, data)).resolves.toBeInstanceOf(Buffer)
+  const result = await readWorkbookForm(template, await renderWorkbookForm(template, data))
+  expect(result).toMatchObject({ success: false, issues: [
+    { code: 'min', path: '$data.groups[0].items[0].hours' },
+    { code: 'boolean', path: '$data.groups[0].items[0].approved' },
+    { code: 'maxLength', path: '$data.groups[0].items[0].code' },
+    { code: 'required', path: '$data.groups[0].items[1].hours' },
+  ] })
+})
+
+it('registers validation globally without replacement, runs it only on read and allows per-call overrides', async () => {
+  const validate = vi.fn(value => value === 'accepted')
+  registerValidationRule('testRegistered', { validate, message: 'Expected accepted' })
+  expect(() => registerValidationRule('testRegistered', { validate: () => true })).toThrow('already registered')
+  const template = await importAuthoredWorkbook(book => book.addWorksheet('Data').getCell('A1').value = '{v}{@validate:testRegistered}')
+  const bytes = await renderWorkbookForm(template, { v: 'rejected' })
+  await renderWorkbookReport(template, { v: 'rejected' })
+  expect(validate).not.toHaveBeenCalled()
+  expect(await readWorkbookForm(template, bytes)).toMatchObject({ success: false, issues: [{ phase: 'value', rule: 'testRegistered', message: 'Expected accepted' }] })
+  expect(await readWorkbookForm(template, bytes, { validationRules: { testRegistered: { validate: () => true } } })).toEqual({ success: true, data: { v: 'rejected' } })
+  expect(() => registerValidationRule('required', { validate: () => true })).toThrow('reserved')
 })

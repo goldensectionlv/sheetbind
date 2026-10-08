@@ -1,49 +1,23 @@
 import { isDataObject } from './json'
-import { isDataPath, readDataPath } from './reference'
-import type { DataReference } from './template'
-import { isDictionaryName } from './dictionaries'
-import type { Dictionaries } from './dictionaries'
-import { assertJson } from './json'
+import { readDataPath } from './template'
+import type { DataReference, TemplateValue } from './template'
 
 export interface ChoiceRule {
   readonly source: { readonly dictionary: string } | DataReference
   readonly key: string
   readonly label: string
   readonly return?: 'object' | 'key'
+  readonly emptySource?: 'input'
 }
 export function returnsObject(rule: ChoiceRule | undefined): boolean {
   return !!rule && rule.return !== 'key'
 }
 export interface ChoiceOption { readonly key: string | number, readonly label: string, readonly value: Readonly<Record<string, unknown>> }
-export interface ResolvedChoice { readonly key: string | number | null, readonly items: readonly ChoiceOption[] }
 
-export function parseChoiceRule(value: unknown): ChoiceRule {
-  if (!isDataObject(value) || Object.keys(value).some(key => !['source', 'key', 'label', 'return'].includes(key)) || !isDataPath(value.key) || !isDataPath(value.label) || !isDataObject(value.source)) {
-    throw new SyntaxError('Choice requires a source and safe key/label paths')
-  }
-  if (value.return !== undefined && value.return !== 'object' && value.return !== 'key') {
-    throw new SyntaxError('Choice return must be object or key')
-  }
-  const source = value.source
-  if ('dictionary' in source) {
-    if (Object.keys(source).length !== 1 || !isDictionaryName(source.dictionary)) {
-      throw new SyntaxError('Choice dictionary must be a named source')
-    }
-  }
-  else if (Object.keys(source).some(key => !['path', 'from'].includes(key)) || !isDataPath(source.path) || source.from !== undefined && source.from !== 'root' && source.from !== 'current') {
-    throw new SyntaxError('Choice source requires a safe path and current/root context')
-  }
-  return structuredClone(value) as unknown as ChoiceRule
-}
-
-/** Empty sources are valid; a nonblank selection must still match an available key. */
-function buildOptions(source: unknown, rule: ChoiceRule): ChoiceOption[] {
-  if (!Array.isArray(source)) {
-    throw new SyntaxError('Choice source must be an array of objects')
-  }
-  assertJson(source)
+/** Options borrow validated source records; consumers copy only values they retain. */
+function buildOptions(source: readonly unknown[], rule: ChoiceRule): ChoiceOption[] {
   const keys = new Set<string>()
-  const options = source.map(item => {
+  return source.map(item => {
     const key = readDataPath(item, rule.key)
     const label = readDataPath(item, rule.label)
     if (!isDataObject(item) || !['string', 'number'].includes(typeof key) || typeof key === 'string' && !key.trim() || typeof key === 'number' && !Number.isFinite(key)) {
@@ -57,34 +31,57 @@ function buildOptions(source: unknown, rule: ChoiceRule): ChoiceOption[] {
       throw new SyntaxError('Choice keys must be unique')
     }
     keys.add(token)
-    return { key: key as string | number, label, value: structuredClone(item) }
+    return { key: key as string | number, label, value: item }
   })
-  return options
 }
 
-/** A cache belongs to one execution; the same source can have independent projections. */
+interface ChoiceResolution { readonly items: readonly WorkbookChoiceOption[], readonly problem?: string }
+
+/** Resolve one projection. Rendering can omit an unusable list; reading must reject a damaged mapping. */
 export function createChoiceResolver() {
-  const sources = new WeakMap<object, Map<string, readonly ChoiceOption[]>>()
-  return function resolveChoice(rule: ChoiceRule, root: unknown, current: unknown, dictionaries: Dictionaries): readonly ChoiceOption[] {
-    const source = 'dictionary' in rule.source ? dictionaries[rule.source.dictionary] : readDataPath(rule.source.from === 'root' ? root : current, rule.source.path)
-    if (!Array.isArray(source)) {
-      throw new SyntaxError('Choice source must be an array of objects')
+  const sources = new WeakMap<object, Map<string, ChoiceResolution>>()
+  return function resolveChoice(rule: ChoiceRule, source: unknown): ChoiceResolution {
+    if (source == null) {
+      return { items: [] }
     }
-    const projections = sources.get(source) ?? new Map<string, readonly ChoiceOption[]>()
+    if (!Array.isArray(source)) {
+      return { items: [], problem: 'Choice source must be an array of objects' }
+    }
+    const projections = sources.get(source) ?? new Map<string, ChoiceResolution>()
     const projection = JSON.stringify([rule.key, rule.label])
     if (!projections.has(projection)) {
-      projections.set(projection, buildOptions(source, rule))
+      try {
+        projections.set(projection, { items: choiceLabels(buildOptions(source, rule)) })
+      }
+      catch (error) {
+        if (!(error instanceof SyntaxError)) {
+          throw error
+        }
+        projections.set(projection, { items: [], problem: error.message })
+      }
     }
     sources.set(source, projections)
     return projections.get(projection)!
   }
 }
 
-export function selectedChoice(rule: ChoiceRule, items: readonly ChoiceOption[], value: unknown): ChoiceOption | undefined {
-  const key = choiceKey(rule, value)
-  return items.find(item => item.key === key)
-}
-
 export function choiceKey(rule: ChoiceRule, value: unknown): unknown {
   return returnsObject(rule) ? readDataPath(value, rule.key) : value
+}
+interface WorkbookChoiceOption extends ChoiceOption { readonly text: string }
+export interface WorkbookChoice { readonly text: TemplateValue, readonly items: readonly WorkbookChoiceOption[] }
+
+/** Workbook layouts and files use the same unambiguous choice labels. */
+function choiceLabels(options: readonly ChoiceOption[]): readonly WorkbookChoiceOption[] {
+  const counts = new Map<string, number>()
+  const texts = new Set<string>()
+  options.forEach(option => counts.set(option.label.toLowerCase(), (counts.get(option.label.toLowerCase()) ?? 0) + 1))
+  return options.map(option => {
+    const text = counts.get(option.label.toLowerCase())! > 1 ? `${option.label} [${option.key}]` : option.label
+    if (texts.has(text.toLowerCase())) {
+      throw new SyntaxError('Choice display labels are ambiguous after adding keys')
+    }
+    texts.add(text.toLowerCase())
+    return { ...option, text }
+  })
 }

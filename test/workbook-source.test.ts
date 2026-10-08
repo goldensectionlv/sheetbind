@@ -4,12 +4,59 @@ import JSZip from 'jszip'
 import { createTemplate, data } from '../examples/xlsx-source/template'
 import { importWorkbookXlsx, renderWorkbookReport, renderWorkbookForm, readWorkbookForm } from '../src/index'
 import { xmlAttributes } from '../src/xlsx/xml'
+import { openWorkbook as open } from './xlsx'
 
-async function open(bytes: Uint8Array) {
+it.each(['rows', 'columns'])('relocates internal hyperlink targets through %s growth and empty repeats', async axis => {
   const book = new ExcelJS.Workbook()
-  await book.xlsx.load(Uint8Array.from(bytes).buffer)
-  return book
-}
+  const sheet = book.addWorksheet("Input's data")
+  const footer = axis === 'rows' ? 'A5' : 'D3'
+  const link = axis === 'rows' ? 'A1' : 'D1'
+  sheet.getCell(link).value = 'Jump to footer'
+  sheet.getCell('A2').value = `{#items | axis=${axis}}`
+  sheet.getCell('A3').value = '{.name}'
+  sheet.getCell('B3').value = 'Repeated link'
+  sheet.getCell('B4').value = '{/items}'
+  sheet.getCell(footer).value = 'Footer'
+  sheet.getCell('E1').value = { text: 'External', hyperlink: 'https://example.com/reference.xlsx' }
+  book.addWorksheet('Summary').addRow(['Cross-sheet', 'First item', 'Named target'])
+  book.definedNames.add(`'Input''s data'!${footer}`, 'Footer')
+  const zip = await JSZip.loadAsync(await book.xlsx.writeBuffer())
+  const target = `'Input''s data'!${footer}`
+  const links = [
+    `<hyperlink ref="${link}" location="${footer}"/><hyperlink ref="B3" location="${target}"/>`,
+    `<hyperlink ref="A1" location="${target}"/><hyperlink ref="B1" location="'Input''s data'!$A$3"/><hyperlink ref="C1" location="Footer"/>`,
+  ]
+  for (const [index, extra] of links.entries()) {
+    const path = `xl/worksheets/sheet${index + 1}.xml`
+    const xml = (await zip.file(path)!.async('string')).replace('<hyperlink ref="E1"', '<hyperlink location="A5" ref="E1"')
+    zip.file(path, xml.includes('</hyperlinks>') ? xml.replace('</hyperlinks>', extra + '</hyperlinks>') : xml.replace('<pageMargins', `<hyperlinks>${extra}</hyperlinks><pageMargins`))
+  }
+  const template = await importWorkbookXlsx(await zip.generateAsync({ type: 'nodebuffer' }))
+  for (const count of [0, 3]) {
+    for (const render of axis === 'rows' ? [renderWorkbookReport, renderWorkbookForm] : [renderWorkbookReport]) {
+      const bytes = await render(template, { items: Array.from({ length: count }, (_, index) => ({ name: `Item ${index + 1}` })) })
+      const output = (await open(bytes)).worksheets[0]
+      let address = ''
+      output.eachRow(row => row.eachCell(cell => {
+        if (cell.value === 'Footer') {
+          address = cell.address
+        }
+      }))
+      expect(address).not.toBe('')
+      const saved = await JSZip.loadAsync(bytes)
+      const hyperlinks = async (part: number) => [...(await saved.file(`xl/worksheets/sheet${part}.xml`)!.async('string')).matchAll(/<hyperlink\b[^>]*>/g)].map(match => xmlAttributes(match[0]))
+      const own = await hyperlinks(1)
+      expect(own.find(node => node['r:id'])?.location).toBe('A5')
+      expect(own.filter(node => !node['r:id']).map(node => node.location)).toEqual([address, ...Array(count || (render === renderWorkbookForm ? 1 : 0)).fill(`'Input''s data'!${address}`)])
+      const summary = await hyperlinks(2)
+      expect(summary.map(node => node.location)).toEqual([
+        `'Input''s data'!${address}`,
+        count || render === renderWorkbookForm ? `'Input''s data'!$A$${render === renderWorkbookForm ? 3 : 2}` : "'Input''s data'!#REF!",
+        'Footer',
+      ])
+    }
+  }
+})
 
 it.each(['rows', 'columns'] as const)('keeps blank styled cells inside their %s repeat or fixed outside it', async axis => {
   const book = new ExcelJS.Workbook()
@@ -35,7 +82,7 @@ it.each(['rows', 'columns'] as const)('keeps blank styled cells inside their %s 
       }))
       const repeated = render === renderWorkbookForm ? Math.max(1, count) : count
       expect(colors).toHaveLength(repeated + 2)
-      const offset = render === renderWorkbookForm ? 2 : 0
+      const offset = render === renderWorkbookForm ? 1 : 0
       const expected = axis === 'rows'
         ? [...Array.from({ length: repeated }, (_, index) => `B${index + 1 + offset}`), `D${1 + offset}`, `B${Math.max(1, repeated) + 1 + offset + (render === renderWorkbookForm ? 1 : 0)}`]
         : [...Array.from({ length: repeated }, (_, index) => `${String.fromCharCode(66 + index * 2)}1`), `${String.fromCharCode(68 + Math.max(0, repeated - 1) * 2)}1`, 'B2']
@@ -108,6 +155,37 @@ it('duplicates native metadata along columns and removes it with an empty body',
   const empty = (await open(await renderWorkbookReport(template, { items: [] }))).worksheets[0]
   expect(empty.getImages()).toHaveLength(0)
   expect(empty.getCell('A1').note).toBeUndefined()
+})
+
+it.each(['rows', 'columns'])('preserves backslashes in native formula names during %s growth', async axis => {
+  const book = new ExcelJS.Workbook()
+  const sheet = book.addWorksheet('Names')
+  sheet.addRows([
+    [`{#items | axis=${axis}}`], ['{.n}', null, null, { formula: 'IFERROR(SUM($A:$A),0)+SUM(\\A1,A1\\Rate)' }], ['{/items}'],
+  ])
+  sheet.getCell('Z2').value = 10
+  book.definedNames.add('Names!$Z$2', '\\A1')
+  book.definedNames.add('Names!$Z$2', 'A1\\Rate')
+  const source = Buffer.from(await book.xlsx.writeBuffer())
+  const template = await importWorkbookXlsx(source)
+  for (const count of [0, 1, 3]) {
+    const data = { items: Array.from({ length: count }, (_, index) => ({ n: index + 1 })) }
+    for (const render of axis === 'rows' ? [renderWorkbookReport, renderWorkbookForm] : [renderWorkbookReport]) {
+      const bytes = await render(template, data)
+      const result = await open(bytes)
+      const formulas: string[] = []
+      result.worksheets[0].eachRow(row => row.eachCell(cell => {
+        if (cell.formula) {
+          formulas.push(cell.formula)
+        }
+      }))
+      expect(formulas).toHaveLength(1)
+      expect(formulas[0]).toContain('SUM(\\A1,A1\\Rate)')
+      if (render === renderWorkbookForm) {
+        expect(await readWorkbookForm(template, bytes)).toEqual({ success: true, data })
+      }
+    }
+  }
 })
 
 it('keeps a single active cell and viewport anchor as selected rows repeat or disappear', async () => {
@@ -196,7 +274,7 @@ it('reads only submitted fields while allowing Excel annotations and unrelated w
   }))
   title!.value = { text: 'Updated title', hyperlink: 'https://example.com/updated' }
   title!.note = 'Checked by the reviewer'
-  sheet.getCell('A2').value = 'Edited heading'
+  sheet.getCell('A1').value = 'Edited heading'
   sheet.getCell('Z100').value = 'Personal calculations'
   sheet.mergeCells('Z101:AA102')
   book.addWorksheet('Notes').getCell('A1').value = 'Working notes'
@@ -236,9 +314,9 @@ it('keeps source sheet identities, scoped names and helper strings', async () =>
     expect(workbook).toContain(`<definedName name="Footer" localSheetId="2">'Lines'!$A$${cells.Footer.slice(1)}</definedName>`)
     expect(workbook).toContain('<definedName name="Title" localSheetId="0">\'Reference\'!$A$1</definedName>')
     expect(workbook).toMatch(/<definedName name="_xlnm.Print_Area" localSheetId="1">/)
-    expect(book.getWorksheet('Status')!.pageSetup.printArea).toBe(render === renderWorkbookForm ? 'A2:A2' : 'A1:A1')
+    expect(book.getWorksheet('Status')!.pageSetup.printArea).toBe('A1:A1')
     if (render === renderWorkbookForm) {
-      expect(await readWorkbookForm(template, bytes, options)).toEqual({ success: true, data })
+      expect(await readWorkbookForm(template, bytes)).toEqual({ success: true, data })
     }
   }
 })

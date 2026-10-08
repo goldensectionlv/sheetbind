@@ -3,15 +3,9 @@ import JSZip from 'jszip'
 import { describe, expect, it } from 'vitest'
 import { definition, dictionaries, data } from '../examples/formulas/definition'
 import { copyWorkbookFormula, parseWorkbookFormula } from '../src/grid/workbook-formula'
-import { resolveWorkbook, importWorkbookXlsx, renderWorkbookReport } from '../src/xlsx/workbook-template'
-import { importAuthoredWorkbook } from './xlsx'
-import { renderWorkbookForm, readWorkbookForm } from '../src/xlsx/workbook-form'
+import { resolveWorkbook, importWorkbookXlsx, renderWorkbookReport, renderWorkbookForm, readWorkbookForm } from '../src/index'
+import { openWorkbook as load, importAuthoredWorkbook } from './xlsx'
 
-async function load(bytes: Uint8Array) {
-  const book = new ExcelJS.Workbook()
-  await book.xlsx.load(Uint8Array.from(bytes).buffer)
-  return book
-}
 describe('workbook formulas', () => {
   it.each([0, 1, 3])('keeps formula meaning through tagged XLSX for %i rows, including cross-sheet totals', async count => {
     const values = { items: Array.from({ length: count }, (_, index) => ({ ...data.items[index % 2], id: `row-${index}` })) }
@@ -38,7 +32,7 @@ describe('workbook formulas', () => {
     })
     expect(total).toBeGreaterThan(count + 3)
     expect(form.getWorksheet('Summary')!.getCell('B1').formula).toBe(`'Invoice'!F${total}`)
-    expect(await readWorkbookForm(definition, bytes, { dictionaries })).toEqual({ success: true, data: values })
+    expect(await readWorkbookForm(definition, bytes)).toEqual({ success: true, data: values })
   })
 
   it('keeps unequal nested groups scoped and expands a grand-total range over all groups', async () => {
@@ -103,6 +97,8 @@ describe('workbook formulas', () => {
     expect(await readWorkbookForm(definition, Buffer.from(await book.xlsx.writeBuffer()))).toMatchObject({ success: true, data: expected })
     sheet.getCell(start, 4).value = { formula }
     sheet.getCell(start, 2).value = { formula: '1+1', result: 2 }
+    expect(await readWorkbookForm(definition, Buffer.from(await book.xlsx.writeBuffer()))).toMatchObject({ success: true, data: { items: [{ ...data.items[0], quantity: 2 }, data.items[1]] } })
+    sheet.getCell(start, 2).value = { formula: '1+1' }
     expect(await readWorkbookForm(definition, Buffer.from(await book.xlsx.writeBuffer()))).toMatchObject({ success: false, issues: [expect.objectContaining({ code: 'formula' })] })
   })
 

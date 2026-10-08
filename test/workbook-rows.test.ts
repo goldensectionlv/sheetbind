@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest'
 import ExcelJS from 'exceljs'
-import { readWorkbookForm, renderWorkbookForm } from '../src/xlsx/workbook-form'
-import { importWorkbookXlsx } from '../src/xlsx/workbook-template'
+import { readWorkbookForm, renderWorkbookForm, importWorkbookXlsx } from '../src/index'
+
 import { FORM_MARKER_PREFIX } from '../src/xlsx/workbook-form-markers'
 import { exampleFile, importAuthoredWorkbook, openWorkbook, saveWorkbook } from './xlsx'
 import { data, dictionaries } from '../examples/records/definition'
@@ -58,14 +58,14 @@ it('issues twenty explicitly empty records with styles, formulas and lists, then
     expect(row.getCell(3).dataValidation).toMatchObject({ type: 'list' })
     expect(row.getCell(4).formula).toBe(`IF(B${row.number}="","",B${row.number}*2)`)
   }
-  expect(await readWorkbookForm(template, bytes, { dictionaries })).toEqual({ success: true, data: { items: [] } })
+  expect(await readWorkbookForm(template, bytes)).toEqual({ success: true, data: { items: [] } })
   for (const index of [0, 9, 19]) {
     const row = sheet.getRow(start + index)
     row.getCell(1).value = `Line ${index + 1}`
     row.getCell(2).value = index
     row.getCell(3).value = 'Open'
   }
-  expect(await readWorkbookForm(template, await saveWorkbook(book), { dictionaries })).toEqual({ success: true, data: {
+  expect(await readWorkbookForm(template, await saveWorkbook(book))).toEqual({ success: true, data: {
     items: [0, 9, 19].map(index => ({ name: `Line ${index + 1}`, quantity: index, status: 'Open' })),
   } })
   expect(input.items).toEqual(Array.from({ length: 20 }, () => ({})))
@@ -127,13 +127,13 @@ it('validates partially filled rows at their resulting paths after skipping empt
   const template = await importWorkbookXlsx(await templateBytes())
   const book = await openWorkbook(await renderWorkbookForm(template, { contact: 'Jordan', items: [{}, { quantity: -1 }] }))
   const address = find(book.worksheets[0], -1).address
-  const result = await readWorkbookForm(template, await saveWorkbook(book), { context: { contact: 'Other', items: [{ name: 'Not submitted' }] } })
+  const result = await readWorkbookForm(template, await saveWorkbook(book))
   expect(result).toMatchObject({ success: false, issues: [
     { code: 'required', path: '$data.items[0].name' }, { code: 'min', path: '$data.items[0].quantity', address },
   ] })
 })
 
-it.each(['choice', 'choice-source'])('keeps a nonempty %s failure and reports its compacted nested path', async code => {
+it.each(['choice', 'choice-source'])('distinguishes invalid input from a damaged source in nested records (%s)', async code => {
   const template = await importAuthoredWorkbook(book => {
     book.addWorksheet('Nested').addRows([
       ['{#departments}'], ['{.name}'], ['{#.groups}'], ['{.name}'], ['{#.items}'],
@@ -148,8 +148,23 @@ it.each(['choice', 'choice-source'])('keeps a nonempty %s failure and reports it
   const first = find(sheet, 'Paper')
   const edited = sheet.getCell(Number(first.row) + 2, 1)
   edited.value = 'Unknown'
-  const result = await readWorkbookForm(template, await saveWorkbook(book), { context: code === 'choice' ? { products } : {} })
+  if (code === 'choice-source') {
+    const range = book.definedNames.getRanges('_sb_object_sources').ranges[0]
+    const start = range.split('!')[1].split(':')[0].replaceAll('$', '')
+    const helper = book.getWorksheet('_sheetbind_lists')!
+    const header = helper.getCell(start)
+    const payload = helper.getCell(Number(header.row) + 1, Number(header.col))
+    const stored = JSON.parse(String(payload.value))
+    stored.context.products = [{ id: '001', name: 'Paper' }, { id: '001', name: 'Different item' }]
+    payload.value = JSON.stringify(stored)
+  }
+  const result = await readWorkbookForm(template, await saveWorkbook(book))
   expect(result.success).toBe(false)
+  if (code === 'choice-source') {
+    expect(result).toMatchObject({ success: false, issues: [{ phase: 'xlsx', code, sheetName: 'Nested' }] })
+    expect(result).not.toHaveProperty('data')
+    return
+  }
   if (!result.success) {
     expect(result.issues.filter(issue => issue.address === edited.address)).toEqual([
       expect.objectContaining({ code, sheetName: 'Nested', address: edited.address, path: '$data.departments[0].groups[0].items[1].product' }),
@@ -172,19 +187,16 @@ it('retains a conflicting nonempty occurrence when the first occurrence is blank
   ] })
 })
 
-it.each([{ formula: '1+1' }, new Date('2026-01-01T00:00:00Z')])('keeps an invalid native input and locates it after blank rows', async value => {
+it('keeps an invalid native input and locates it after blank rows', async () => {
   const template = await importWorkbookXlsx(await templateBytes())
   const book = await openWorkbook(await renderWorkbookForm(template, { contact: 'Jordan', items: [{}, {}, {}] }))
   const sheet = book.worksheets[0]
   const start = Number(find(sheet, FORM_MARKER_PREFIX + '["repeat",1]').row) + 1
   const cell = sheet.getCell(start + 2, 1)
-  cell.value = value
-  if (value instanceof Date) {
-    cell.numFmt = 'yyyy-mm-dd'
-  }
+  cell.value = { formula: '1+1' }
   const result = await readWorkbookForm(template, await saveWorkbook(book))
   expect(result).toMatchObject({ success: false, issues: [
-    { code: value instanceof Date ? 'non-scalar' : 'formula', address: cell.address, path: '$data.items[0].name' },
+    { code: 'formula', address: cell.address, path: '$data.items[0].name' },
   ] })
 })
 
@@ -205,7 +217,7 @@ it('reads child insertion under an unkeyed parent and treats its identifier as a
   const expected = { ...input, sites: input.sites.map((site, index) => index === 2
     ? { ...site, name: 'Renamed site', work: [{ code: '0007', description: 'Extra', hours: 3, approved: false }, ...site.work] }
     : site) }
-  expect(await readWorkbookForm(await importWorkbookXlsx(source), await saveWorkbook(book), { dictionaries })).toEqual({ success: true, data: expected })
+  expect(await readWorkbookForm(await importWorkbookXlsx(source), await saveWorkbook(book))).toEqual({ success: true, data: expected })
 })
 
 it('reads copied and deleted multirow blocks by their current boundaries', async () => {
@@ -229,6 +241,6 @@ it('locates the first displaced boundary of an incomplete multirow block', async
   const book = await openWorkbook(await renderWorkbookForm(template, { items: [{ name: 'First', quantity: 1 }] }))
   book.worksheets[0].spliceRows(5, 0, ['An extra line'])
   expect(await readWorkbookForm(template, await saveWorkbook(book))).toMatchObject({ success: false, issues: [
-    { code: 'form-layout', sheetName: 'Blocks', address: 'IW7', message: expect.stringContaining('expected at IW6, found IW7') },
+    { code: 'form-layout', sheetName: 'Blocks', address: 'IW6', message: expect.stringContaining('expected at IW5, found IW6') },
   ] })
 })

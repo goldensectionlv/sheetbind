@@ -26,7 +26,7 @@ export class TaggedXlsxError extends TemplateError {
   }
 }
 
-/** Add authored locations at the XLSX boundary; execution keeps format-independent node identities. */
+/** Locate execution errors in the authored template using their cell and region IDs. */
 export function withTemplateLocations<T>(template: WorkbookDefinition, run: () => T): T {
   try {
     return run()
@@ -37,7 +37,7 @@ export function withTemplateLocations<T>(template: WorkbookDefinition, run: () =
     }
     const locations = new Map(template.sheets.flatMap(sheet => [
       ...workbookCells(sheet), ...workbookRegions(sheet),
-    ].map(node => [node.id, { sheetName: sheet.name, address: node.xlsx?.address }] as const)))
+    ].map(node => [node.id, { sheetName: sheet.name, address: node.xlsx.address }] as const)))
     throw new TaggedXlsxError(error.issues.map(issue => ({ ...issue, ...locations.get(issue.nodeId) })), { cause: error })
   }
 }

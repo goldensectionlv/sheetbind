@@ -1,18 +1,15 @@
 import { axisPositions, mapAxis } from '../grid/workbook-axis'
-import type { WorkbookAxes } from '../grid/workbook-axis'
-import type { WorkbookCoordinates } from '../grid/workbook-coordinates'
+import type { WorkbookSheetPlan } from '../grid/workbook-layout'
 import { FormulaEdge } from '../grid/workbook-formula'
 import type { FormulaRows } from '../grid/workbook-formula'
-import type { WorkbookSheet } from '../grid/workbook'
-import type { WorkbookOutputSheet } from './workbook-output'
 import { columnName, columnNumber } from '../grid/geometry'
-import { formatAddress, formatRange, parseAddress, parseRange } from './addresses'
+import { formatAddress, formatRange, parseAddress, parseRange } from '../grid/geometry'
 import type { GridAddress, GridRange } from '../grid/geometry'
 
 /** Source XLSX coordinates to final XLSX coordinates, including tag removal and form control rows. */
 export interface SourceCoordinates {
   readonly name: string
-  readonly part?: string
+  readonly part: string
   readonly row: (position: number, edge?: FormulaEdge) => number | undefined
   readonly rows: (position: number) => readonly number[]
   readonly column: (position: number, edge?: FormulaEdge) => number | undefined
@@ -28,17 +25,16 @@ export interface SourceCoordinates {
 }
 
 /** One source-to-output coordinate transform for cells and coordinate-bearing Excel metadata. */
-export function sourceCoordinates(source: WorkbookSheet, output: WorkbookOutputSheet, axes: WorkbookAxes, coordinates: WorkbookCoordinates, carrier?: FormulaRows): SourceCoordinates {
-  const markers = source.xlsx?.markers ?? []
-  const cells = new Map<string, GridAddress[]>(source.xlsx?.cells.map(address => [address, []]) ?? [])
+export function sourceCoordinates(plan: WorkbookSheetPlan, carrier?: FormulaRows): SourceCoordinates {
+  const { definition: source, sheet: output, axes, coordinates } = plan
+  const markers = source.xlsx.markers
+  const cells = new Map<string, GridAddress[]>(source.xlsx.cells.map(address => [address, []]))
   const addresses = new Map<string, string[]>()
   const ranges = new Map<string, readonly GridRange[]>()
   for (const cell of output.cells) {
-    if (cell.xlsx && cell.xlsx.part === source.xlsx?.part) {
-      const positions = cells.get(cell.xlsx.address) ?? []
-      positions.push(cell.at)
-      cells.set(cell.xlsx.address, positions)
-    }
+    const positions = cells.get(cell.xlsx.address) ?? []
+    positions.push(cell.at)
+    cells.set(cell.xlsx.address, positions)
   }
   const authored = (row: number, edge: FormulaEdge) => row - markers.filter(marker => edge === FormulaEdge.End ? marker <= row : marker < row).length
   function row(position: number, edge = FormulaEdge.Cell): number | undefined {
@@ -136,12 +132,12 @@ export function sourceCoordinates(source: WorkbookSheet, output: WorkbookOutputS
     }
     return result
   }
-  return { name: output.name, part: source.xlsx?.part, row, rows, column, columns, point: address => points(address)[0], points, range, references }
+  return { name: output.name, part: source.xlsx.part, row, rows, column, columns, point: address => points(address)[0], points, range, references }
 }
 
 /** Excel formula syntax stays opaque; only local A1 references are relocated. */
 export function sourceFormula(value: string, current: SourceCoordinates, sheets: ReadonlyMap<string, SourceCoordinates>): string {
-  const reference = /(?<![\p{L}\p{N}_.!'])(?:(?:'((?:[^']|'')+)'|([\p{L}_][\p{L}\p{N}_.]*))!)?(\$?[A-Z]{1,3}\$?[1-9]\d*(?::\$?[A-Z]{1,3}\$?[1-9]\d*)?|\$?[A-Z]{1,3}:\$?[A-Z]{1,3}|\$?[1-9]\d*:\$?[1-9]\d*)(?![\p{L}\p{N}_(])/giu
+  const reference = /(?<![\p{L}\p{N}_.!\\'])(?:(?:'((?:[^']|'')+)'|([\p{L}_][\p{L}\p{N}_.]*))!)?(\$?[A-Z]{1,3}\$?[1-9]\d*(?::\$?[A-Z]{1,3}\$?[1-9]\d*)?|\$?[A-Z]{1,3}:\$?[A-Z]{1,3}|\$?[1-9]\d*:\$?[1-9]\d*)(?![\p{L}\p{N}_(\\])/giu
   return value.split(/("(?:[^"]|"")*"|\[[^\]]*\](?:[^\s!+*/^&<>=(),;]*![A-Z0-9$:]+)?)/gi).map((part, index) => {
     if (index % 2) {
       return part

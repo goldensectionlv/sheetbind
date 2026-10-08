@@ -5,10 +5,10 @@ import type { WorkbookRegion } from '../grid/workbook'
 import { FormulaEdge } from '../grid/workbook-formula'
 import type { ValueExpression } from '../core/template'
 import type { FieldRules } from '../core/field-rules'
-import { parseRegionTag } from './region-tag'
+import { parseDataReference } from '../core/template'
 import { splitRuleText } from '../core/rule-syntax'
-import { parseFieldTag } from './field-tag'
-import { parseRange } from './addresses'
+import { parseFieldTag } from '../core/field-rules'
+import { parseRange } from '../grid/geometry'
 import { xlsxTextIssues } from './report-text'
 import { TaggedXlsxError } from './tagged-template'
 
@@ -52,7 +52,13 @@ function parseShape(text: string) {
     shape.axis = value
     return false
   })
-  return { ...parseRegionTag(binding.join(' | ')), ...shape }
+  if (binding.length !== 1) {
+    throw new SyntaxError('Unknown region option; use the closing marker to set the rectangle')
+  }
+  const head = binding[0]
+  const scope = head.startsWith('with ')
+  const source = parseDataReference(scope ? head.slice(5) : head)
+  return { source, scope, close: scope ? 'with' : head, ...shape }
 }
 
 /** Rectangular ownership is reconstructed before parsing fields. Marker rows are a carrier only. */
