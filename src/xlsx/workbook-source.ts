@@ -7,7 +7,7 @@ import { sourceCoordinates, sourceFormula } from './source-coordinates'
 import type { SourceCoordinates } from './source-coordinates'
 import { sourceWorksheet } from './source-worksheet'
 import { relocateSourceMetadata } from './source-metadata'
-import { appendXmlChildren, decodeXml, encodeXml, setXmlElement, xmlAttributes, xmlElements } from './xml'
+import { appendXmlChildren, decodeXml, encodeXml, setXmlAttributes, setXmlElement, xmlAttributes, xmlElements } from './xml'
 import { decodeXstring, protect } from './report-text'
 import { createWorkbookResources, workbookParts, workbookRelationshipId } from './workbook-resources'
 import type { WorkbookResourceSource } from './workbook-resources'
@@ -40,14 +40,16 @@ export async function writeWorkbookPackage(source: WorkbookSource): Promise<Buff
   const maps = new Map(bindings.map(binding => [binding.original.name.toLowerCase(), binding.coordinates]))
   const cells = await prepareWorkbookCells(zip)
   const lists = workbookLists(source.plan, source.dictionaries, createWorkbookResources(source.resources), cells, source.form?.choices)
+  let workbook = await zip.file('xl/workbook.xml')!.async('string')
+  const calculation = xmlElements(workbook, 'calcPr')[0]
+  const iterate = ['1', 'true'].includes(xmlAttributes(calculation ?? '').iterate)
   for (const { original, output, coordinates } of bindings) {
     const xml = sourceWorksheet(await zip.file(original.part)!.async('string'), {
-      output, map: coordinates, maps, writer: cells, form: !!source.form,
+      output, map: coordinates, maps, writer: cells, form: !!source.form, iterate,
       markers: source.form?.markers.get(output.name), validations: lists.validations.get(output.name)!,
     })
     zip.file(original.part, new TextEncoder().encode(xml))
   }
-  let workbook = await zip.file('xl/workbook.xml')!.async('string')
   let relations = await zip.file('xl/_rels/workbook.xml.rels')!.async('string')
   let types = await zip.file('[Content_Types].xml')!.async('string')
   if (lists.xml) {
@@ -63,7 +65,14 @@ export async function writeWorkbookPackage(source: WorkbookSource): Promise<Buff
   const sheetNames = [...parts.keys()]
   const generatedNames = [...source.plan.sheets.flatMap(({ sheet }) => workbookPrintNames(sheet.name, sheetNames.indexOf(sheet.name), sheet.print)), ...lists.names]
   workbook = mergeWorkbookNames(workbook, generatedNames, maps)
-  workbook = setXmlElement(workbook, 'calcPr', '<calcPr fullCalcOnLoad="1"/>')
+  const recalculation = setXmlAttributes(calculation ?? '<calcPr/>', { fullCalcOnLoad: 1 })
+  if (calculation) {
+    workbook = workbook.replace(calculation, () => recalculation)
+  }
+  else {
+    const previous = ['externalReferences', 'functionGroups', 'sheets'].map(name => xmlElements(workbook, name)[0]).find(Boolean)!
+    workbook = workbook.replace(previous, () => previous + recalculation)
+  }
   const names = xmlElements(workbook, 'definedNames')[0]
   if (names) {
     workbook = workbook.replace(names, '').replace(/<calcPr\b/, () => names + '<calcPr')

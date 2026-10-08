@@ -57,22 +57,14 @@ Use `@list` when the selected text is the value you need:
 {status}{@list:Statuses}
 ```
 
-Create an `Input` sheet in `list-template.xlsx`: A1 = `Status`, B1 = this tag. Or download the [template](/examples/tutorials/list-template.xlsx). After [installation](./getting-started.md), save [list-report.ts](/examples/tutorials/list-report.ts) next to it:
+Create an `Input` sheet in `list-template.xlsx`: A1 = `Status`, B1 = this tag. Or download the [template](/examples/tutorials/list-template.xlsx). After [installation](./getting-started.md#run-examples), save [list-report.ts](/examples/tutorials/list-report.ts) next to it:
 
-```ts
-import { readFile, writeFile } from 'node:fs/promises'
-import { importWorkbookXlsx, renderWorkbookReport } from 'sheetbind'
-
-const template = await importWorkbookXlsx(await readFile('list-template.xlsx'))
-const data = { status: 'Draft' }
-const dictionaries = { Statuses: ['Draft', 'Ready'] }
-await writeFile('list-report.xlsx', await renderWorkbookReport(template, data, { dictionaries }))
-```
+<<< @/public/examples/tutorials/list-report.ts
 
 Run from that directory:
 
 ```sh
-pnpm exec tsx list-report.ts
+npx tsx list-report.ts
 ```
 
 Cell B1 in `list-report.xlsx` contains `Draft` and offers the `Draft`, `Ready` list. Add `{@validate:required}` to require a selection.
@@ -91,23 +83,10 @@ Use `@choice` when each option has a separate identifier and display label:
 
 Create an `Input` sheet in `choice-template.xlsx`: A1 = `Product`, B1 = this tag. Or download the [template](/examples/tutorials/choice-template.xlsx). Save [choice-report.ts](/examples/tutorials/choice-report.ts) next to it:
 
-```ts
-import { readFile, writeFile } from 'node:fs/promises'
-import { importWorkbookXlsx, renderWorkbookReport } from 'sheetbind'
-
-const template = await importWorkbookXlsx(await readFile('choice-template.xlsx'))
-const dictionaries = {
-  Products: [
-    { id: '001', name: 'Paper' },
-    { id: '002', name: 'Pen' },
-  ],
-}
-const data = { product: dictionaries.Products[0] }
-await writeFile('choice-report.xlsx', await renderWorkbookReport(template, data, { dictionaries }))
-```
+<<< @/public/examples/tutorials/choice-report.ts
 
 ```sh
-pnpm exec tsx choice-report.ts
+npx tsx choice-report.ts
 ```
 
 Cell B1 in `choice-report.xlsx` contains `Paper` and offers a list of products. `key=id` names the identifier field; `label=name` names the label shown in Excel. By default the data field holds the whole object.
@@ -226,37 +205,14 @@ Create an `Input` sheet in `rules-template.xlsx`, or download the [template](/ex
 | A1 | `Quantity` |
 | B1 | `{quantity}{@validate:required\|number\|multipleOf:2}` |
 
-After [installation](./getting-started.md), save [rules-form.ts](/examples/tutorials/rules-form.ts) next to it:
+After [installation](./getting-started.md#run-examples), save [rules-form.ts](/examples/tutorials/rules-form.ts) next to it:
 
-```ts
-import { readFile, writeFile } from 'node:fs/promises'
-import { importWorkbookXlsx, renderWorkbookForm, readWorkbookForm } from 'sheetbind'
-import type { ValidationOptions } from 'sheetbind'
-
-const options: ValidationOptions = {
-  validationRules: {
-    multipleOf: {
-      validateArgs: args => args.length === 1 && typeof args[0] === 'number'
-        && Number.isSafeInteger(args[0]) && args[0] > 0,
-      validate(value, [step]) {
-        return typeof value === 'number' && Number.isSafeInteger(value)
-          && typeof step === 'number' && value % step === 0
-      },
-      message: ({ args }) => `Enter a whole number divisible by ${args[0]}`,
-    },
-  },
-}
-const template = await importWorkbookXlsx(await readFile('rules-template.xlsx'))
-const data = { quantity: 4 }
-await writeFile('rules-form.xlsx', await renderWorkbookForm(template, data))
-const result = await readWorkbookForm(template, await readFile('rules-form.xlsx'), options)
-console.log(JSON.stringify(result, null, 2))
-```
+<<< @/public/examples/tutorials/rules-form.ts
 
 Run from that directory:
 
 ```sh
-pnpm exec tsx rules-form.ts
+npx tsx rules-form.ts
 ```
 
 The script issues `rules-form.xlsx` and reads the saved file. Reading succeeds for `quantity: 4`. Changing the value to `3` still creates the file, but reading returns `success: false` with the `multipleOf` rule and the message `Enter a whole number divisible by 2`. `multipleOf:0` causes a configuration error during reading, before checking the value.
@@ -311,4 +267,4 @@ Pipelines run left to right. Each handler receives a value and JSON arguments an
 
 Formatters **never run on read** and are not inverted: a cell formatted with `bool_replace` returns the text “Yes”, not a boolean. Use `@choice` to return a key or object from a display label. Formatting cannot share a cell with `@choice` or `@list`. Handler registrations are not stored in XLSX.
 
-The [complete runnable example](/examples/tutorials/formatting.ts) issues a form with built-in and custom formatters and reads it using a global rule. After installing dependencies, run `pnpm exec tsx formatting.ts`.
+Save the [formatting template](/examples/tutorials/formatting-template.xlsx) beside the [complete runnable example](/examples/tutorials/formatting.ts). It issues a form with built-in and custom formatters and reads it using a global rule. With the [example setup](./getting-started.md#run-examples), run `npx tsx formatting.ts`.

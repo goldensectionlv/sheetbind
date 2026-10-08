@@ -4,17 +4,19 @@
 
 Sheetbind fills XLSX templates with data. Add tags to cells in Excel, pass the workbook and data to your code, and save a report. You can also issue a form, let a user fill it in, and read the completed file.
 
-Requires Node.js 22.13 or newer and ExcelJS 4.4.0. Licensed under MIT.
+Requires Node.js 22.13 or newer. Licensed under MIT.
 
 [Read the documentation](https://goldensectionlv.github.io/sheetbind/) for illustrated examples and downloadable workbooks.
 
-The documentation and downloadable examples use Sheetbind 0.3.0. Install it with the ExcelJS peer dependency:
+Install in your application:
 
 ```sh
-npm install sheetbind@0.3.0 exceljs@4.4.0
+npm install sheetbind
 ```
 
-The [installation guide](https://goldensectionlv.github.io/sheetbind/getting-started) walks through creating an application and running a report.
+ExcelJS is installed automatically as a dependency. Sheetbind includes TypeScript declarations and supports both `import` and `require`; use your application's existing module and build settings. In CommonJS, use `const { importWorkbookXlsx, renderWorkbookReport } = require('sheetbind')`.
+
+The [first report guide](https://goldensectionlv.github.io/sheetbind/getting-started) includes a ready-made template and a complete example. The documentation and downloadable examples use Sheetbind 0.3.1.
 
 ## First report
 
@@ -24,9 +26,16 @@ Create `first-report-template.xlsx`: put `Customer` in A1 and `{customer.name}` 
 import { readFile, writeFile } from 'node:fs/promises'
 import { importWorkbookXlsx, renderWorkbookReport } from 'sheetbind'
 
-const template = await importWorkbookXlsx(await readFile('first-report-template.xlsx'))
-const data = { customer: { name: 'Sample customer' } }
-await writeFile('report.xlsx', await renderWorkbookReport(template, data))
+async function main() {
+  const template = await importWorkbookXlsx(await readFile('first-report-template.xlsx'))
+  const data = { customer: { name: 'Sample customer' } }
+  await writeFile('report.xlsx', await renderWorkbookReport(template, data))
+}
+
+main().catch(error => {
+  console.error(error)
+  process.exitCode = 1
+})
 ```
 
 The result contains `Sample customer` in B1. Follow [First report](https://goldensectionlv.github.io/sheetbind/getting-started) for package installation, a ready-made template and the command to run this code.

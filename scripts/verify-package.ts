@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
+import { createRequire } from 'node:module'
 import { copyFile, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import ExcelJS from 'exceljs'
 
 interface PackResult {
   filename: string
@@ -17,7 +19,7 @@ const npmCli = path.join(path.dirname(process.execPath), 'node_modules', 'npm', 
 
 function run(command: string, args: string[], cwd: string, capture = false): string {
   const result = execFileSync(command, args, {
-    cwd, encoding: 'utf8', env: { ...process.env, NO_COLOR: '1' },
+    cwd, encoding: 'utf8', env: { ...process.env, NODE_PATH: '', NO_COLOR: '1' },
     stdio: capture ? ['ignore', 'pipe', 'inherit'] : 'inherit',
   })
   return typeof result === 'string' ? result : ''
@@ -50,11 +52,51 @@ async function main(): Promise<void> {
 
     const consumer = path.join(workspace, 'consumer')
     await mkdir(consumer)
-    await writeFile(path.join(consumer, 'package.json'), JSON.stringify({ name: 'sheetbind-consumer', private: true, type: 'module' }))
-    npm(['install', '--ignore-scripts', '--no-audit', '--no-fund', '--package-lock=false', path.join(workspace, pack.filename), 'exceljs@4.4.0', 'typescript@5.9.3', '@types/node@22.20.1'], consumer)
+    await writeFile(path.join(consumer, 'package.json'), JSON.stringify({ name: 'sheetbind-consumer', private: true }))
+    npm(['install', '--omit=dev', '--omit=peer', '--ignore-scripts', '--no-audit', '--no-fund', '--package-lock=false', path.join(workspace, pack.filename)], consumer)
     const installed = JSON.parse(await readFile(path.join(consumer, 'node_modules', 'sheetbind', 'package.json'), 'utf8')) as { version: string, exports: Record<string, unknown> }
     assert.equal(installed.version, pack.version)
     assert.deepEqual(Object.keys(installed.exports).sort(), ['.', './package.json'])
+    const dependency = createRequire(path.join(consumer, 'node_modules', 'sheetbind', 'package.json'))
+    for (const name of ['exceljs', 'jszip']) {
+      assert(path.relative(consumer, dependency.resolve(name)).startsWith('node_modules' + path.sep), `${name} must come from the consumer installation`)
+    }
+
+    const application = JSON.parse(await readFile(path.join(consumer, 'package.json'), 'utf8'))
+    assert.deepEqual(Object.keys(application.dependencies), ['sheetbind'])
+    assert.equal(application.type, undefined)
+    assert.equal(application.devDependencies, undefined)
+    const source = new ExcelJS.Workbook()
+    source.addWorksheet('Input').getCell('A1').value = '{value}{@validate:number}'
+    await writeFile(path.join(consumer, 'template.xlsx'), Buffer.from(await source.xlsx.writeBuffer()))
+    for (const mode of ['commonjs', 'module']) {
+      const directory = path.join(consumer, mode)
+      await mkdir(directory)
+      if (mode === 'module') {
+        await writeFile(path.join(directory, 'package.json'), JSON.stringify({ type: 'module' }))
+      }
+      const imports = mode === 'module'
+        ? "import assert from 'node:assert/strict'\nimport { readFile, writeFile } from 'node:fs/promises'\nimport * as api from 'sheetbind'"
+        : "const assert = require('node:assert/strict')\nconst { readFile, writeFile } = require('node:fs/promises')\nconst api = require('sheetbind')"
+      await writeFile(path.join(directory, 'report.js'), `${imports}
+  async function main() {
+    const template = await api.importWorkbookXlsx(await readFile('template.xlsx'))
+    const data = { value: 42 }
+    await writeFile('${mode}-report.xlsx', await api.renderWorkbookReport(template, data))
+    const form = await api.renderWorkbookForm(template, data)
+    assert.deepEqual(await api.readWorkbookForm(template, form), { success: true, data })
+  }
+  main().catch(error => { console.error(error); process.exitCode = 1 })
+  `)
+      run(process.execPath, [path.join(directory, 'report.js')], consumer)
+      const report = new ExcelJS.Workbook()
+      await report.xlsx.readFile(path.join(consumer, `${mode}-report.xlsx`))
+      assert.equal(report.worksheets[0].getCell('A1').value, 42)
+    }
+    console.log('Installed sheetbind alone: plain CommonJS and ESM reports/forms without dev or peer dependencies: ok')
+
+    await writeFile(path.join(consumer, 'package.json'), JSON.stringify({ ...application, type: 'module' }))
+    npm(['install', '--save-dev', '--include=dev', '--ignore-scripts', '--no-audit', '--no-fund', '--package-lock=false', 'typescript@5.9.3', '@types/node@22.20.1', 'tsx@4.23.1'], consumer)
 
     const examples = {
       package: ['verify.ts', 'validation.ts', 'template.xlsx', 'template.data.json'],
@@ -126,9 +168,14 @@ async function main(): Promise<void> {
     run(process.execPath, ['build/tutorials/run.js', 'artifacts/tutorials'], consumer)
     run(process.execPath, ['build/tutorials/read-form.js', 'artifacts/tutorials'], consumer)
     // Run the exact downloadable scripts from the directory used by the reader.
+    await writeFile(path.join(consumer, 'artifacts', 'package.json'), JSON.stringify({ private: true }))
     const tutorialDirectory = path.join(consumer, 'artifacts', 'tutorials')
+    for (const name of examples.tutorials) {
+      await copyFile(path.join(consumer, 'tutorials', name), path.join(tutorialDirectory, name))
+    }
+    const tsx = path.join(consumer, 'node_modules', 'tsx', 'dist', 'cli.mjs')
     function tutorial(name: string, capture = false): string {
-      return run(process.execPath, [path.join(consumer, 'build', 'tutorials', `${name}.js`)], tutorialDirectory, capture)
+      return run(process.execPath, [tsx, `${name}.ts`], tutorialDirectory, capture)
     }
     tutorial('first-report')
     tutorial('report')
@@ -148,10 +195,13 @@ async function main(): Promise<void> {
     assert.equal(contacts.contacts.length, 2)
     run(process.execPath, ['build/walkthroughs/generate.js', 'artifacts/walkthroughs'], consumer)
     const walkthroughDirectory = path.join(consumer, 'artifacts', 'walkthroughs')
-    for (const name of ['budget', 'study-plan', 'registration-issue']) {
-      run(process.execPath, [path.join(consumer, 'build', 'walkthroughs', `${name}.js`)], walkthroughDirectory)
+    for (const name of examples.walkthroughs.filter(name => name.endsWith('.ts'))) {
+      await copyFile(path.join(consumer, 'walkthroughs', name), path.join(walkthroughDirectory, name))
     }
-    const registration = run(process.execPath, [path.join(consumer, 'build', 'walkthroughs', 'registration-read.js')], walkthroughDirectory, true)
+    for (const name of ['budget', 'study-plan', 'registration-issue']) {
+      run(process.execPath, [tsx, `${name}.ts`], walkthroughDirectory)
+    }
+    const registration = run(process.execPath, [tsx, 'registration-read.ts'], walkthroughDirectory, true)
     assert.deepEqual(JSON.parse(registration), JSON.parse(await readFile(path.join(walkthroughDirectory, 'registration-completed.json'), 'utf8')))
     await writeFile(path.join(consumer, 'smoke.cjs'), `
   const assert = require('node:assert/strict')

@@ -44,6 +44,15 @@ const rules = new ExcelJS.Workbook()
 rules.addWorksheet('Input').addRow(['Quantity', '{quantity}{@validate:required|number|multipleOf:2}'])
 await save('rules-template.xlsx', rules)
 
+const formatting = new ExcelJS.Workbook()
+formatting.addWorksheet('Input').addRow([
+  '{date | format_date:DD.MM.YYYY}',
+  '{enabled | bool_replace:"Yes","No"}',
+  '{amount | float}',
+  '{code | uppercase}{@validate:twoLetters}',
+])
+await save('formatting-template.xlsx', formatting)
+
 const listBook = new ExcelJS.Workbook()
 listBook.addWorksheet('Input').addRow(['Status', '{status}{@list:Statuses}'])
 await save('list-template.xlsx', listBook)

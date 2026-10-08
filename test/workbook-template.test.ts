@@ -231,14 +231,32 @@ describe('native XLSX preservation', () => {
     }
   })
 
-  it('keeps blank sheets, metadata-only rows and ordinary text containing braces', async () => {
+  it('keeps static text consistent between the public layout and rendered cells', async () => {
     const book = new ExcelJS.Workbook()
     const sheet = book.addWorksheet('Blank')
     sheet.getRow(12).hidden = true
     sheet.getRow(12).getCell(1)
+    sheet.getCell('A1').value = '{code}'
     sheet.getCell('A2').value = 'Before {code} after'
-    const result = await load(await renderWorkbookReport(await importWorkbookXlsx(await saveWorkbook(book)), {}))
-    expect(result.worksheets[0].getRow(12).hidden).toBe(true)
-    expect(result.worksheets[0].getCell('A2').value).toBe('Before {code} after')
+    sheet.getCell('A3').value = '{{code}}'
+    sheet.getCell('A4').value = 'Literal _x005F_x0041_'
+    sheet.getCell('A5').value = { richText: [{ text: 'Rich {braces}', font: { bold: true } }] }
+    sheet.getCell('A6').value = { text: 'Link {braces}', hyperlink: 'https://example.com/' }
+    const template = await importWorkbookXlsx(await saveWorkbook(book))
+    const expected = ['Before {code} after', '{code}', 'Literal _x0041_', 'Rich {braces}', 'Link {braces}']
+    const data = { code: 'Example' }
+    const layout = resolveWorkbook(template, data)
+    for (const [index, text] of expected.entries()) {
+      expect(layout.sheets[0].cells.find(cell => cell.at.row === index + 2)?.value).toEqual({ literal: text })
+    }
+    for (const render of [renderWorkbookReport, renderWorkbookForm]) {
+      const result = await load(await render(template, data))
+      expect(result.worksheets[0].getRow(12).hidden).toBe(true)
+      for (const [index, text] of expected.entries()) {
+        expect(result.worksheets[0].getCell(index + 2, 1).text).toBe(text)
+      }
+      expect(result.worksheets[0].getCell('A5').value).toEqual(sheet.getCell('A5').value)
+      expect(result.worksheets[0].getCell('A6').value).toEqual(sheet.getCell('A6').value)
+    }
   })
 })

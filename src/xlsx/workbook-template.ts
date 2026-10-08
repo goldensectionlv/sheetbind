@@ -97,13 +97,12 @@ export async function importWorkbookXlsx(bytes: Uint8Array): Promise<WorkbookTem
       const scalar = typeof cell.value === 'string' || typeof cell.value === 'number' || typeof cell.value === 'boolean'
         ? cell.value
         : cell.type === ExcelJS.ValueType.RichText || cell.type === ExcelJS.ValueType.Hyperlink ? cell.text : null
-      const literal = typeof scalar === 'string' && /_x[0-9a-f]{4}_|[{}]/i.test(scalar) ? null : scalar
       const row = Number(cell.row)
       const column = Number(cell.col)
       const index = authoredRow(row)
       const owner = entries.findLast(({ node }) => row > node.row && row < node.endRow && column >= node.column && column < node.column + node.width)
       const target = owner?.region.cells ?? cells
-      const value = field?.expression ?? (formula === undefined ? { literal } : { formula })
+      const value = field?.expression ?? (formula === undefined ? { literal: scalar } : { formula })
       target.push({ id: createId('cell'), at: { row: owner ? index - owner.row + 1 : index, column: column - (owner ? owner.node.column - 1 : 0) },
         size: { rows: range ? compiled.authoredRow(range.end.row, FormulaEdge.End)! - index + 1 : 1, columns: range ? range.end.column - range.start.column + 1 : 1 },
         value, xlsx: { address: cell.address, value: field && 'literal' in field.expression ? { literal: scalar } : value },

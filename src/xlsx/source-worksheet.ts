@@ -22,6 +22,7 @@ export function sourceWorksheet(xml: string, options: {
   readonly validations: string
   readonly markers?: FormMarkers
   readonly form?: boolean
+  readonly iterate?: boolean
 }) {
   const { output, map, maps, writer } = options
   const sourceRows = new Map<number, string>()
@@ -59,6 +60,12 @@ export function sourceWorksheet(xml: string, options: {
   const rows = worksheetCells(output, (definition, address) => {
     const content = writer.content('formula' in definition.value ? definition.value : definition.choice ? definition.choice.text : definition.value.literal)
     const original = originals.get(definition.xlsx.address)
+    if (options.iterate && 'formula' in definition.value) {
+      // Excel needs a starting value for circular formulas, even before their first calculation.
+      const initial = xmlElements(original?.xml ?? '', 'v')[0]
+      content.type = initial ? original?.attributes.t : undefined
+      content.body += initial ?? '<v>0</v>'
+    }
     return original ? original.render(address, content.type, definition, content.body) : cellXml(address, { ...content, style: writer.style(0) })
   }, { rows: sourceRows, cells: extra })
   const merges = output.cells.filter(cell => cell.size.rows > 1 || cell.size.columns > 1).map(cell =>

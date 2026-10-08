@@ -159,6 +159,38 @@ it.each([{}, { catalog: undefined }, { catalog: null }, { catalog: {} }, { catal
   expect(data).toStrictEqual(before)
 })
 
+it.each([false, true])('keeps overlapping root sources independent of field order and input ownership (reverse: %s)', async reverse => {
+  const tags = [
+    '{answer}{@choice:$root.options; key=id; label=name; return=key}',
+    '{nestedAnswer}{@choice:$root.options.children; key=id; label=name; return=key}',
+  ]
+  const template = await importAuthoredWorkbook(book => book.addWorksheet('Input').addRows((reverse ? tags.toReversed() : tags).map(tag => [tag])))
+  for (const options of [{}, [], 'unavailable', { children: [] }, { children: [{ id: 'a', name: 'Allowed' }] }, [{ id: 'a', name: 'Allowed' }]]) {
+    for (const frozen of [false, true]) {
+      const source = structuredClone(options)
+      const data = {
+        options: frozen ? Object.freeze(source) : source,
+        answer: Array.isArray(source) && source.length ? 'a' : 'Free text',
+        nestedAnswer: typeof source === 'object' && 'children' in source && source.children?.length ? 'a' : 'Nested text',
+      }
+      const before = structuredClone(data)
+      const issued = await renderWorkbookForm(template, data)
+      expect(data).toStrictEqual(before)
+      expect(await readWorkbookForm(template, issued)).toEqual({ success: true, data: { answer: data.answer, nestedAnswer: data.nestedAnswer } })
+    }
+  }
+})
+
+it.each([false, true])('retains a valid root projection when another field cannot use the same source (reverse: %s)', async reverse => {
+  const tags = [
+    '{answer}{@choice:$root.options; key=id; label=name; return=key}',
+    '{other}{@choice:$root.options; key=id; label=missing; return=key}',
+  ]
+  const template = await importAuthoredWorkbook(book => book.addWorksheet('Input').addRows((reverse ? tags.toReversed() : tags).map(tag => [tag])))
+  const issued = await renderWorkbookForm(template, { answer: 'a', other: 'Free text', options: [{ id: 'a', name: 'Allowed' }] })
+  expect(await readWorkbookForm(template, issued)).toEqual({ success: true, data: { answer: 'a', other: 'Free text' } })
+})
+
 it('skips unusable local sources and retains input through issued files', async () => {
   const template = await importAuthoredWorkbook(book => book.addWorksheet('Input').getCell('A1').value = sourceTag)
   for (const answers of ['', 0, false, {}]) {

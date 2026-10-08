@@ -1,6 +1,6 @@
 # Заполнение формы
 
-Форма — это XLSX, который пользователь заполняет и возвращает приложению. `renderWorkbookForm` создаёт такой файл, `readWorkbookForm` читает его по исходному шаблону. Для выполнения примеров сначала [установите пакет и настройте запуск TypeScript](./getting-started.md).
+Форма — это XLSX, который пользователь заполняет и возвращает приложению. `renderWorkbookForm` создаёт такой файл, `readWorkbookForm` читает его по исходному шаблону. Для отдельного запуска скачиваемых скриптов используйте необязательную [настройку примеров](./getting-started.md#run-examples).
 
 ## Первая форма
 
@@ -19,19 +19,12 @@
 
 Сохраните [first-form.ts](/examples/tutorials/first-form.ts) рядом с шаблоном:
 
-```ts
-import { readFile, writeFile } from 'node:fs/promises'
-import { importWorkbookXlsx, renderWorkbookForm } from 'sheetbind'
-
-const template = await importWorkbookXlsx(await readFile('first-form-template.xlsx'))
-const data = { customer: { name: 'Sample customer' } }
-await writeFile('first-form-issued.xlsx', await renderWorkbookForm(template, data))
-```
+<<< @/public/examples/tutorials/first-form.ts
 
 Выполните из этой папки:
 
 ```sh
-pnpm exec tsx first-form.ts
+npx tsx first-form.ts
 ```
 
 Откройте `first-form-issued.xlsx`. Поле находится в B1. При выдаче формы адрес этой ячейки сохраняется. Измените имя на `Alex` и сохраните **отдельный файл `completed.xlsx`** рядом со скриптом. Исходный шаблон сохраните для чтения.
@@ -40,29 +33,10 @@ pnpm exec tsx first-form.ts
 
 Сохраните [read-first-form.ts](/examples/tutorials/read-first-form.ts) в той же папке:
 
-```ts
-import { readFile } from 'node:fs/promises'
-import { importWorkbookXlsx, readWorkbookForm } from 'sheetbind'
-
-try {
-  const template = await importWorkbookXlsx(await readFile('first-form-template.xlsx'))
-  const result = await readWorkbookForm(template, await readFile('completed.xlsx'))
-  if (result.success) {
-    console.log(JSON.stringify(result.data, null, 2))
-  }
-  else {
-    console.error(result.issues)
-    process.exitCode = 1
-  }
-}
-catch (error) {
-  console.error('Cannot process the form:', error)
-  process.exitCode = 1
-}
-```
+<<< @/public/examples/tutorials/read-first-form.ts
 
 ```sh
-pnpm exec tsx read-first-form.ts
+npx tsx read-first-form.ts
 ```
 
 Результат:
@@ -75,7 +49,7 @@ pnpm exec tsx read-first-form.ts
 
 Если очистить B1 и снова сохранить файл, `success` будет `false`. В `issues` появится ошибка `required` с `sheetName: "Input"`, `address: "B1"`, `path: "$data.customer.name"`. Прочитанные поля остаются в `data`, чтобы их можно было показать для исправления; `success: false` означает, что данные ещё не прошли валидацию. При нарушенной структуре файла `data` отсутствует.
 
-`issues` описывает проблемы возвращённого файла или введённых значений. Неверные настройки приложения и ошибки работы с файлами могут выбрасывать исключения, поэтому нужны и `result.success`, и `try/catch`. Подробности — в [API](./api.md).
+`issues` описывает проблемы возвращённого файла или введённых значений. Неверные настройки приложения и ошибки работы с файлами могут выбрасывать исключения, поэтому нужны проверка `result.success` и обработка исключений. Подробности — в [API](./api.md).
 
 ## Таблица на 20 строк
 
@@ -90,7 +64,7 @@ mkdir table-form
 cd table-form
 ```
 
-Она использует уже установленные пакеты и настройку модулей приложения. Следующие файлы сохраняйте и команды выполняйте в `table-form`.
+Она использует уже установленные пакеты приложения. Следующие файлы сохраняйте и команды выполняйте в `table-form`.
 
 Создайте лист `Input` в `form-template.xlsx` или скачайте [шаблон](/examples/tutorials/form-template.xlsx):
 
@@ -109,25 +83,10 @@ cd table-form
 
 Сохраните [issue-form.ts](/examples/tutorials/issue-form.ts) рядом с шаблоном:
 
-```ts
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
-import { importWorkbookXlsx, renderWorkbookForm } from 'sheetbind'
-
-const source = await readFile('form-template.xlsx')
-const template = await importWorkbookXlsx(source)
-const dictionaries = {
-  Products: [{ id: '001', name: 'Paper' }, { id: '002', name: 'Paper' }],
-}
-const data = { items: Array.from({ length: 20 }, () => ({})) }
-const issued = await renderWorkbookForm(template, data, { dictionaries })
-
-await mkdir('saved-form', { recursive: true })
-await writeFile('saved-form/template.xlsx', source)
-await writeFile('saved-form/issued.xlsx', issued)
-```
+<<< @/public/examples/tutorials/issue-form.ts
 
 ```sh
-pnpm exec tsx issue-form.ts
+npx tsx issue-form.ts
 ```
 
 Двадцать объектов `{}` создают двадцать строк для заполнения. Пустые обязательные поля допустимы при выдаче. У товаров одинаковые подписи, поэтому список показывает `Paper [001]` и `Paper [002]`.
@@ -167,10 +126,10 @@ pnpm exec tsx issue-form.ts
 Сохраните файл как `completed.xlsx` рядом с `issue-form.ts` или скачайте [готовую заполненную форму](/examples/tutorials/completed.xlsx). Для чтения нужен созданный на предыдущем шаге `saved-form/template.xlsx`. Скачайте рядом с `completed.xlsx` скрипт [read-completed-form.ts](/examples/tutorials/read-completed-form.ts) и запустите:
 
 ```sh
-pnpm exec tsx read-completed-form.ts
+npx tsx read-completed-form.ts
 ```
 
-Это полный обработчик с проверкой `result.success` и `try/catch`, как в первой форме. Он загружает `saved-form/template.xlsx` и `completed.xlsx` из текущей папки.
+Это полный обработчик с проверкой `result.success` и обработкой исключений, как в первой форме. Он загружает `saved-form/template.xlsx` и `completed.xlsx` из текущей папки.
 
 Результат можно [скачать как JSON](/examples/tutorials/completed.json):
 
@@ -221,7 +180,7 @@ pnpm exec tsx read-completed-form.ts
 После этого одного копирования сохраните книгу как `contacts-completed.xlsx` рядом с `contacts-template.xlsx`. Скачайте туда [read-contacts.ts](/examples/tutorials/read-contacts.ts) и запустите:
 
 ```sh
-pnpm exec tsx read-contacts.ts
+npx tsx read-contacts.ts
 ```
 
 Получатся три записи:

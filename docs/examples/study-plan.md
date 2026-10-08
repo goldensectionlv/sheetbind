@@ -2,7 +2,7 @@
 
 A learner has several courses, each with its own lesson list. Produce one document with headings, notes and duration totals. The courses contain zero, one and three lessons.
 
-After [installing the package](../getting-started.md), create a directory inside your application:
+After [installing the package](../getting-started.md#run-examples), create a directory inside your application:
 
 ```sh
 mkdir study-plan-example
@@ -50,7 +50,7 @@ Download [study-plan.ts](/examples/walkthroughs/study-plan.ts):
 Run from the example directory:
 
 ```sh
-pnpm exec tsx study-plan.ts
+npx tsx study-plan.ts
 ```
 
 Open `study-plan.xlsx`, or download the [rendered report](/examples/walkthroughs/study-plan.xlsx):

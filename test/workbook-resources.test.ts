@@ -4,6 +4,42 @@ import JSZip from 'jszip'
 import { importWorkbookXlsx, readWorkbookForm, renderWorkbookForm, renderWorkbookReport, resolveWorkbook, workbookChoiceRange } from '../src/index'
 import { importAuthoredWorkbook, openWorkbook, saveWorkbook } from './xlsx'
 
+it.each([['report', renderWorkbookReport], ['form', renderWorkbookForm]] as const)('%s preserves calculation settings while requesting a full recalculation', async (_, render) => {
+  const book = new ExcelJS.Workbook()
+  const sheet = book.addWorksheet('Calc')
+  sheet.getCell('A1').value = '{value}'
+  sheet.getCell('B1').value = { formula: '(B1+A1)/2' }
+  sheet.getCell('C1').value = { formula: 'C1', result: 17 }
+  sheet.getCell('D1').value = { formula: '"Ready"', result: 'Ready' }
+  sheet.getCell('E1').value = { formula: 'FALSE()', result: false }
+  const authored = await saveWorkbook(book)
+  for (const [calc, expected] of [
+    ['<calcPr calcId="191029" calcMode="auto" fullCalcOnLoad="0" iterate="1" iterateCount="200" iterateDelta="0.00001"/>',
+      { calcId: '191029', calcMode: 'auto', fullCalcOnLoad: '1', iterate: '1', iterateCount: '200', iterateDelta: '0.00001' }],
+    ["<calcPr iterate='true' iterateCount='200'/>", { iterate: 'true', iterateCount: '200', fullCalcOnLoad: '1' }],
+    ["<calcPr calcMode='manual' fullCalcOnLoad = 'false' fullPrecision='0' forceFullCalc='1' calcOnSave='0' concurrentCalc='0'></calcPr>",
+      { calcMode: 'manual', fullCalcOnLoad: '1', fullPrecision: '0', forceFullCalc: '1', calcOnSave: '0', concurrentCalc: '0' }],
+    ['', { fullCalcOnLoad: '1' }],
+  ] as const) {
+    const zip = await JSZip.loadAsync(authored)
+    const xml = (await zip.file('xl/workbook.xml')!.async('string')).replace(/<calcPr\b[^>]*\/>/, calc)
+      .replace('</workbook>', '<fileRecoveryPr autoRecover="0"/></workbook>')
+    zip.file('xl/workbook.xml', xml)
+    const template = await importWorkbookXlsx(await zip.generateAsync({ type: 'nodebuffer' }))
+    const saved = await JSZip.loadAsync(await render(template, { value: 42 }))
+    const output = await saved.file('xl/workbook.xml')!.async('string')
+    const settings = output.match(/<calcPr\b[^>]*?(?:\/>|>[\s\S]*?<\/calcPr>)/g)!
+    expect(settings).toHaveLength(1)
+    expect(Object.fromEntries([...settings[0].matchAll(/\s(\w+)\s*=\s*(["'])(.*?)\2/g)].map(match => [match[1], match[3]]))).toEqual(expected)
+    expect(output.indexOf('<calcPr')).toBeLessThan(output.indexOf('<fileRecoveryPr'))
+    const rendered = (await openWorkbook(await saved.generateAsync({ type: 'nodebuffer' }))).getWorksheet('Calc')!
+    expect(rendered.getCell('B1').formula).toBe('(B1+A1)/2')
+    expect(['B1', 'C1', 'D1', 'E1'].map(address => rendered.getCell(address).result)).toEqual('iterate' in expected
+      ? [0, 17, 'Ready', false]
+      : [undefined, undefined, undefined, undefined])
+  }
+})
+
 it('keeps hidden list sheets valid after an ExcelJS edit', async () => {
   const authored = new ExcelJS.Workbook()
   authored.addWorksheet('Input').getCell('A1').value = '{code}{@list:Codes}'

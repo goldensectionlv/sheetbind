@@ -57,22 +57,14 @@ registerValidationRule('twoLetters', {
 {status}{@list:Statuses}
 ```
 
-Создайте лист `Input` в `list-template.xlsx`: A1 = `Status`, B1 = этот тег. Или скачайте [готовый шаблон](/examples/tutorials/list-template.xlsx). После [установки](./getting-started.md) сохраните рядом [list-report.ts](/examples/tutorials/list-report.ts):
+Создайте лист `Input` в `list-template.xlsx`: A1 = `Status`, B1 = этот тег. Или скачайте [готовый шаблон](/examples/tutorials/list-template.xlsx). После [установки](./getting-started.md#run-examples) сохраните рядом [list-report.ts](/examples/tutorials/list-report.ts):
 
-```ts
-import { readFile, writeFile } from 'node:fs/promises'
-import { importWorkbookXlsx, renderWorkbookReport } from 'sheetbind'
-
-const template = await importWorkbookXlsx(await readFile('list-template.xlsx'))
-const data = { status: 'Draft' }
-const dictionaries = { Statuses: ['Draft', 'Ready'] }
-await writeFile('list-report.xlsx', await renderWorkbookReport(template, data, { dictionaries }))
-```
+<<< @/public/examples/tutorials/list-report.ts
 
 Из этой папки выполните:
 
 ```sh
-pnpm exec tsx list-report.ts
+npx tsx list-report.ts
 ```
 
 В `list-report.xlsx` ячейка B1 содержит `Draft` и предлагает список `Draft`, `Ready`. Чтобы обязать пользователя выбрать значение, добавьте `{@validate:required}`.
@@ -91,23 +83,10 @@ pnpm exec tsx list-report.ts
 
 Создайте лист `Input` в `choice-template.xlsx`: A1 = `Product`, B1 = этот тег. Или скачайте [готовый шаблон](/examples/tutorials/choice-template.xlsx). Сохраните рядом [choice-report.ts](/examples/tutorials/choice-report.ts):
 
-```ts
-import { readFile, writeFile } from 'node:fs/promises'
-import { importWorkbookXlsx, renderWorkbookReport } from 'sheetbind'
-
-const template = await importWorkbookXlsx(await readFile('choice-template.xlsx'))
-const dictionaries = {
-  Products: [
-    { id: '001', name: 'Paper' },
-    { id: '002', name: 'Pen' },
-  ],
-}
-const data = { product: dictionaries.Products[0] }
-await writeFile('choice-report.xlsx', await renderWorkbookReport(template, data, { dictionaries }))
-```
+<<< @/public/examples/tutorials/choice-report.ts
 
 ```sh
-pnpm exec tsx choice-report.ts
+npx tsx choice-report.ts
 ```
 
 В `choice-report.xlsx` ячейка B1 содержит `Paper` и предлагает список товаров. `key=id` указывает поле идентификатора, `label=name` — поле подписи в Excel. По умолчанию поле данных содержит весь объект.
@@ -226,37 +205,14 @@ const options = { validationMessages: { required: 'Enter a value' } }
 | A1 | `Quantity` |
 | B1 | `{quantity}{@validate:required\|number\|multipleOf:2}` |
 
-После [установки](./getting-started.md) сохраните рядом [rules-form.ts](/examples/tutorials/rules-form.ts):
+После [установки](./getting-started.md#run-examples) сохраните рядом [rules-form.ts](/examples/tutorials/rules-form.ts):
 
-```ts
-import { readFile, writeFile } from 'node:fs/promises'
-import { importWorkbookXlsx, renderWorkbookForm, readWorkbookForm } from 'sheetbind'
-import type { ValidationOptions } from 'sheetbind'
-
-const options: ValidationOptions = {
-  validationRules: {
-    multipleOf: {
-      validateArgs: args => args.length === 1 && typeof args[0] === 'number'
-        && Number.isSafeInteger(args[0]) && args[0] > 0,
-      validate(value, [step]) {
-        return typeof value === 'number' && Number.isSafeInteger(value)
-          && typeof step === 'number' && value % step === 0
-      },
-      message: ({ args }) => `Enter a whole number divisible by ${args[0]}`,
-    },
-  },
-}
-const template = await importWorkbookXlsx(await readFile('rules-template.xlsx'))
-const data = { quantity: 4 }
-await writeFile('rules-form.xlsx', await renderWorkbookForm(template, data))
-const result = await readWorkbookForm(template, await readFile('rules-form.xlsx'), options)
-console.log(JSON.stringify(result, null, 2))
-```
+<<< @/public/examples/tutorials/rules-form.ts
 
 Из этой папки выполните:
 
 ```sh
-pnpm exec tsx rules-form.ts
+npx tsx rules-form.ts
 ```
 
 Скрипт выдаёт `rules-form.xlsx` и читает сохранённый файл. При `quantity: 4` чтение успешно. Если заменить значение на `3`, файл всё равно создаётся, а чтение возвращает `success: false` с правилом `multipleOf` и сообщением `Enter a whole number divisible by 2`. `multipleOf:0` вызывает ошибку настройки при чтении, до проверки значения.
@@ -311,4 +267,4 @@ registerFormatter('suffix', (value, args) => String(value ?? '') + String(args[0
 
 Форматтеры **не выполняются при чтении** и не обращают преобразование: после `bool_replace` читается текст «Да», а не boolean. Для возврата ключа или объекта по подписи используйте `@choice`. Форматирование нельзя совмещать с `@choice` или `@list` в одной ячейке. Регистрация обработчиков не записывается в XLSX.
 
-[Полный запускаемый пример](/examples/tutorials/formatting.ts) создаёт форму со встроенными и своим форматтерами и читает её с глобальным правилом. После установки зависимостей выполните `pnpm exec tsx formatting.ts`.
+Сохраните [шаблон форматирования](/examples/tutorials/formatting-template.xlsx) рядом с [полным запускаемым примером](/examples/tutorials/formatting.ts). Он создаёт форму со встроенными и своим форматтерами и читает её с глобальным правилом. После [настройки примеров](./getting-started.md#run-examples) выполните `npx tsx formatting.ts`.

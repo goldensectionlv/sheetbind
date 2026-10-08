@@ -1,6 +1,6 @@
 # Sheetbind
 
-This guide and its downloadable examples use Sheetbind 0.3.0. Start with the [installation guide](./getting-started.md).
+This guide and its downloadable examples use Sheetbind 0.3.1. Start with the [installation guide](./getting-started.md).
 
 Sheetbind fills XLSX templates with data. You prepare and format the workbook in Excel; your application supplies the values. The result is a report or a form that users can fill in and return.
 
@@ -49,4 +49,4 @@ Each example includes a template, data, a runnable script and the expected resul
 - [Excel and limitations](./xlsx.md) — formatting, formulas and workbook features.
 - [Development](./development.md) and [Architecture](./architecture.md) — for changes to the library itself.
 
-Requires Node.js 22.13 or newer and ExcelJS 4.4.0. Licensed under MIT.
+Requires Node.js 22.13 or newer. Licensed under MIT.

@@ -1,22 +1,30 @@
 # First report
 
-Create an XLSX with a customer name. You need Node.js 22.13 or newer, [pnpm 11.5.2](https://pnpm.io/installation), and Excel to create or open the workbook. Check `pnpm --version`: the commands below use pnpm 11.5.2.
-
-To install that pnpm version, run `npm install --global pnpm@11.5.2`.
+Create an XLSX with a customer name. Sheetbind runs on Node.js 22.13 or newer. Use Excel to edit the template or view the result.
 
 ## 1. Install the package
 
-Create a `sheetbind-example` directory for your application. From that directory, install Sheetbind 0.3.0, ExcelJS and a TypeScript runner:
+From your application directory:
 
 ```sh
-pnpm init --init-type module
-pnpm add sheetbind@0.3.0 exceljs@4.4.0
-pnpm add -D tsx
+npm install sheetbind
 ```
 
-`--init-type module` adds `"type": "module"` to `package.json`; the examples use `import` and top-level `await`. For an existing application, install the dependencies there and use its module setup. ExcelJS is a peer dependency and must be installed alongside Sheetbind.
+Dependencies, including ExcelJS, are installed automatically. TypeScript declarations are included. Use your application's existing module and build settings:
 
-Run the rest of this guide from `sheetbind-example`. Keep form issuance and reading on the same package build.
+::: code-group
+
+```ts [TypeScript / ESM]
+import { importWorkbookXlsx, renderWorkbookReport } from 'sheetbind'
+```
+
+```js [CommonJS]
+const { importWorkbookXlsx, renderWorkbookReport } = require('sheetbind')
+```
+
+:::
+
+Keep form issuance and reading on the same package build. To try the downloadable scripts in a separate directory, use the optional [example setup](#run-examples).
 
 ## 2. Create the template
 
@@ -33,26 +41,35 @@ Save it as `first-report-template.xlsx`. You can set the font, borders and colum
 
 Save this code as `report.ts` beside the template. You can also [download the script](/examples/tutorials/first-report.ts) and save it under that name.
 
-```ts
-import { readFile, writeFile } from 'node:fs/promises'
-import { importWorkbookXlsx, renderWorkbookReport } from 'sheetbind'
+<<< @/public/examples/tutorials/first-report.ts
 
-const template = await importWorkbookXlsx(await readFile('first-report-template.xlsx'))
-const data = { customer: { name: 'Sample customer' } }
-await writeFile('report.xlsx', await renderWorkbookReport(template, data))
-```
-
-Run it:
-
-```sh
-pnpm exec tsx report.ts
-```
+Run it with your application's usual command. File paths in this example are relative to the working directory. For a standalone run, follow the [example setup](#run-examples) below.
 
 Open `report.xlsx` in the same directory. A1 still contains `Customer`; B1 now contains `Sample customer`.
 
 If rendering warns that `$data.customer.name` is missing, check the data structure. `{ name: 'Sample customer' }` does not match `{customer.name}`; rendering leaves that cell blank. The example above supplies the required `customer` object.
 
 Keep the tagged file as your template. After changing its tags or formatting, save it and call `importWorkbookXlsx` again.
+
+## Run the downloadable examples {#run-examples}
+
+This setup is for trying the guide outside an existing application. Create a directory and install a TypeScript runner for the `.ts` example files:
+
+```sh
+mkdir sheetbind-example
+cd sheetbind-example
+npm init -y
+npm install sheetbind
+npm install --save-dev tsx
+```
+
+Save the template and `report.ts` here, then run:
+
+```sh
+npx tsx report.ts
+```
+
+The other downloadable examples use the same setup. In an existing application, use its own TypeScript tools; `tsx` is only a runner for these standalone scripts.
 
 ## Next step
 

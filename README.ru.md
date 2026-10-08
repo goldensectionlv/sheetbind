@@ -4,17 +4,19 @@
 
 Sheetbind заполняет XLSX-шаблоны данными. Разметьте ячейки тегами в Excel, передайте файл и данные в код и сохраните отчёт. Для ввода данных создайте форму: пользователь заполнит её в Excel, а приложение прочитает результат.
 
-Нужны Node.js 22.13 или новее и ExcelJS 4.4.0. Лицензия MIT.
+Нужен Node.js 22.13 или новее. Лицензия MIT.
 
 [Документация](https://goldensectionlv.github.io/sheetbind/ru/) содержит примеры с изображениями и книги для скачивания.
 
-Документация и скачиваемые примеры используют Sheetbind 0.3.0. Установите его вместе с необходимым ему ExcelJS:
+Установите пакет в своём приложении:
 
 ```sh
-npm install sheetbind@0.3.0 exceljs@4.4.0
+npm install sheetbind
 ```
 
-[Инструкция по установке](https://goldensectionlv.github.io/sheetbind/ru/getting-started) показывает, как создать приложение и запустить первый отчёт.
+ExcelJS устанавливается автоматически как зависимость. Sheetbind включает типы TypeScript и поддерживает `import` и `require`; используйте существующие настройки модулей и сборки приложения. Для CommonJS: `const { importWorkbookXlsx, renderWorkbookReport } = require('sheetbind')`.
+
+В инструкции [«Первый отчёт»](https://goldensectionlv.github.io/sheetbind/ru/getting-started) есть готовый шаблон и полный пример. Документация и скачиваемые примеры используют Sheetbind 0.3.1.
 
 ## Первый отчёт
 
@@ -24,9 +26,16 @@ npm install sheetbind@0.3.0 exceljs@4.4.0
 import { readFile, writeFile } from 'node:fs/promises'
 import { importWorkbookXlsx, renderWorkbookReport } from 'sheetbind'
 
-const template = await importWorkbookXlsx(await readFile('first-report-template.xlsx'))
-const data = { customer: { name: 'Sample customer' } }
-await writeFile('report.xlsx', await renderWorkbookReport(template, data))
+async function main() {
+  const template = await importWorkbookXlsx(await readFile('first-report-template.xlsx'))
+  const data = { customer: { name: 'Sample customer' } }
+  await writeFile('report.xlsx', await renderWorkbookReport(template, data))
+}
+
+main().catch(error => {
+  console.error(error)
+  process.exitCode = 1
+})
 ```
 
 В результате B1 содержит `Sample customer`. В инструкции [«Первый отчёт»](https://goldensectionlv.github.io/sheetbind/ru/getting-started) есть установка пакета, готовый шаблон и команда запуска.
