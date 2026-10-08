@@ -16,7 +16,7 @@ npm install sheetbind
 
 ExcelJS is installed automatically as a dependency. Sheetbind includes TypeScript declarations and supports both `import` and `require`; use your application's existing module and build settings. In CommonJS, use `const { importWorkbookXlsx, renderWorkbookReport } = require('sheetbind')`.
 
-The [first report guide](https://goldensectionlv.github.io/sheetbind/getting-started) includes a ready-made template and a complete example. The documentation and downloadable examples use Sheetbind 0.3.0.
+The [first report guide](https://goldensectionlv.github.io/sheetbind/getting-started) includes a ready-made template and a complete example. The documentation and downloadable examples use Sheetbind 0.3.1.
 
 ## First report
 
