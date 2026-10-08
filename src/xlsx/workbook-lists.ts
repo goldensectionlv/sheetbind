@@ -242,9 +242,13 @@ export function serializeWorkbookChoiceSources(plan: WorkbookPlan, data: unknown
     }
     else if (source.from === 'root') {
       const path = source.path.split('.')
-      writeData(context, path, readData(data, path) ?? [], true)
-      if (resolve(cell.rules!.choice!, readData(data, path)).problem) {
+      const { items, problem } = resolve(cell.rules!.choice!, readData(data, path))
+      if (problem) {
         skipped.push(cell.id)
+      }
+      else if (items.length) {
+        // Only arrays are sources; copying unavailable parents would alias input objects.
+        writeData(context, path, items.map(item => item.value), true)
       }
     }
   }

@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- Report and form rendering preserve workbook calculation settings when requesting recalculation on opening. Iterative calculations retain their starting values, using zero when no saved value exists.
+- Overlapping root choice paths no longer mutate input data or prevent form issuance when a source is unavailable. Available choices remain independent of field order.
+- `resolveWorkbook` retains static text containing braces or literal XLSX escape sequences, consistently with rendered cells.
+
 ## 0.3.0 — 2026-10-08
 
 Reissue existing forms with this version. Form reading requires the original template; the application owns document identity and version checks.

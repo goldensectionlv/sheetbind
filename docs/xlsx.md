@@ -41,6 +41,10 @@ Write formulas in the template using ordinary Excel cells. Local cell and range 
 
 **Sheetbind does not calculate formulas.** It asks Excel to recalculate when the workbook opens. Another viewer may show blank or stale results until recalculation. If the server needs a total immediately, calculate it in the application and pass it as data.
 
+Reports and forms retain the template's calculation mode and iterative calculation settings, including the iteration limit and convergence threshold, when requesting a full recalculation on opening.
+
+When iterative calculation is enabled, saved formula values supply the starting values for iteration; formulas without a saved value start at zero. These are not calculated results for the rendered data: recalculate and save the file in Excel before using them.
+
 When a repeat is empty and its whole referenced range disappears, a reference can become `#REF!`. For a total that should be zero, either include a fixed header row in the `SUM` range or explicitly handle the missing range:
 
 ```text
