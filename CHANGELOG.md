@@ -7,6 +7,7 @@
 - Template formatting pipelines with built-in `float`, `bool_replace` and `format_date`, plus application formatters registered through `registerFormatter`.
 - Global validation registration through `registerValidationRule`. Per-read `validationRules` override global rules; validation still runs only on read.
 - Row-local choice sources such as `.answers` work when filling the issued rows. Changing their membership or order requires issuing a new form.
+- `inspectWorkbookTemplate` reports unavailable formatters, invalid built-in formatter arguments and missing named dictionaries without executing handlers, including fields in empty repeats.
 
 ### Changed
 
@@ -22,6 +23,14 @@
 - Rendering and layout resolution no longer execute `@validate` or require its handlers. Supply `validationRules` and `validationMessages` only when reading a form.
 - Unknown validation rules stop reading with a template error, including fields in empty repeats. Rules retain their order and original indexes; invalid known arguments and handler failures remain errors.
 - Form reading uses the dictionaries embedded at issuance for lists, key choices and object choices. `readWorkbookForm` no longer accepts `dictionaries` or `context`; validation handlers and messages remain supported. Reissue older forms whose list or key sources were not embedded.
+- Form reading respects submitted cell formats for text, numeric conversion and rounding. Formula inputs use the saved Excel result, including zero, false and empty text; missing results and Excel errors produce field issues.
+
+### Fixed
+
+- Internal hyperlink targets follow workbook placement, and Excel names containing backslashes remain intact when formulas move.
+- Workbooks with missing or empty style tables render with valid default styles while retaining authored style resources.
+- Generated workbook relationships avoid collisions with existing IDs. Hidden choice-source sheets retain valid names when a completed form is saved with ExcelJS.
+- Form control columns are placed beyond all authored content, including empty repeats, so wide templates retain their input fields. Reissue older forms when previously issued control cells overlapped those fields.
 
 ## 0.2.0 — 2026-10-06
 
